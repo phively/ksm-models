@@ -2,9 +2,6 @@
 Thumbs.db
 ehthumbs.db
 
-# PL/SQL Developer temp files
-*.~*
-
 # Folder config file
 Desktop.ini
 
@@ -19,6 +16,17 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+# =========================
+# Coding and data files
+# =========================
+
+# PL/SQL Developer temp files
+*.~*
+
+# Tabular data, Excel, etc.
+*.csv
+*.xls*
 
 # =========================
 # Operating System Files
