@@ -27,17 +27,17 @@ ksm_giving As (
     , count(Distinct Case When hh_recognition_credit > 0 Then fiscal_year End) As gifts_fys_supported
     , min(Case When hh_recognition_credit > 0 Then fiscal_year End) As giving_first_year
     , sum(Case When fiscal_year = ksm_giving_yr.first_year And tx_gypm_ind <> 'P'
-        Then hh_recognition_credit End) As giving_first_cash_amount
+        Then hh_recognition_credit End) As giving_first_year_cash_amt
     , sum(Case When fiscal_year = ksm_giving_yr.first_year And tx_gypm_ind = 'P'
-        Then hh_recognition_credit End) As giving_first_pledge_amount
-    , sum(Case When tx_gypm_ind = 'P' Then NULL Else hh_recognition_credit End) As giving_cash_total
-    , sum(Case When tx_gypm_ind = 'P' And pledge_status Not In ('I', 'R') -- Exclude inactive and reconciliation
-        Then hh_recognition_credit Else NULL End) As giving_pledge_total
-    , sum(Case When (tx_gypm_ind = 'P' And pledge_status Not In ('I', 'R')) Or tx_gypm_ind In ('G', 'M')
-        Then hh_recognition_credit Else NULL End) As giving_ngc_total
-    , sum(Case When payment_type = 'Cash / Check' And tx_gypm_ind <> 'M' Then 1 End) As gifts_cash
-    , sum(Case When payment_type = 'Credit Card' And tx_gypm_ind <> 'M' Then 1 End) As gifts_credit_card
-    , sum(Case When payment_type = 'Securities' And tx_gypm_ind <> 'M' Then 1 End) As gifts_stock
+        Then hh_recognition_credit End) As giving_first_year_pledge_amt
+    , max(Case When tx_gypm_ind <> 'P' Then hh_recognition_credit End) As giving_max_cash_amt
+    , max(Case When tx_gypm_ind = 'P' Then hh_recognition_credit End) As giving_max_pledge_amt 
+    , sum(Case When tx_gypm_ind = 'P' Then 0 Else hh_recognition_credit End) As giving_cash_total
+    , sum(Case When tx_gypm_ind = 'P' Then hh_recognition_credit Else 0 End) As giving_pledge_total
+    , sum(Case When tx_gypm_ind <> 'Y' Then hh_recognition_credit Else 0 End) As giving_ngc_total
+    , sum(Case When payment_type = 'Cash / Check' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then 1 End) As gifts_cash
+    , sum(Case When payment_type = 'Credit Card' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then 1 End) As gifts_credit_card
+    , sum(Case When payment_type = 'Securities' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then 1 End) As gifts_stock
   From giving_hh
   Left Join ksm_giving_yr On ksm_giving_yr.household_id = giving_hh.household_id
   Group By giving_hh.household_id
@@ -52,21 +52,21 @@ Select
     hh.id_number
   , hh.report_name
   , hh.record_status_code
+  , hh.household_record
   , hh.household_id
   , Case When hh.id_number = hh.household_id Then 'Y' Else 'N' End As hh_primary
-  -- Dependent variables
-  --, dependent variable -- ever made a $10K gift
-  --, dependent variable -- ever made a $100K gift
   -- Biographic indicators
-  --, alum flag
-  --, class year
-  --, age
-  --, program
-  --, program group
-  --, spouse indicator: married, NU, KSM?
-  --, pref addr type code
-  --, pref addr IL indicator
-  --, pref addr USA indicator
+  , hh.institutional_suffix
+  , hh.first_ksm_year
+  , entity.birth_dt
+  , hh.degrees_concat
+  , trim(hh.program_group) As program_group
+  , hh.spouse_first_ksm_year
+  , hh.spouse_suffix
+  , entity.pref_addr_type_code
+  , hh.household_city
+  , hh.household_state
+  , hh.household_country
   --, pref addr continent
   --, has home addr
   --, has bus addr
@@ -80,8 +80,10 @@ Select
   --, citizenship continent?
   -- Giving indicators
   , ksm_giving.giving_first_year
-  , ksm_giving.giving_first_cash_amount
-  , ksm_giving.giving_first_pledge_amount
+  , ksm_giving.giving_first_year_cash_amt
+  , ksm_giving.giving_first_year_pledge_amt
+  , ksm_giving.giving_max_cash_amt
+  , ksm_giving.giving_max_pledge_amt
   , ksm_giving.giving_cash_total
   , ksm_giving.giving_pledge_total
   , ksm_giving.giving_ngc_total
@@ -106,4 +108,13 @@ Select
   --, number of events attended
   --, ever attended Reunion
 From v_entity_ksm_households hh
+Inner Join entity On entity.id_number = hh.id_number
 Left Join ksm_giving On ksm_giving.household_id = hh.household_id
+Where
+  -- Exclude organizations
+  hh.person_or_org = 'P'
+  -- Must be Kellogg alumni or donor
+  And (
+    hh.degrees_concat Is Not Null
+    Or ksm_giving.giving_first_year Is Not Null
+  )
