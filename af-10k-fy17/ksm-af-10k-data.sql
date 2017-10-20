@@ -64,6 +64,32 @@ addresses As (
   Where addr_status_code = 'A' -- Active addresses only
     And addr_type_code In ('H', 'B', 'AH', 'AB', 'S') -- Home, Bus, Alt Home, Alt Bus, Seasonal
   Group By household_id
+),
+
+/* Entity phone */
+phones As (
+  Select
+    household_id
+    , Listagg(telephone_type_code, ', '
+      ) Within Group (Order By telephone_type_code Asc) As phone_types
+  From telephone
+  Inner Join hh On hh.id_number = telephone.id_number
+  Where telephone_status_code = 'A' -- Active phone only
+    And telephone_type_code In ('H', 'B', 'M') -- Home, Business, Mobile
+  Group By household_id
+),
+
+/* Entity email */
+emails As (
+  Select
+    household_id
+    , Listagg(email_type_code, ', '
+      ) Within Group (Order By email_type_code Asc) As email_types
+  From email
+  Inner Join hh On hh.id_number = email.id_number
+  Where email_status_code = 'A' -- Active emails only
+    And email_type_code In ('X', 'Y') -- Home, Business
+  Group By household_id
 )
 
 /*************************
@@ -90,17 +116,21 @@ Select
   , hh.household_city
   , hh.household_state
   , hh.household_country
-  --, pref addr continent
-  , Case When addresses.addr_types Like '%H%' Then 'Y' Else 'N' End As has_home_addr
-  , Case When addresses.addr_types Like '%B%' Then 'Y' Else 'N' End As has_bus_addr
-  , Case When addresses.addr_types Like '%S%' Then 'Y' Else 'N' End As has_seasonal_addr
-  --, has pref phone
-  --, has pref email
-  --, special handling?
+  , hh.household_continent
   --, high-level business title
   --, high-income career specialty
   --, company has matching program
-  --, citizenship continent?
+  -- Contact indicators
+  , Case When addresses.addr_types Like '%H%' Then 'Y' Else 'N' End As has_home_addr
+  , Case When addresses.addr_types Like '%AH%' Then 'Y' Else 'N' End As has_alt_home_addr
+  , Case When addresses.addr_types Like '%B%' Then 'Y' Else 'N' End As has_bus_addr
+  , Case When addresses.addr_types Like '%S%' Then 'Y' Else 'N' End As has_seasonal_addr
+  , Case When phones.phone_types Like '%H%' Then 'Y' Else 'N' End As has_home_phone
+  , Case When phones.phone_types Like '%B%' Then 'Y' Else 'N' End As has_bus_phone
+  , Case When phones.phone_types Like '%M%' Then 'Y' Else 'N' End As has_mobile_phone
+  , Case When emails.email_types Like '%X%' Then 'Y' Else 'N' End As has_home_email
+  , Case When emails.email_types Like '%Y%' Then 'Y' Else 'N' End As has_bus_email
+  --, special handling?
   -- Giving indicators
   , ksm_giving.giving_first_year
   , ksm_giving.giving_first_year_cash_amt
@@ -136,6 +166,8 @@ From hh
 Inner Join entity On entity.id_number = hh.id_number
 Left Join ksm_giving On ksm_giving.household_id = hh.household_id
 Left Join addresses On addresses.household_id = hh.household_id
+Left Join phones On phones.household_id = hh.household_id
+Left Join emails On emails.household_id = hh.household_id
 Where
   -- Exclude organizations
   hh.person_or_org = 'P'
