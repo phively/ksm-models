@@ -41,6 +41,29 @@ ksm_giving As (
   From giving_hh
   Left Join ksm_giving_yr On ksm_giving_yr.household_id = giving_hh.household_id
   Group By giving_hh.household_id
+),
+
+/*************************
+Entity information
+*************************/
+
+/* KSM householding */
+hh As (
+  Select *
+  From v_entity_ksm_households
+),
+
+/* Entity addresses */
+addresses As (
+  Select
+    household_id
+    , Listagg(addr_type_code, ', '
+      ) Within Group (Order By addr_type_code Asc) As addr_types
+  From address
+  Inner Join hh On hh.id_number = address.id_number
+  Where addr_status_code = 'A' -- Active addresses only
+    And addr_type_code In ('H', 'B', 'AH', 'AB', 'S') -- Home, Bus, Alt Home, Alt Bus, Seasonal
+  Group By household_id
 )
 
 /*************************
@@ -68,9 +91,9 @@ Select
   , hh.household_state
   , hh.household_country
   --, pref addr continent
-  --, has home addr
-  --, has bus addr
-  --, has seasonal addr
+  , Case When addresses.addr_types Like '%H%' Then 'Y' Else 'N' End As has_home_addr
+  , Case When addresses.addr_types Like '%B%' Then 'Y' Else 'N' End As has_bus_addr
+  , Case When addresses.addr_types Like '%S%' Then 'Y' Else 'N' End As has_seasonal_addr
   --, has pref phone
   --, has pref email
   --, special handling?
@@ -105,11 +128,14 @@ Select
   --, Trustee indicator (careful, endogenous)
   --, Reunion indicator
   --, Club Leader indicator
+  --, number of FY on committees
   --, number of events attended
+  --, number of FY attending events
   --, ever attended Reunion
-From v_entity_ksm_households hh
+From hh
 Inner Join entity On entity.id_number = hh.id_number
 Left Join ksm_giving On ksm_giving.household_id = hh.household_id
+Left Join addresses On addresses.household_id = hh.household_id
 Where
   -- Exclude organizations
   hh.person_or_org = 'P'
