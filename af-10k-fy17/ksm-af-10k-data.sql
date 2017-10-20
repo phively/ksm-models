@@ -90,6 +90,32 @@ emails As (
   Where email_status_code = 'A' -- Active emails only
     And email_type_code In ('X', 'Y') -- Home, Business
   Group By household_id
+),
+
+/* Entity employment */
+employer As (
+  Select
+    id_number
+    , business_title
+    , job_title
+    , matching_status_ind
+    , high_level_job_title
+  From v_ksm_high_level_job_title
+),
+
+/* Employment aggregated to the household level */
+employer_hh As (
+  Select
+    household_id
+    , Listagg(trim(business_title || '; ' || job_title), ' // '
+      ) Within Group (Order By employer.id_number Asc) As bus_title_string
+    , Listagg(matching_status_ind, ' '
+      ) Within Group (Order By employer.id_number Asc) As bus_gift_match
+    , Listagg(high_level_job_title, '; '
+      ) Within Group (Order By employer.id_number Asc) As bus_high_lvl_job_title
+  From employer
+  Inner Join hh On hh.id_number = employer.id_number
+  Group By household_id
 )
 
 /*************************
@@ -117,9 +143,12 @@ Select
   , hh.household_state
   , hh.household_country
   , hh.household_continent
-  --, high-level business title
+  , Case When employer_hh.household_id Is Not Null Then 'Y' Else 'N' End As bus_is_employed
+  , Case When employer_hh.bus_title_string Not In (';', '; // ;')
+    Then employer_hh.bus_title_string End As bus_title_string
+  , employer_hh.bus_high_lvl_job_title
   --, high-income career specialty
-  --, company has matching program
+  , Case When employer_hh.bus_gift_match Like '%Y%' Then 'Y' Else 'N' End As bus_gift_match
   -- Contact indicators
   , Case When addresses.addr_types Like '%H%' Then 'Y' Else 'N' End As has_home_addr
   , Case When addresses.addr_types Like '%AH%' Then 'Y' Else 'N' End As has_alt_home_addr
@@ -168,6 +197,7 @@ Left Join ksm_giving On ksm_giving.household_id = hh.household_id
 Left Join addresses On addresses.household_id = hh.household_id
 Left Join phones On phones.household_id = hh.household_id
 Left Join emails On emails.household_id = hh.household_id
+Left Join employer_hh On employer_hh.household_id = hh.household_id
 Where
   -- Exclude organizations
   hh.person_or_org = 'P'
