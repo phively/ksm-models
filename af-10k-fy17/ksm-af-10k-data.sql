@@ -100,6 +100,7 @@ employer As (
     , job_title
     , matching_status_ind
     , high_level_job_title
+    , trim(fld_of_work || ' ' || fld_of_spec1 || ' ' || fld_of_spec2 || ' ' || fld_of_spec3) As career_specs
   From v_ksm_high_level_job_title
 ),
 
@@ -113,6 +114,8 @@ employer_hh As (
       ) Within Group (Order By employer.id_number Asc) As bus_gift_match
     , Listagg(high_level_job_title, '; '
       ) Within Group (Order By employer.id_number Asc) As bus_high_lvl_job_title
+    , Listagg(career_specs, '; '
+      ) Within Group (Order By employer.id_number Asc) As bus_career_specs
   From employer
   Inner Join hh On hh.id_number = employer.id_number
   Group By household_id
@@ -147,7 +150,12 @@ Select
   , Case When employer_hh.bus_title_string Not In (';', '; // ;')
     Then employer_hh.bus_title_string End As bus_title_string
   , employer_hh.bus_high_lvl_job_title
-  --, high-income career specialty
+  , employer_hh.bus_career_specs
+  , Case When employer_hh.bus_career_specs Like '%Bank%'
+      Or employer_hh.bus_career_specs Like '%Financ%'
+      Or employer_hh.bus_career_specs Like '%Invest%'
+      Then 'Y'
+    End As bus_career_spec_finance
   , Case When employer_hh.bus_gift_match Like '%Y%' Then 'Y' Else 'N' End As bus_gift_match
   -- Contact indicators
   , Case When addresses.addr_types Like '%H%' Then 'Y' Else 'N' End As has_home_addr
