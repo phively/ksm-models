@@ -146,7 +146,8 @@ Select
   , hh.household_state
   , hh.household_country
   , hh.household_continent
-  , Case When employer_hh.household_id Is Not Null Then 'Y' Else 'N' End As bus_is_employed
+  , Case When employer_hh.bus_title_string Is Not Null And employer_hh.bus_title_string Not In (';', '; // ;')
+    Then 'Y' Else 'N' End As bus_is_employed
   , Case When employer_hh.bus_title_string Not In (';', '; // ;')
     Then employer_hh.bus_title_string End As bus_title_string
   , employer_hh.bus_high_lvl_job_title
