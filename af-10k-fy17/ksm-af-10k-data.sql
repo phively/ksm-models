@@ -4,6 +4,12 @@ With
  Giving queries
 *************************/
 
+/* Current calendar */
+cal As (
+  Select curr_fy
+  From v_current_calendar
+),
+
 /* Householded transactions */
 giving_hh As (
   Select *
@@ -38,7 +44,18 @@ ksm_giving As (
     , sum(Case When payment_type = 'Cash / Check' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then 1 End) As gifts_cash
     , sum(Case When payment_type = 'Credit Card' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then 1 End) As gifts_credit_card
     , sum(Case When payment_type = 'Securities' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then 1 End) As gifts_stock
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 1 Then hh_recognition_credit End) As cash_pfy1
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 2 Then hh_recognition_credit End) As cash_pfy2
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 3 Then hh_recognition_credit End) As cash_pfy3
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 4 Then hh_recognition_credit End) As cash_pfy4
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 5 Then hh_recognition_credit End) As cash_pfy5
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 1 Then hh_recognition_credit End) As ngc_pfy1
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 2 Then hh_recognition_credit End) As ngc_pfy2
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 3 Then hh_recognition_credit End) As ngc_pfy3
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 4 Then hh_recognition_credit End) As ngc_pfy4
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 5 Then hh_recognition_credit End) As ngc_pfy5
   From giving_hh
+  Cross Join cal
   Left Join ksm_giving_yr On ksm_giving_yr.household_id = giving_hh.household_id
   Group By giving_hh.household_id
 ),
@@ -183,6 +200,17 @@ Select
   , ksm_giving.gifts_cash
   , ksm_giving.gifts_credit_card
   , ksm_giving.gifts_stock
+  -- Recent giving
+  , ksm_giving.cash_pfy1
+  , ksm_giving.cash_pfy2
+  , ksm_giving.cash_pfy3
+  , ksm_giving.cash_pfy4
+  , ksm_giving.cash_pfy5
+  , ksm_giving.ngc_pfy1
+  , ksm_giving.ngc_pfy2
+  , ksm_giving.ngc_pfy3
+  , ksm_giving.ngc_pfy4
+  , ksm_giving.ngc_pfy5
   -- Prospect indicators
   --, research capacity rating (careful, endogenous)
   --, active prospect record (careful, endogenous)
