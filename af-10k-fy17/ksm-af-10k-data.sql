@@ -6,7 +6,7 @@ With
 
 /* Current calendar */
 cal As (
-  Select curr_fy
+  Select *
   From v_current_calendar
 ),
 
@@ -136,6 +136,76 @@ employer_hh As (
   From employer
   Inner Join hh On hh.id_number = employer.id_number
   Group By household_id
+),
+
+/*************************
+Prospect information
+*************************/
+
+/* Ever had a KSM program interest */
+ksm_prs_ids As (
+  Select Distinct
+    hh.household_id
+  From program_prospect prs
+  Inner Join prospect_entity prs_e On prs_e.prospect_id = prs.prospect_id
+  Inner Join hh On hh.id_number = prs_e.id_number
+  Where prs.program_code = 'KM'
+),
+
+/* Active KSM prospect records */
+ksm_prs_ids_active As (
+  Select Distinct
+    hh.household_id
+  From program_prospect prs
+  Inner Join prospect_entity prs_e On prs_e.prospect_id = prs.prospect_id
+  Inner Join hh On hh.id_number = prs_e.id_number
+  Inner Join prospect On prs.prospect_id = prospect.prospect_id
+  Inner Join entity on entity.id_number = prs_e.id_number
+  Where prs.program_code = 'KM'
+    -- Active only
+    And prs.active_ind = 'Y'
+    And prospect.active_ind = 'Y'
+    -- Exclude deceased, purgable
+    And entity.record_status_code Not In ('D', 'X')
+    -- Exclude Disqualified, Permanent Stewardship
+    And prs.stage_code Not In (7, 11)
+    And prospect.stage_code Not In (7, 11)
+),
+
+/* Visits in last 5 FY */
+recent_visits As (
+  Select
+    hh.household_id
+    , rpt_pbh634.ksm_pkg.get_fiscal_year(contact_report.contact_date) As fiscal_year
+    , contact_report.report_id
+    , trunc(contact_report.contact_date) As contact_date
+    , contact_report.author_id_number
+  From contact_report
+  Inner Join hh On hh.id_number = contact_report.id_number
+  Cross Join cal
+  Where rpt_pbh634.ksm_pkg.get_fiscal_year(contact_report.contact_date) Between cal.curr_fy - 5 And cal.curr_fy - 1
+    And contact_report.contact_type = 'V'
+),
+
+/* Visits summary */
+visits As (
+  Select
+    household_id
+    -- Unique visits, max of 1 per day
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 1 Then contact_date Else NULL End) As visits_pfy1
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 2 Then contact_date Else NULL End) As visits_pfy2
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 3 Then contact_date Else NULL End) As visits_pfy3
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 4 Then contact_date Else NULL End) As visits_pfy4
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 5 Then contact_date Else NULL End) As visits_pfy5
+    -- Unique visitors based on author
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 1 Then author_id_number Else NULL End) As visitors_pfy1
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 2 Then author_id_number Else NULL End) As visitors_pfy2
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 3 Then author_id_number Else NULL End) As visitors_pfy3
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 4 Then author_id_number Else NULL End) As visitors_pfy4
+    , count(Distinct Case When fiscal_year = cal.curr_fy - 5 Then author_id_number Else NULL End) As visitors_pfy5
+  From recent_visits
+  Cross Join cal
+  Group By household_id
 )
 
 /*************************
@@ -185,7 +255,6 @@ Select
   , Case When phones.phone_types Like '%M%' Then 'Y' Else 'N' End As has_mobile_phone
   , Case When emails.email_types Like '%X%' Then 'Y' Else 'N' End As has_home_email
   , Case When emails.email_types Like '%Y%' Then 'Y' Else 'N' End As has_bus_email
-  --, special handling?
   -- Giving indicators
   , ksm_giving.giving_first_year
   , ksm_giving.giving_first_year_cash_amt
@@ -212,11 +281,19 @@ Select
   , ksm_giving.ngc_pfy4
   , ksm_giving.ngc_pfy5
   -- Prospect indicators
-  --, research capacity rating (careful, endogenous)
-  --, active prospect record (careful, endogenous)
-  --, inactive prospect record (careful, endogenous)
-  --, count of visits with NU
-  --, count of visits with KSM
+  , prs.evaluation_rating
+  , Case When ksm_prs_ids_active.household_id Is Not Null Then 'Y' End As ksm_prospect_active
+  , Case When ksm_prs_ids.household_id Is Not Null Then 'Y' End As ksm_prospect_any
+  , visits.visits_pfy1
+  , visits.visits_pfy2
+  , visits.visits_pfy3
+  , visits.visits_pfy4
+  , visits.visits_pfy5
+  , visits.visitors_pfy1
+  , visits.visitors_pfy2
+  , visits.visitors_pfy3
+  , visits.visitors_pfy4
+  , visits.visitors_pfy5
   -- Engagement indicators
   --, count of NU committees
   --, count of KSM committees
@@ -230,11 +307,18 @@ Select
   --, ever attended Reunion
 From hh
 Inner Join entity On entity.id_number = hh.id_number
+-- Giving
 Left Join ksm_giving On ksm_giving.household_id = hh.household_id
+-- Entity
 Left Join addresses On addresses.household_id = hh.household_id
 Left Join phones On phones.household_id = hh.household_id
 Left Join emails On emails.household_id = hh.household_id
 Left Join employer_hh On employer_hh.household_id = hh.household_id
+-- Prospect
+Left Join nu_prs_trp_prospect prs On prs.id_number = hh.id_number
+Left Join ksm_prs_ids On ksm_prs_ids.household_id = hh.household_id
+Left Join ksm_prs_ids_active On ksm_prs_ids_active.household_id = hh.household_id
+Left Join visits On visits.household_id = hh.household_id
 Where
   -- Exclude organizations
   hh.person_or_org = 'P'
