@@ -322,8 +322,9 @@ Left Join visits On visits.household_id = hh.household_id
 Where
   -- Exclude organizations
   hh.person_or_org = 'P'
-  -- Must be Kellogg alumni or donor
+  -- Must be Kellogg alumni, donor, or past prospect
   And (
     hh.degrees_concat Is Not Null
     Or ksm_giving.giving_first_year Is Not Null
+    Or ksm_prs_ids.household_id Is Not Null
   )
