@@ -206,6 +206,89 @@ visits As (
   From recent_visits
   Cross Join cal
   Group By household_id
+),
+
+/*************************
+ Engagement information
+*************************/
+
+/* Committee data */
+cmtee As (
+  Select
+    hh.household_id
+    , c.committee_status_code
+    , c.committee_code
+    , tms_ct.short_desc As committee
+    , c.committee_role_code
+    , tms_r.short_desc As role
+    , Case
+        When (tms_ct.short_desc || ' ' || tms_ct.full_desc) Like '%KSM%' Then 'Y'
+        When (tms_ct.short_desc || ' ' || tms_ct.full_desc) Like '%Kellogg%' Then 'Y'
+      End As ksm_committee
+    , c.start_dt
+    , c.stop_dt
+  From committee c
+  Inner Join hh On hh.id_number = c.id_number
+  Inner Join tms_committee_table tms_ct On tms_ct.committee_code = c.committee_code
+  Inner Join tms_committee_status tms_cs On tms_cs.committee_status_code = c.committee_status_code
+  Left Join tms_committee_role tms_r On tms_r.committee_role_code = c.committee_role_code
+  Where c.committee_status_code In ('C', 'F', 'A', 'U') -- Current, Former, Active, Inactive; A/I for historic tracking
+),
+
+/* Committee summary */
+cmtees As (
+  Select
+    household_id
+    , count(Distinct committee_code) As committee_nu_distinct
+    , count(Distinct Case When committee_status_code = 'C' Then committee_code Else NULL End) As committee_nu_active
+    , count(Distinct Case When ksm_committee = 'Y' Then committee_code Else NULL End) As committee_ksm_distinct
+    , count(Distinct Case When ksm_committee = 'Y' And committee_status_code = 'C' Then committee_code Else NULL End) As committee_ksm_active
+    , count(Distinct
+    Case
+      When ksm_committee = 'Y' And committee_role_code In (
+        'B', 'C', 'CC', 'CL', 'DAL', 'E', 'I', 'P', 'PE', 'RGD', 'T', 'TA', 'TC', 'TF', 'TL', 'TN', 'TO', 'V'
+      ) Then committee_code
+      When committee_code In (
+        'KPH' -- PHS
+        , 'UA' -- KAC (historical)
+        , 'KACNA' -- KAC
+        , 'U' -- GAB
+        , 'KCC' -- Campaign Committee
+        , 'KGAB' -- GAB (historical)
+        , 'KACAS' -- KAC (historical)
+        , 'KACEM' -- KAC (historical)
+        , 'KACLA' -- KAC (historical)
+        , 'KAMP' -- Asset Management
+        , 'KCGN' -- Corporate Governance
+        , 'CEW' -- Executive Women
+        , 'KCDO' -- Diversity
+      ) Then committee_code
+      Else NULL
+    End) As committee_ksm_ldr
+  , count(Distinct
+    Case
+      When committee_status_code = 'C' And ksm_committee = 'Y' And committee_role_code In (
+        'B', 'C', 'CC', 'CL', 'DAL', 'E', 'I', 'P', 'PE', 'RGD', 'T', 'TA', 'TC', 'TF', 'TL', 'TN', 'TO', 'V'
+      ) Then committee_code
+      When committee_status_code = 'C' And committee_code In (
+        'KPH' -- PHS
+        , 'UA' -- KAC (historical)
+        , 'KACNA' -- KAC
+        , 'U' -- GAB
+        , 'KCC' -- Campaign Committee
+        , 'KGAB' -- GAB (historical)
+        , 'KACAS' -- KAC (historical)
+        , 'KACEM' -- KAC (historical)
+        , 'KACLA' -- KAC (historical)
+        , 'KAMP' -- Asset Management
+        , 'KCGN' -- Corporate Governance
+        , 'CEW' -- Executive Women
+        , 'KCDO' -- Diversity
+      ) Then committee_code
+      Else NULL
+    End) As committee_ksm_ldr_active
+  From cmtee
+  Group By household_id
 )
 
 /*************************
@@ -280,6 +363,7 @@ Select
   , ksm_giving.ngc_pfy3
   , ksm_giving.ngc_pfy4
   , ksm_giving.ngc_pfy5
+  --, gift clubs in each of past 5 FY
   -- Prospect indicators
   , prs.evaluation_rating
   , Case When ksm_prs_ids_active.household_id Is Not Null Then 'Y' End As ksm_prospect_active
@@ -295,12 +379,12 @@ Select
   , visits.visitors_pfy4
   , visits.visitors_pfy5
   -- Engagement indicators
-  --, count of NU committees
-  --, count of KSM committees
-  --, GAB indicator
-  --, Trustee indicator (careful, endogenous)
-  --, Reunion indicator
-  --, Club Leader indicator
+  , cmtees.committee_nu_distinct
+  , cmtees.committee_nu_active
+  , cmtees.committee_ksm_distinct
+  , cmtees.committee_ksm_active
+  , cmtees.committee_ksm_ldr
+  , cmtees.committee_ksm_ldr_active
   --, number of FY on committees
   --, number of events attended
   --, number of FY attending events
@@ -319,6 +403,8 @@ Left Join nu_prs_trp_prospect prs On prs.id_number = hh.id_number
 Left Join ksm_prs_ids On ksm_prs_ids.household_id = hh.household_id
 Left Join ksm_prs_ids_active On ksm_prs_ids_active.household_id = hh.household_id
 Left Join visits On visits.household_id = hh.household_id
+-- Engagement
+Left Join cmtees On cmtees.household_id = hh.household_id
 Where
   -- Exclude organizations
   hh.person_or_org = 'P'
