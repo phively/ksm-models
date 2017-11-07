@@ -217,7 +217,7 @@ tickets As (
   Select
     hh.household_id
     , count(Distinct substr(stop_dt, 1, 4)) As athletics_ticket_years
-    , max(Distinct substr(stop_dt, 1, 4)) As athletics_ticket_last
+    , to_number(max(Distinct substr(stop_dt, 1, 4))) As athletics_ticket_last
   From activity
   Inner Join hh On hh.id_number = activity.id_number
   Where activity_code In ('BBSEA', 'FBSEA')
@@ -237,8 +237,8 @@ cmtee As (
         When (tms_ct.short_desc || ' ' || tms_ct.full_desc) Like '%KSM%' Then 'Y'
         When (tms_ct.short_desc || ' ' || tms_ct.full_desc) Like '%Kellogg%' Then 'Y'
       End As ksm_committee
-    , c.start_dt
-    , c.stop_dt
+    , substr(c.start_dt, 1, 4) As start_yr
+    , substr(c.stop_dt, 1, 4) As stop_yr
   From committee c
   Inner Join hh On hh.id_number = c.id_number
   Inner Join tms_committee_table tms_ct On tms_ct.committee_code = c.committee_code
@@ -252,8 +252,10 @@ cmtees As (
   Select
     household_id
     , count(Distinct committee_code) As committee_nu_distinct
+    , count(Distinct Case When start_yr <> '0000' Then start_yr Else NULL End) As committee_nu_years
     , count(Distinct Case When committee_status_code = 'C' Then committee_code Else NULL End) As committee_nu_active
     , count(Distinct Case When ksm_committee = 'Y' Then committee_code Else NULL End) As committee_ksm_distinct
+    , count(Distinct Case When ksm_committee = 'Y' And start_yr <> '0000' Then start_yr Else NULL End) As committee_ksm_years
     , count(Distinct Case When ksm_committee = 'Y' And committee_status_code = 'C' Then committee_code Else NULL End) As committee_ksm_active
     , count(Distinct
     Case
@@ -393,11 +395,12 @@ Select
   -- Engagement indicators
   , cmtees.committee_nu_distinct
   , cmtees.committee_nu_active
+    , cmtees.committee_nu_years
   , cmtees.committee_ksm_distinct
   , cmtees.committee_ksm_active
+  , cmtees.committee_ksm_years
   , cmtees.committee_ksm_ldr
   , cmtees.committee_ksm_ldr_active
-  --, number of FY on committees
   --, number of events attended
   --, ever attended Reunion
   --, number of FY attending events
