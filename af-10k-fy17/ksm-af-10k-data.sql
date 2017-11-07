@@ -212,6 +212,18 @@ visits As (
  Engagement information
 *************************/
 
+/* Athletics season tickets */
+tickets As (
+  Select
+    hh.household_id
+    , count(Distinct substr(stop_dt, 1, 4)) As athletics_ticket_years
+    , max(Distinct substr(stop_dt, 1, 4)) As athletics_ticket_last
+  From activity
+  Inner Join hh On hh.id_number = activity.id_number
+  Where activity_code In ('BBSEA', 'FBSEA')
+  Group By hh.household_id
+),
+
 /* Committee data */
 cmtee As (
   Select
@@ -387,8 +399,11 @@ Select
   , cmtees.committee_ksm_ldr_active
   --, number of FY on committees
   --, number of events attended
-  --, number of FY attending events
   --, ever attended Reunion
+  --, number of FY attending events
+  --, number of events as volunteer
+  , tickets.athletics_ticket_years
+  , tickets.athletics_ticket_last
 From hh
 Inner Join entity On entity.id_number = hh.id_number
 -- Giving
@@ -405,6 +420,8 @@ Left Join ksm_prs_ids_active On ksm_prs_ids_active.household_id = hh.household_i
 Left Join visits On visits.household_id = hh.household_id
 -- Engagement
 Left Join cmtees On cmtees.household_id = hh.household_id
+Left Join tickets On tickets.household_id = hh.household_id
+-- Conditionals
 Where
   -- Exclude organizations
   hh.person_or_org = 'P'
