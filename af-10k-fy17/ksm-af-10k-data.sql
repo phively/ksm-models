@@ -212,6 +212,37 @@ visits As (
  Engagement information
 *************************/
 
+/* Gift clubs data */
+gc_dat As (
+  Select
+    hh.household_id
+    , gc.gift_club_code
+    , substr(gc.gift_club_start_date, 1, 4) As start_yr
+    , substr(gc.gift_club_end_date, 1, 4) As stop_yr
+    , Case
+        When gc.gift_club_code = 'LKM' Then 'KSM' -- Kellogg Leadership Circle
+        When gc.gift_club_code In ('028', 'AHR') Then 'BEQ' -- Rogers Society
+        When gc.gift_club_code In ('NUL', 'INF') Then 'LOYAL' -- NU Loyal, Infinity
+        Else 'LDR' -- Other leadership, e.g. NULC, Law, Feinberg, SESP, etc.
+      End As gc_category
+  From gift_clubs gc
+  Inner Join hh On hh.id_number = gc.gift_club_id_number
+  Inner Join gift_club_table gct On gct.club_code = gc.gift_club_code
+  Where gct.club_status = 'A' -- Only currently active gift clubs
+),
+
+/* Gift clubs summary */
+gc_summary As (
+  Select
+    household_id
+    , count(Distinct Case When gc_category = 'KSM' Then stop_yr Else NULL End) As gift_club_klc_yrs
+    , count(Distinct Case When gc_category = 'BEQ' Then stop_yr Else NULL End) As gift_club_bequest_yrs
+    , count(Distinct Case When gc_category = 'LOYAL' Then stop_yr Else NULL End) As gift_club_loyal_yrs
+    , count(Distinct Case When gc_category In ('LDR', 'KSM') Then stop_yr Else NULL End) As gift_club_nu_ldr_yrs
+  From gc_dat
+  Group By household_id
+),
+
 /* Athletics season tickets */
 tickets As (
   Select
@@ -377,7 +408,11 @@ Select
   , ksm_giving.ngc_pfy3
   , ksm_giving.ngc_pfy4
   , ksm_giving.ngc_pfy5
-  --, gift clubs in each of past 5 FY
+  -- Gift clubs
+  , gc_summary.gift_club_klc_yrs
+  , gc_summary.gift_club_bequest_yrs
+  , gc_summary.gift_club_loyal_yrs
+  , gc_summary.gift_club_nu_ldr_yrs
   -- Prospect indicators
   , prs.evaluation_rating
   , Case When ksm_prs_ids_active.household_id Is Not Null Then 'Y' End As ksm_prospect_active
@@ -422,12 +457,15 @@ Left Join ksm_prs_ids On ksm_prs_ids.household_id = hh.household_id
 Left Join ksm_prs_ids_active On ksm_prs_ids_active.household_id = hh.household_id
 Left Join visits On visits.household_id = hh.household_id
 -- Engagement
+Left Join gc_summary On gc_summary.household_id = hh.household_id
 Left Join cmtees On cmtees.household_id = hh.household_id
 Left Join tickets On tickets.household_id = hh.household_id
 -- Conditionals
 Where
   -- Exclude organizations
   hh.person_or_org = 'P'
+  -- No inactive or purgable records
+  And hh.record_status_code Not In ('I', 'X')
   -- Must be Kellogg alumni, donor, or past prospect
   And (
     hh.degrees_concat Is Not Null
