@@ -8,25 +8,25 @@ With
 cal As (
   Select *
   From v_current_calendar
-),
+)
 
 /* Householded transactions */
-giving_hh As (
+, giving_hh As (
   Select *
   From v_ksm_giving_trans_hh
-),
+)
 
 /* First year of Kellogg giving */
-ksm_giving_yr As (
+, ksm_giving_yr As (
   Select
     household_id
     , min(Case When hh_recognition_credit > 0 Then fiscal_year End) As first_year
   From giving_hh
   Group By household_id
-),
+)
 
 /* Total lifetime giving transactions */
-ksm_giving As (
+, ksm_giving As (
   Select
     giving_hh.household_id
     , count(Distinct Case When hh_recognition_credit > 0 Then allocation_code End) As gifts_allocs_supported
@@ -58,20 +58,20 @@ ksm_giving As (
   Cross Join cal
   Left Join ksm_giving_yr On ksm_giving_yr.household_id = giving_hh.household_id
   Group By giving_hh.household_id
-),
+)
 
 /*************************
 Entity information
 *************************/
 
 /* KSM householding */
-hh As (
+, hh As (
   Select *
   From v_entity_ksm_households
-),
+)
 
 /* Entity addresses */
-addresses As (
+, addresses As (
   Select
     household_id
     , Listagg(addr_type_code, ', '
@@ -81,10 +81,10 @@ addresses As (
   Where addr_status_code = 'A' -- Active addresses only
     And addr_type_code In ('H', 'B', 'AH', 'AB', 'S') -- Home, Bus, Alt Home, Alt Bus, Seasonal
   Group By household_id
-),
+)
 
 /* Entity phone */
-phones As (
+, phones As (
   Select
     household_id
     , Listagg(telephone_type_code, ', '
@@ -94,10 +94,10 @@ phones As (
   Where telephone_status_code = 'A' -- Active phone only
     And telephone_type_code In ('H', 'B', 'M') -- Home, Business, Mobile
   Group By household_id
-),
+)
 
 /* Entity email */
-emails As (
+, emails As (
   Select
     household_id
     , Listagg(email_type_code, ', '
@@ -107,10 +107,10 @@ emails As (
   Where email_status_code = 'A' -- Active emails only
     And email_type_code In ('X', 'Y') -- Home, Business
   Group By household_id
-),
+)
 
 /* Entity employment */
-employer As (
+, employer As (
   Select
     id_number
     , business_title
@@ -119,10 +119,10 @@ employer As (
     , high_level_job_title
     , trim(fld_of_work || ' ' || fld_of_spec1 || ' ' || fld_of_spec2 || ' ' || fld_of_spec3) As career_specs
   From v_ksm_high_level_job_title
-),
+)
 
 /* Employment aggregated to the household level */
-employer_hh As (
+, employer_hh As (
   Select
     household_id
     , Listagg(trim(business_title || '; ' || job_title), ' // '
@@ -136,24 +136,24 @@ employer_hh As (
   From employer
   Inner Join hh On hh.id_number = employer.id_number
   Group By household_id
-),
+)
 
 /*************************
 Prospect information
 *************************/
 
 /* Ever had a KSM program interest */
-ksm_prs_ids As (
+, ksm_prs_ids As (
   Select Distinct
     hh.household_id
   From program_prospect prs
   Inner Join prospect_entity prs_e On prs_e.prospect_id = prs.prospect_id
   Inner Join hh On hh.id_number = prs_e.id_number
   Where prs.program_code = 'KM'
-),
+)
 
 /* Active KSM prospect records */
-ksm_prs_ids_active As (
+, ksm_prs_ids_active As (
   Select Distinct
     hh.household_id
   From program_prospect prs
@@ -170,10 +170,10 @@ ksm_prs_ids_active As (
     -- Exclude Disqualified, Permanent Stewardship
     And prs.stage_code Not In (7, 11)
     And prospect.stage_code Not In (7, 11)
-),
+)
 
 /* Visits in last 5 FY */
-recent_visits As (
+, recent_visits As (
   Select
     hh.household_id
     , rpt_pbh634.ksm_pkg.get_fiscal_year(contact_report.contact_date) As fiscal_year
@@ -185,10 +185,10 @@ recent_visits As (
   Cross Join cal
   Where rpt_pbh634.ksm_pkg.get_fiscal_year(contact_report.contact_date) Between cal.curr_fy - 5 And cal.curr_fy - 1
     And contact_report.contact_type = 'V'
-),
+)
 
 /* Visits summary */
-visits As (
+, visits As (
   Select
     household_id
     -- Unique visits, max of 1 per day
@@ -206,14 +206,14 @@ visits As (
   From recent_visits
   Cross Join cal
   Group By household_id
-),
+)
 
 /*************************
  Engagement information
 *************************/
 
 /* Gift clubs data */
-gc_dat As (
+, gc_dat As (
   Select
     hh.household_id
     , gc.gift_club_code
@@ -229,10 +229,10 @@ gc_dat As (
   Inner Join hh On hh.id_number = gc.gift_club_id_number
   Inner Join gift_club_table gct On gct.club_code = gc.gift_club_code
   Where gct.club_status = 'A' -- Only currently active gift clubs
-),
+)
 
 /* Gift clubs summary */
-gc_summary As (
+, gc_summary As (
   Select
     household_id
     , count(Distinct Case When gc_category = 'KSM' Then stop_yr Else NULL End) As gift_club_klc_yrs
@@ -241,10 +241,10 @@ gc_summary As (
     , count(Distinct Case When gc_category In ('LDR', 'KSM') Then stop_yr Else NULL End) As gift_club_nu_ldr_yrs
   From gc_dat
   Group By household_id
-),
+)
 
 /* Athletics season tickets */
-tickets As (
+, tickets As (
   Select
     hh.household_id
     , count(Distinct substr(stop_dt, 1, 4)) As athletics_ticket_years
@@ -253,10 +253,10 @@ tickets As (
   Inner Join hh On hh.id_number = activity.id_number
   Where activity_code In ('BBSEA', 'FBSEA')
   Group By hh.household_id
-),
+)
 
 /* Committee data */
-cmtee As (
+, cmtee As (
   Select
     hh.household_id
     , c.committee_status_code
@@ -276,10 +276,10 @@ cmtee As (
   Inner Join tms_committee_status tms_cs On tms_cs.committee_status_code = c.committee_status_code
   Left Join tms_committee_role tms_r On tms_r.committee_role_code = c.committee_role_code
   Where c.committee_status_code In ('C', 'F', 'A', 'U') -- Current, Former, Active, Inactive; A/I for historic tracking
-),
+)
 
 /* Committee summary */
-cmtees As (
+, cmtees As (
   Select
     household_id
     , count(Distinct committee_code) As committee_nu_distinct
@@ -430,7 +430,7 @@ Select
   -- Engagement indicators
   , cmtees.committee_nu_distinct
   , cmtees.committee_nu_active
-    , cmtees.committee_nu_years
+  , cmtees.committee_nu_years
   , cmtees.committee_ksm_distinct
   , cmtees.committee_ksm_active
   , cmtees.committee_ksm_years
@@ -442,6 +442,9 @@ Select
   --, number of events as volunteer
   , tickets.athletics_ticket_years
   , tickets.athletics_ticket_last
+  --, corporate recruiter, in activities
+  --, KSM communications featured, in activities
+  --, Kellogg speaker in activities
 From hh
 Inner Join entity On entity.id_number = hh.id_number
 -- Giving
