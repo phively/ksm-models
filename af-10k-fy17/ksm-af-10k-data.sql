@@ -355,6 +355,56 @@ Prospect information
   Group By household_id
 )
 
+/* Kellogg event IDs */
+, ksm_event_ids As (
+  Select Distinct
+    event.event_id
+    , event.event_name
+    , event.event_type
+    , trunc(event.event_start_datetime) As start_dt
+    , trunc(event.event_stop_datetime) As stop_dt
+  From ep_event event
+  Left Join ep_event_organizer evo On event.event_id = evo.event_id
+  Left Join entity On entity.id_number = evo.organization_id
+  Where event.master_event_id Is Null -- Do not count individual sub-events
+    And (
+      event.event_name Like '%KSM%'
+      Or event.event_name Like '%Kellogg%'
+      Or evo.organization_id = '0000697410' -- Kellogg Event Admin ID
+      Or lower(entity.report_name) Like lower('%Kellogg%') -- Kellogg club event organizers
+    )
+)
+
+/* Events data */
+, event_dat As (
+  Select Distinct
+    hh.household_id
+    , ksm_event_ids.event_id
+    , ksm_event_ids.event_name
+    , tms_et.short_desc As event_type
+    , extract(year from ksm_event_ids.start_dt) As start_yr
+    , extract(year from ksm_event_ids.stop_dt) As stop_yr
+  From ep_participant ppt
+  Inner Join ksm_event_ids On ksm_event_ids.event_id = ppt.event_id -- KSM events
+  Inner Join hh On hh.id_number = ppt.id_number
+  Inner Join ep_participation ppn On ppn.registration_id = ppt.registration_id
+  Left Join tms_event_type tms_et On tms_et.event_type = ksm_event_ids.event_type
+  Where ppn.participation_status_code In (' ', 'P') -- Blank or Participated
+)
+
+/* Events summary */
+, ksm_events As (
+  Select
+    household_id
+    , count(Distinct event_id) As ksm_events_attended
+    , count(Distinct start_yr) As ksm_events_yrs
+    , count(Distinct Case When start_yr Between cal.curr_fy - 3 And cal.curr_fy - 1 Then event_id Else NULL End) As ksm_events_prev_3_fy
+    , count(Distinct Case When event_type = 'Reunion' Or event_name Like '%Reunion%' Then start_yr Else NULL End) As ksm_events_reunions
+  From event_dat
+  Cross Join cal
+  Group By household_id
+)
+
 /*************************
  Main query
 *************************/
@@ -363,7 +413,7 @@ Select
   -- Identifiers
     hh.id_number
   , hh.report_name
-  , hh.record_status_code
+/*  , hh.record_status_code
   , hh.household_record
   , hh.household_id
   , Case When hh.id_number = hh.household_id Then 'Y' Else 'N' End As hh_primary
@@ -455,10 +505,11 @@ Select
   , cmtees.committee_ksm_years
   , cmtees.committee_ksm_ldr
   , cmtees.committee_ksm_ldr_active
-  -- Event indicators
-  --, number of events attended
-  --, ever attended Reunion
-  --, number of FY attending events
+*/  -- Event indicators
+  , ksm_events.ksm_events_attended
+  , ksm_events.ksm_events_yrs
+  , ksm_events.ksm_events_prev_3_fy
+  , ksm_events.ksm_events_reunions
   --, number of events as volunteer
   -- Activity indicators
   , acts.ksm_speaker_years
@@ -487,6 +538,7 @@ Left Join visits On visits.household_id = hh.household_id
 Left Join gc_summary On gc_summary.household_id = hh.household_id
 Left Join cmtees On cmtees.household_id = hh.household_id
 Left Join acts On acts.household_id = hh.household_id
+Left Join ksm_events On ksm_events.household_id = hh.household_id
 -- Conditionals
 Where
   -- Exclude organizations
