@@ -243,16 +243,35 @@ Prospect information
   Group By household_id
 )
 
-/* Athletics season tickets */
-, tickets As (
+/* Activities data */
+, activities As (
   Select
     hh.household_id
-    , count(Distinct substr(stop_dt, 1, 4)) As athletics_ticket_years
-    , to_number(max(Distinct substr(stop_dt, 1, 4))) As athletics_ticket_last
+    , activity_code
+    , substr(start_dt, 1, 4) As start_yr
+    , substr(stop_dt, 1, 4) As stop_yr
   From activity
   Inner Join hh On hh.id_number = activity.id_number
-  Where activity_code In ('BBSEA', 'FBSEA')
-  Group By hh.household_id
+)
+
+/* Activities summary */
+, acts As (
+  Select
+    household_id
+    -- Kellogg speakers
+    , count(Distinct Case When activity_code = 'KSP' Then stop_yr Else NULL End) As ksm_speaker_years
+    , count(Case When activity_code = 'KSP' Then stop_yr Else NULL End) As ksm_speaker_times
+    -- Kellogg communications
+    , count(Distinct Case When activity_code = 'KCF' Then stop_yr Else NULL End) As ksm_featured_comm_years
+    , count(Case When activity_code = 'KCF' Then stop_yr Else NULL End) As ksm_featured_comm_times
+    -- Kellogg corporate recruiter
+    , count(Distinct Case When activity_code = 'KCR' Then stop_yr Else NULL End) As ksm_corp_recruiter_years
+    , count(Case When activity_code = 'KCR' Then stop_yr Else NULL End) As ksm_corp_recruiter_times
+    -- Season tickets for basketball and football (BBSEA, FBSEA)
+    , count(Distinct Case When activity_code In ('BBSEA', 'FBSEA') Then stop_yr Else NULL End) As athletics_ticket_years
+    , to_number(max(Distinct Case When activity_code In ('BBSEA', 'FBSEA') Then stop_yr Else NULL End)) As athletics_ticket_last
+  From activities
+  Group By household_id
 )
 
 /* Committee data */
@@ -427,7 +446,7 @@ Select
   , visits.visitors_pfy3
   , visits.visitors_pfy4
   , visits.visitors_pfy5
-  -- Engagement indicators
+  -- Committee indicators
   , cmtees.committee_nu_distinct
   , cmtees.committee_nu_active
   , cmtees.committee_nu_years
@@ -436,15 +455,20 @@ Select
   , cmtees.committee_ksm_years
   , cmtees.committee_ksm_ldr
   , cmtees.committee_ksm_ldr_active
+  -- Event indicators
   --, number of events attended
   --, ever attended Reunion
   --, number of FY attending events
   --, number of events as volunteer
-  , tickets.athletics_ticket_years
-  , tickets.athletics_ticket_last
-  --, corporate recruiter, in activities
-  --, KSM communications featured, in activities
-  --, Kellogg speaker in activities
+  -- Activity indicators
+  , acts.ksm_speaker_years
+  , acts.ksm_speaker_times
+  , acts.ksm_featured_comm_years
+  , acts.ksm_featured_comm_times
+  , acts.ksm_corp_recruiter_years
+  , acts.ksm_corp_recruiter_times
+  , acts.athletics_ticket_years
+  , acts.athletics_ticket_last
 From hh
 Inner Join entity On entity.id_number = hh.id_number
 -- Giving
@@ -462,7 +486,7 @@ Left Join visits On visits.household_id = hh.household_id
 -- Engagement
 Left Join gc_summary On gc_summary.household_id = hh.household_id
 Left Join cmtees On cmtees.household_id = hh.household_id
-Left Join tickets On tickets.household_id = hh.household_id
+Left Join acts On acts.household_id = hh.household_id
 -- Conditionals
 Where
   -- Exclude organizations
