@@ -413,7 +413,7 @@ Select
   -- Identifiers
     hh.id_number
   , hh.report_name
-/*  , hh.record_status_code
+  , hh.record_status_code
   , hh.household_record
   , hh.household_id
   , Case When hh.id_number = hh.household_id Then 'Y' Else 'N' End As hh_primary
@@ -505,12 +505,11 @@ Select
   , cmtees.committee_ksm_years
   , cmtees.committee_ksm_ldr
   , cmtees.committee_ksm_ldr_active
-*/  -- Event indicators
+  -- Event indicators
   , ksm_events.ksm_events_attended
   , ksm_events.ksm_events_yrs
   , ksm_events.ksm_events_prev_3_fy
   , ksm_events.ksm_events_reunions
-  --, number of events as volunteer
   -- Activity indicators
   , acts.ksm_speaker_years
   , acts.ksm_speaker_times
