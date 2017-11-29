@@ -185,14 +185,15 @@ $(document).ready(function () {
 <!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2Vzc2lvbkluZm8oKVxuYGBgIn0= -->
 <pre class="r"><code>sessionInfo()</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiUiB2ZXJzaW9uIDMuMy4zICgyMDE3LTAzLTA2KVxuUGxhdGZvcm06IHg4Nl82NC13NjQtbWluZ3czMi94NjQgKDY0LWJpdClcblJ1bm5pbmcgdW5kZXI6IFdpbmRvd3MgPj0gOCB4NjQgKGJ1aWxkIDkyMDApXG5cbmxvY2FsZTpcblsxXSBMQ19DT0xMQVRFPUVuZ2xpc2hfVW5pdGVkIFN0YXRlcy4xMjUyICBMQ19DVFlQRT1FbmdsaXNoX1VuaXRlZCBTdGF0ZXMuMTI1MiAgICBMQ19NT05FVEFSWT1FbmdsaXNoX1VuaXRlZCBTdGF0ZXMuMTI1MlxuWzRdIExDX05VTUVSSUM9QyAgICAgICAgICAgICAgICAgICAgICAgICAgIExDX1RJTUU9RW5nbGlzaF9Vbml0ZWQgU3RhdGVzLjEyNTIgICAgXG5cbmF0dGFjaGVkIGJhc2UgcGFja2FnZXM6XG5bMV0gc3RhdHMgICAgIGdyYXBoaWNzICBnckRldmljZXMgdXRpbHMgICAgIGRhdGFzZXRzICBtZXRob2RzICAgYmFzZSAgICAgXG5cbmxvYWRlZCB2aWEgYSBuYW1lc3BhY2UgKGFuZCBub3QgYXR0YWNoZWQpOlxuWzFdIHRvb2xzXzMuMy4zICBrbml0cl8xLjE1LjFcbiJ9 -->
+<!-- rnb-output-begin eyJkYXRhIjoiUiB2ZXJzaW9uIDMuMy4zICgyMDE3LTAzLTA2KVxuUGxhdGZvcm06IHg4Nl82NC13NjQtbWluZ3czMi94NjQgKDY0LWJpdClcblJ1bm5pbmcgdW5kZXI6IFdpbmRvd3MgPj0gOCB4NjQgKGJ1aWxkIDkyMDApXG5cbmxvY2FsZTpcblsxXSBMQ19DT0xMQVRFPUVuZ2xpc2hfVW5pdGVkIFN0YXRlcy4xMjUyICBMQ19DVFlQRT1FbmdsaXNoX1VuaXRlZCBTdGF0ZXMuMTI1MiAgIFxuWzNdIExDX01PTkVUQVJZPUVuZ2xpc2hfVW5pdGVkIFN0YXRlcy4xMjUyIExDX05VTUVSSUM9QyAgICAgICAgICAgICAgICAgICAgICAgICAgXG5bNV0gTENfVElNRT1FbmdsaXNoX1VuaXRlZCBTdGF0ZXMuMTI1MiAgICBcblxuYXR0YWNoZWQgYmFzZSBwYWNrYWdlczpcblsxXSBzdGF0cyAgICAgZ3JhcGhpY3MgIGdyRGV2aWNlcyB1dGlscyAgICAgZGF0YXNldHMgIG1ldGhvZHMgICBiYXNlICAgICBcblxubG9hZGVkIHZpYSBhIG5hbWVzcGFjZSAoYW5kIG5vdCBhdHRhY2hlZCk6XG5bMV0gdG9vbHNfMy4zLjMgIGtuaXRyXzEuMTUuMVxuIn0= -->
 <pre><code>R version 3.3.3 (2017-03-06)
 Platform: x86_64-w64-mingw32/x64 (64-bit)
 Running under: Windows &gt;= 8 x64 (build 9200)
 
 locale:
-[1] LC_COLLATE=English_United States.1252  LC_CTYPE=English_United States.1252    LC_MONETARY=English_United States.1252
-[4] LC_NUMERIC=C                           LC_TIME=English_United States.1252    
+[1] LC_COLLATE=English_United States.1252  LC_CTYPE=English_United States.1252   
+[3] LC_MONETARY=English_United States.1252 LC_NUMERIC=C                          
+[5] LC_TIME=English_United States.1252    
 
 attached base packages:
 [1] stats     graphics  grDevices utils     datasets  methods   base     
@@ -208,8 +209,8 @@ loaded via a namespace (and not attached):
 <p>My code makes use of several packages:</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2NhbihcIlBBQ0tBR0VTLnR4dFwiLCB3aGF0PVwiY2hhcmFjdGVyXCIpXG5gYGAifQ== -->
-<pre class="r"><code>scan(&quot;PACKAGES.txt&quot;, what=&quot;character&quot;)</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2NhbignUEFDS0FHRVMudHh0Jywgd2hhdCA9ICdjaGFyYWN0ZXInKVxuYGBgIn0= -->
+<pre class="r"><code>scan('PACKAGES.txt', what = 'character')</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-output-begin eyJkYXRhIjoiUmVhZCA4IGl0ZW1zXG4ifQ== -->
 <pre><code>Read 8 items</code></pre>
@@ -222,16 +223,16 @@ loaded via a namespace (and not attached):
 <p>This code will install and load them as necessary. First, install <code>devtools</code> and my <code>wranglR</code> package:</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBDaGVjayB0byBzZWUgaWYgZGV2dG9vbHMgaXMgdW5hdmFpbGFibGVcbmlmICghKFwiZGV2dG9vbHNcIiAlaW4lIHV0aWxzOjppbnN0YWxsZWQucGFja2FnZXMoKVssIFwiUGFja2FnZVwiXSkpIHtcbiAgIyBJZiB1bmF2YWlsYWJsZSwgaW5zdGFsbCBpdFxuICBpbnN0YWxsLnBhY2thZ2VzKFwiZGV2dG9vbHNcIilcbn1cbiMgQ2hlY2sgdG8gc2VlIGlmIHdyYW5nbFIgaXMgdW5hdmFpbGFibGVcbmlmICghKFwid3JhbmdsUlwiICVpbiUgdXRpbHM6Omluc3RhbGxlZC5wYWNrYWdlcygpWywgXCJQYWNrYWdlXCJdKSkge1xuICAjIElmIHVuYXZhaWxhYmxlLCB1c2UgZGV2dG9vbHMgdG8gaW5zdGFsbCBpdCB2aWEgR2l0SHViXG4gIGRldnRvb2xzOjppbnN0YWxsX2dpdGh1YihcInBoaXZlbHkvd3JhbmdsUlwiKVxufVxuYGBgIn0= -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBDaGVjayB0byBzZWUgaWYgZGV2dG9vbHMgaXMgdW5hdmFpbGFibGVcbmlmICghKCdkZXZ0b29scycgJWluJSB1dGlsczo6aW5zdGFsbGVkLnBhY2thZ2VzKClbLCAnUGFja2FnZSddKSkge1xuICAjIElmIHVuYXZhaWxhYmxlLCBpbnN0YWxsIGl0XG4gIGluc3RhbGwucGFja2FnZXMoJ2RldnRvb2xzJylcbn1cbiMgQ2hlY2sgdG8gc2VlIGlmIHdyYW5nbFIgaXMgdW5hdmFpbGFibGVcbmlmICghKCd3cmFuZ2xSJyAlaW4lIHV0aWxzOjppbnN0YWxsZWQucGFja2FnZXMoKVssICdQYWNrYWdlJ10pKSB7XG4gICMgSWYgdW5hdmFpbGFibGUsIHVzZSBkZXZ0b29scyB0byBpbnN0YWxsIGl0IHZpYSBHaXRIdWJcbiAgZGV2dG9vbHM6Omluc3RhbGxfZ2l0aHViKCdwaGl2ZWx5L3dyYW5nbFInKVxufVxuYGBgIn0= -->
 <pre class="r"><code># Check to see if devtools is unavailable
-if (!(&quot;devtools&quot; %in% utils::installed.packages()[, &quot;Package&quot;])) {
+if (!('devtools' %in% utils::installed.packages()[, 'Package'])) {
   # If unavailable, install it
-  install.packages(&quot;devtools&quot;)
+  install.packages('devtools')
 }
 # Check to see if wranglR is unavailable
-if (!(&quot;wranglR&quot; %in% utils::installed.packages()[, &quot;Package&quot;])) {
+if (!('wranglR' %in% utils::installed.packages()[, 'Package'])) {
   # If unavailable, use devtools to install it via GitHub
-  devtools::install_github(&quot;phively/wranglR&quot;)
+  devtools::install_github('phively/wranglR')
 }</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
@@ -239,20 +240,87 @@ if (!(&quot;wranglR&quot; %in% utils::installed.packages()[, &quot;Package&quot;
 <p>Now load <code>wranglR</code> and use it to install or load the other required packages:</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBMb2FkIHdyYW5nbFJcbmxpYnJhcnkod3JhbmdsUilcbiMgRmVlZCB0aGUgbGlicmFyaWVzIHNwZWNpZmllZCBpbiBQQUNLQUdFUy50eHQgaW50byB3cmFuZ2xSJ3MgTGlicmFyaWVzKCkgZnVuY3Rpb25cbkxpYnJhcmllcyhzY2FuKGZpbGU9XCJQQUNLQUdFUy50eHRcIiwgd2hhdD1cImNoYXJhY3RlclwiKSlcbmBgYCJ9 -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBMb2FkIHdyYW5nbFJcbmxpYnJhcnkod3JhbmdsUilcbiMgRmVlZCB0aGUgbGlicmFyaWVzIHNwZWNpZmllZCBpbiBQQUNLQUdFUy50eHQgaW50byB3cmFuZ2xSJ3MgTGlicmFyaWVzKCkgZnVuY3Rpb25cbkxpYnJhcmllcyhzY2FuKGZpbGUgPSAnUEFDS0FHRVMudHh0Jywgd2hhdCA9ICdjaGFyYWN0ZXInKSlcbmBgYCJ9 -->
 <pre class="r"><code># Load wranglR
 library(wranglR)
 # Feed the libraries specified in PACKAGES.txt into wranglR's Libraries() function
-Libraries(scan(file=&quot;PACKAGES.txt&quot;, what=&quot;character&quot;))</code></pre>
+Libraries(scan(file = 'PACKAGES.txt', what = 'character'))</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-output-begin eyJkYXRhIjoiUmVhZCA4IGl0ZW1zXG4ifQ== -->
 <pre><code>Read 8 items</code></pre>
 <!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
 </div>
+<div id="data-preparation" class="section level2">
+<h2>Data preparation</h2>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyMjIEltcG9ydCB0aGUgZGF0YVxuZnVsbC5kYXRhIDwtIHJlYWQuY3N2KCdkYXRhLzIwMTctMTEtMjkgQUYgMTBLIE1vZGVsLmNzdicsIHN0cmluZ3NBc0ZhY3RvcnMgPSBGQUxTRSwgc3RyaXAud2hpdGUgPSBUUlVFLFxuICAgICAgICAgICAgICAgICAgICAgIGNvbENsYXNzZXMgPSBjKCdJRF9OVU1CRVInID0gJ2NoYXJhY3RlcicsXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgJ0hPVVNFSE9MRF9JRCcgPSAnY2hhcmFjdGVyJyxcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAnQklSVEhfRFQnID0gJ2NoYXJhY3RlcicpKSAlPiVcbiAgIyBEcm9wIGFueSBudWxsIHJvd3NcbiAgZmlsdGVyKCFpcy5uYShSTikpICU+JVxuICAjIERyb3Agcm93IG51bWJlcnNcbiAgc2VsZWN0KC1STilcbiMjIyBDbGVhbiB0aGUgZGF0YVxuZnVsbC5kYXRhIDwtIGZ1bGwuZGF0YSAlPiVcbiAgIyBDb252ZXJ0IE5BIHRvIDBcbiAgbXV0YXRlX2FsbChcbiAgICBmdW5zKFxuICAgICAgaWZlbHNlKGlzLm5hKC4pLCAwLCAuKVxuICAgIClcbiAgKSAlPiVcbiAgIyBDb252ZXJ0IHRvIGRhdGVcbiAgbXV0YXRlKFxuICAgICAgRE9CID0gVG9EYXRlKEJJUlRIX0RULCBtZXRob2QgPSAneW1kJylcbiAgKSAlPiVcbiAgIyBDb252ZXJ0IGNlcnRhaW4gY2hhcmFjdGVyIHRvIGZhY3RvclxuICBtdXRhdGUoXG4gICAgIyBGYWN0b3JzXG4gICAgICBSRUNPUkRfU1RBVFVTX0NPREUgPSBmYWN0b3IoUkVDT1JEX1NUQVRVU19DT0RFKSAlPiUgcmVsZXZlbChyZWYgPSAnQScpICMgQWN0aXZlXG4gICAgLCBIT1VTRUhPTERfUkVDT1JEID0gZmFjdG9yKEhPVVNFSE9MRF9SRUNPUkQpICU+JSByZWxldmVsKHJlZiA9ICdBTCcpICMgQWx1bW5pXG4gICAgLCBQUk9HUkFNX0dST1VQID0gZmFjdG9yKFBST0dSQU1fR1JPVVApICU+JSByZWxldmVsKHJlZiA9ICdGVCcpICMgRnVsbC1UaW1lXG4gICAgLCBQUkVGX0FERFJfVFlQRV9DT0RFID0gZmFjdG9yKFBSRUZfQUREUl9UWVBFX0NPREUpICU+JSByZWxldmVsKHJlZiA9ICdIJykgIyBIb21lXG4gICAgLCBIT1VTRUhPTERfU1RBVEUgPSBmYWN0b3IoSE9VU0VIT0xEX1NUQVRFKSAlPiUgcmVsZXZlbChyZWYgPSAnSUwnKSAjIElsbGlub2lzXG4gICAgLCBIT1VTRUhPTERfQ09VTlRSWSA9IGZhY3RvcihIT1VTRUhPTERfQ09VTlRSWSkgJT4lIHJlbGV2ZWwocmVmID0gJ1VuaXRlZCBTdGF0ZXMnKVxuICAgICwgSE9VU0VIT0xEX0NPTlRJTkVOVCA9IGZhY3RvcihIT1VTRUhPTERfQ09OVElORU5UKSAlPiUgcmVsZXZlbChyZWYgPSAnTm9ydGggQW1lcmljYScpXG4gICAgLCBFVkFMVUFUSU9OX1JBVElORyA9IGZhY3RvcihFVkFMVUFUSU9OX1JBVElORykgJT4lIHJlbGV2ZWwocmVmID0gJycpICMgVW5yYXRlZFxuICAgICMgSW5kaWNhdG9yc1xuICAgICwgQlVTX0lTX0VNUExPWUVEID0gZmFjdG9yKEJVU19JU19FTVBMT1lFRCA9PSAnWScpXG4gICAgLCBCVVNfSElHSF9MVkxfSk9CX1RJVExFID0gZmFjdG9yKEJVU19ISUdIX0xWTF9KT0JfVElUTEUgIT0gJycpXG4gICAgLCBCVVNfQ0FSRUVSX1NQRUNfRklOQU5DRSA9IGZhY3RvcihCVVNfQ0FSRUVSX1NQRUNfRklOQU5DRSAhPSAnJylcbiAgICAsIEJVU19HSUZUX01BVENIID0gZmFjdG9yKEJVU19HSUZUX01BVENIID09ICdZJylcbiAgICAsIEhBU19IT01FX0FERFIgPSBmYWN0b3IoSEFTX0hPTUVfQUREUiA9PSAnWScpXG4gICAgLCBIQVNfQUxUX0hPTUVfQUREUiA9IGZhY3RvcihIQVNfQUxUX0hPTUVfQUREUiA9PSAnWScpXG4gICAgLCBIQVNfQlVTX0FERFIgPSBmYWN0b3IoSEFTX0JVU19BRERSID09ICdZJylcbiAgICAsIEhBU19TRUFTT05BTF9BRERSID0gZmFjdG9yKEhBU19TRUFTT05BTF9BRERSID09ICdZJylcbiAgICAsIEhBU19IT01FX1BIT05FID0gZmFjdG9yKEhBU19IT01FX1BIT05FID09ICdZJylcbiAgICAsIEhBU19CVVNfUEhPTkUgPSBmYWN0b3IoSEFTX0JVU19QSE9ORSA9PSAnWScpXG4gICAgLCBIQVNfTU9CSUxFX1BIT05FID0gZmFjdG9yKEhBU19NT0JJTEVfUEhPTkUgPT0gJ1knKVxuICAgICwgSEFTX0hPTUVfRU1BSUwgPSBmYWN0b3IoSEFTX0hPTUVfRU1BSUwgPT0gJ1knKVxuICAgICwgSEFTX0JVU19FTUFJTCA9IGZhY3RvcihIQVNfQlVTX0VNQUlMID09ICdZJylcbiAgICAsIEtTTV9QUk9TUEVDVF9BQ1RJVkUgPSBmYWN0b3IoS1NNX1BST1NQRUNUX0FDVElWRSA9PSAnWScpXG4gICAgLCBLU01fUFJPU1BFQ1RfQU5ZID0gZmFjdG9yKEtTTV9QUk9TUEVDVF9BTlkgPT0gJ1knKVxuICApXG5gYGAifQ== -->
+<pre class="r"><code>### Import the data
+full.data &lt;- read.csv('data/2017-11-29 AF 10K Model.csv', stringsAsFactors = FALSE, strip.white = TRUE,
+                      colClasses = c('ID_NUMBER' = 'character',
+                                     'HOUSEHOLD_ID' = 'character',
+                                     'BIRTH_DT' = 'character')) %&gt;%
+  # Drop any null rows
+  filter(!is.na(RN)) %&gt;%
+  # Drop row numbers
+  select(-RN)
+### Clean the data
+full.data &lt;- full.data %&gt;%
+  # Convert NA to 0
+  mutate_all(
+    funs(
+      ifelse(is.na(.), 0, .)
+    )
+  ) %&gt;%
+  # Convert to date
+  mutate(
+      DOB = ToDate(BIRTH_DT, method = 'ymd')
+  ) %&gt;%
+  # Convert certain character to factor
+  mutate(
+    # Factors
+      RECORD_STATUS_CODE = factor(RECORD_STATUS_CODE) %&gt;% relevel(ref = 'A') # Active
+    , HOUSEHOLD_RECORD = factor(HOUSEHOLD_RECORD) %&gt;% relevel(ref = 'AL') # Alumni
+    , PROGRAM_GROUP = factor(PROGRAM_GROUP) %&gt;% relevel(ref = 'FT') # Full-Time
+    , PREF_ADDR_TYPE_CODE = factor(PREF_ADDR_TYPE_CODE) %&gt;% relevel(ref = 'H') # Home
+    , HOUSEHOLD_STATE = factor(HOUSEHOLD_STATE) %&gt;% relevel(ref = 'IL') # Illinois
+    , HOUSEHOLD_COUNTRY = factor(HOUSEHOLD_COUNTRY) %&gt;% relevel(ref = 'United States')
+    , HOUSEHOLD_CONTINENT = factor(HOUSEHOLD_CONTINENT) %&gt;% relevel(ref = 'North America')
+    , EVALUATION_RATING = factor(EVALUATION_RATING) %&gt;% relevel(ref = '') # Unrated
+    # Indicators
+    , BUS_IS_EMPLOYED = factor(BUS_IS_EMPLOYED == 'Y')
+    , BUS_HIGH_LVL_JOB_TITLE = factor(BUS_HIGH_LVL_JOB_TITLE != '')
+    , BUS_CAREER_SPEC_FINANCE = factor(BUS_CAREER_SPEC_FINANCE != '')
+    , BUS_GIFT_MATCH = factor(BUS_GIFT_MATCH == 'Y')
+    , HAS_HOME_ADDR = factor(HAS_HOME_ADDR == 'Y')
+    , HAS_ALT_HOME_ADDR = factor(HAS_ALT_HOME_ADDR == 'Y')
+    , HAS_BUS_ADDR = factor(HAS_BUS_ADDR == 'Y')
+    , HAS_SEASONAL_ADDR = factor(HAS_SEASONAL_ADDR == 'Y')
+    , HAS_HOME_PHONE = factor(HAS_HOME_PHONE == 'Y')
+    , HAS_BUS_PHONE = factor(HAS_BUS_PHONE == 'Y')
+    , HAS_MOBILE_PHONE = factor(HAS_MOBILE_PHONE == 'Y')
+    , HAS_HOME_EMAIL = factor(HAS_HOME_EMAIL == 'Y')
+    , HAS_BUS_EMAIL = factor(HAS_BUS_EMAIL == 'Y')
+    , KSM_PROSPECT_ACTIVE = factor(KSM_PROSPECT_ACTIVE == 'Y')
+    , KSM_PROSPECT_ANY = factor(KSM_PROSPECT_ANY == 'Y')
+  )</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiIDI3MjM3IGZhaWxlZCB0byBwYXJzZS5cbiJ9 -->
+<pre><code> 27237 failed to parse.</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>“Failed to parse” means <code>DOB</code> is NA due to invalid <code>BIRTH_DT</code> format.</p>
+</div>
+</div>
+<div id="data-exploration" class="section level1">
+<h1>Data Exploration</h1>
+<!-- rnb-text-end -->
 </div>
 
-<div id="rmd-source-code">LS0tDQp0aXRsZTogIkFubnVhbCBGdW5kICQxMEsgTW9kZWwgRGF0YSBFeHBsb3JhdGlvbiINCm91dHB1dDogaHRtbF9ub3RlYm9vaw0KLS0tDQoNCiMgR29hbA0KDQpDbGVhbiB1cCBhbmQgZXhwbG9yZSB0aGUgZGF0YXNldCBnZW5lcmF0ZWQgd2l0aCB0aGUgYGtzbS1hZi0xMGstZGF0YS5zcWxgIHF1ZXJ5IHdpdGggcmV1c2FibGUgUiBjb2RlLg0KDQojIFNldHVwDQoNCiMjIFIgdmVyc2lvbg0KDQpgYGB7ciBnZXQuc2Vzc2lvbkluZm99DQpzZXNzaW9uSW5mbygpDQpgYGANCg0KIyMgUmVxdWlyZWQgcGFja2FnZXMNCg0KTXkgY29kZSBtYWtlcyB1c2Ugb2Ygc2V2ZXJhbCBwYWNrYWdlczoNCg0KYGBge3IgZ2V0LnBhY2thZ2VzfQ0Kc2NhbigiUEFDS0FHRVMudHh0Iiwgd2hhdD0iY2hhcmFjdGVyIikNCmBgYA0KDQpUaGlzIGNvZGUgd2lsbCBpbnN0YWxsIGFuZCBsb2FkIHRoZW0gYXMgbmVjZXNzYXJ5LiBGaXJzdCwgaW5zdGFsbCBgZGV2dG9vbHNgIGFuZCBteSBgd3JhbmdsUmAgcGFja2FnZToNCg0KYGBge3IgZ2V0LndyYW5nbFJ9DQojIENoZWNrIHRvIHNlZSBpZiBkZXZ0b29scyBpcyB1bmF2YWlsYWJsZQ0KaWYgKCEoImRldnRvb2xzIiAlaW4lIHV0aWxzOjppbnN0YWxsZWQucGFja2FnZXMoKVssICJQYWNrYWdlIl0pKSB7DQogICMgSWYgdW5hdmFpbGFibGUsIGluc3RhbGwgaXQNCiAgaW5zdGFsbC5wYWNrYWdlcygiZGV2dG9vbHMiKQ0KfQ0KDQojIENoZWNrIHRvIHNlZSBpZiB3cmFuZ2xSIGlzIHVuYXZhaWxhYmxlDQppZiAoISgid3JhbmdsUiIgJWluJSB1dGlsczo6aW5zdGFsbGVkLnBhY2thZ2VzKClbLCAiUGFja2FnZSJdKSkgew0KICAjIElmIHVuYXZhaWxhYmxlLCB1c2UgZGV2dG9vbHMgdG8gaW5zdGFsbCBpdCB2aWEgR2l0SHViDQogIGRldnRvb2xzOjppbnN0YWxsX2dpdGh1YigicGhpdmVseS93cmFuZ2xSIikNCn0NCmBgYA0KDQpOb3cgbG9hZCBgd3JhbmdsUmAgYW5kIHVzZSBpdCB0byBpbnN0YWxsIG9yIGxvYWQgdGhlIG90aGVyIHJlcXVpcmVkIHBhY2thZ2VzOg0KDQpgYGB7ciBsb2FkLnBhY2thZ2VzLCB3YXJuaW5nPUZBTFNFLCBtZXNzYWdlPUZBTFNFfQ0KIyBMb2FkIHdyYW5nbFINCmxpYnJhcnkod3JhbmdsUikNCg0KIyBGZWVkIHRoZSBsaWJyYXJpZXMgc3BlY2lmaWVkIGluIFBBQ0tBR0VTLnR4dCBpbnRvIHdyYW5nbFIncyBMaWJyYXJpZXMoKSBmdW5jdGlvbg0KTGlicmFyaWVzKHNjYW4oZmlsZT0iUEFDS0FHRVMudHh0Iiwgd2hhdD0iY2hhcmFjdGVyIikpDQpgYGANCg==</div>
+<div id="rmd-source-code">LS0tDQp0aXRsZTogIkFubnVhbCBGdW5kICQxMEsgTW9kZWwgRGF0YSBFeHBsb3JhdGlvbiINCm91dHB1dDogaHRtbF9ub3RlYm9vaw0KLS0tDQoNCiMgR29hbA0KDQpDbGVhbiB1cCBhbmQgZXhwbG9yZSB0aGUgZGF0YXNldCBnZW5lcmF0ZWQgd2l0aCB0aGUgYGtzbS1hZi0xMGstZGF0YS5zcWxgIHF1ZXJ5IHdpdGggcmV1c2FibGUgUiBjb2RlLg0KDQojIFNldHVwDQoNCiMjIFIgdmVyc2lvbg0KDQpgYGB7ciBnZXQuc2Vzc2lvbkluZm99DQpzZXNzaW9uSW5mbygpDQpgYGANCg0KIyMgUmVxdWlyZWQgcGFja2FnZXMNCg0KTXkgY29kZSBtYWtlcyB1c2Ugb2Ygc2V2ZXJhbCBwYWNrYWdlczoNCg0KYGBge3IgZ2V0LnBhY2thZ2VzfQ0Kc2NhbignUEFDS0FHRVMudHh0Jywgd2hhdCA9ICdjaGFyYWN0ZXInKQ0KYGBgDQoNClRoaXMgY29kZSB3aWxsIGluc3RhbGwgYW5kIGxvYWQgdGhlbSBhcyBuZWNlc3NhcnkuIEZpcnN0LCBpbnN0YWxsIGBkZXZ0b29sc2AgYW5kIG15IGB3cmFuZ2xSYCBwYWNrYWdlOg0KDQpgYGB7ciBnZXQud3JhbmdsUn0NCiMgQ2hlY2sgdG8gc2VlIGlmIGRldnRvb2xzIGlzIHVuYXZhaWxhYmxlDQppZiAoISgnZGV2dG9vbHMnICVpbiUgdXRpbHM6Omluc3RhbGxlZC5wYWNrYWdlcygpWywgJ1BhY2thZ2UnXSkpIHsNCiAgIyBJZiB1bmF2YWlsYWJsZSwgaW5zdGFsbCBpdA0KICBpbnN0YWxsLnBhY2thZ2VzKCdkZXZ0b29scycpDQp9DQoNCiMgQ2hlY2sgdG8gc2VlIGlmIHdyYW5nbFIgaXMgdW5hdmFpbGFibGUNCmlmICghKCd3cmFuZ2xSJyAlaW4lIHV0aWxzOjppbnN0YWxsZWQucGFja2FnZXMoKVssICdQYWNrYWdlJ10pKSB7DQogICMgSWYgdW5hdmFpbGFibGUsIHVzZSBkZXZ0b29scyB0byBpbnN0YWxsIGl0IHZpYSBHaXRIdWINCiAgZGV2dG9vbHM6Omluc3RhbGxfZ2l0aHViKCdwaGl2ZWx5L3dyYW5nbFInKQ0KfQ0KYGBgDQoNCk5vdyBsb2FkIGB3cmFuZ2xSYCBhbmQgdXNlIGl0IHRvIGluc3RhbGwgb3IgbG9hZCB0aGUgb3RoZXIgcmVxdWlyZWQgcGFja2FnZXM6DQoNCmBgYHtyIGxvYWQucGFja2FnZXMsIHdhcm5pbmc9RkFMU0UsIG1lc3NhZ2U9RkFMU0V9DQojIExvYWQgd3JhbmdsUg0KbGlicmFyeSh3cmFuZ2xSKQ0KDQojIEZlZWQgdGhlIGxpYnJhcmllcyBzcGVjaWZpZWQgaW4gUEFDS0FHRVMudHh0IGludG8gd3JhbmdsUidzIExpYnJhcmllcygpIGZ1bmN0aW9uDQpMaWJyYXJpZXMoc2NhbihmaWxlID0gJ1BBQ0tBR0VTLnR4dCcsIHdoYXQgPSAnY2hhcmFjdGVyJykpDQpgYGANCg0KIyMgRGF0YSBwcmVwYXJhdGlvbg0KDQpgYGB7ciBsb2FkLmRhdGF9DQojIyMgSW1wb3J0IHRoZSBkYXRhDQpmdWxsLmRhdGEgPC0gcmVhZC5jc3YoJ2RhdGEvMjAxNy0xMS0yOSBBRiAxMEsgTW9kZWwuY3N2Jywgc3RyaW5nc0FzRmFjdG9ycyA9IEZBTFNFLCBzdHJpcC53aGl0ZSA9IFRSVUUsDQogICAgICAgICAgICAgICAgICAgICAgY29sQ2xhc3NlcyA9IGMoJ0lEX05VTUJFUicgPSAnY2hhcmFjdGVyJywNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAnSE9VU0VIT0xEX0lEJyA9ICdjaGFyYWN0ZXInLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICdCSVJUSF9EVCcgPSAnY2hhcmFjdGVyJykpICU+JQ0KICAjIERyb3AgYW55IG51bGwgcm93cw0KICBmaWx0ZXIoIWlzLm5hKFJOKSkgJT4lDQogICMgRHJvcCByb3cgbnVtYmVycw0KICBzZWxlY3QoLVJOKQ0KDQojIyMgQ2xlYW4gdGhlIGRhdGENCmZ1bGwuZGF0YSA8LSBmdWxsLmRhdGEgJT4lDQogICMgQ29udmVydCBOQSB0byAwDQogIG11dGF0ZV9hbGwoDQogICAgZnVucygNCiAgICAgIGlmZWxzZShpcy5uYSguKSwgMCwgLikNCiAgICApDQogICkgJT4lDQogICMgQ29udmVydCB0byBkYXRlDQogIG11dGF0ZSgNCiAgICAgIERPQiA9IFRvRGF0ZShCSVJUSF9EVCwgbWV0aG9kID0gJ3ltZCcpDQogICkgJT4lDQogICMgQ29udmVydCBjZXJ0YWluIGNoYXJhY3RlciB0byBmYWN0b3INCiAgbXV0YXRlKA0KICAgICMgRmFjdG9ycw0KICAgICAgUkVDT1JEX1NUQVRVU19DT0RFID0gZmFjdG9yKFJFQ09SRF9TVEFUVVNfQ09ERSkgJT4lIHJlbGV2ZWwocmVmID0gJ0EnKSAjIEFjdGl2ZQ0KICAgICwgSE9VU0VIT0xEX1JFQ09SRCA9IGZhY3RvcihIT1VTRUhPTERfUkVDT1JEKSAlPiUgcmVsZXZlbChyZWYgPSAnQUwnKSAjIEFsdW1uaQ0KICAgICwgUFJPR1JBTV9HUk9VUCA9IGZhY3RvcihQUk9HUkFNX0dST1VQKSAlPiUgcmVsZXZlbChyZWYgPSAnRlQnKSAjIEZ1bGwtVGltZQ0KICAgICwgUFJFRl9BRERSX1RZUEVfQ09ERSA9IGZhY3RvcihQUkVGX0FERFJfVFlQRV9DT0RFKSAlPiUgcmVsZXZlbChyZWYgPSAnSCcpICMgSG9tZQ0KICAgICwgSE9VU0VIT0xEX1NUQVRFID0gZmFjdG9yKEhPVVNFSE9MRF9TVEFURSkgJT4lIHJlbGV2ZWwocmVmID0gJ0lMJykgIyBJbGxpbm9pcw0KICAgICwgSE9VU0VIT0xEX0NPVU5UUlkgPSBmYWN0b3IoSE9VU0VIT0xEX0NPVU5UUlkpICU+JSByZWxldmVsKHJlZiA9ICdVbml0ZWQgU3RhdGVzJykNCiAgICAsIEhPVVNFSE9MRF9DT05USU5FTlQgPSBmYWN0b3IoSE9VU0VIT0xEX0NPTlRJTkVOVCkgJT4lIHJlbGV2ZWwocmVmID0gJ05vcnRoIEFtZXJpY2EnKQ0KICAgICwgRVZBTFVBVElPTl9SQVRJTkcgPSBmYWN0b3IoRVZBTFVBVElPTl9SQVRJTkcpICU+JSByZWxldmVsKHJlZiA9ICcnKSAjIFVucmF0ZWQNCiAgICAjIEluZGljYXRvcnMNCiAgICAsIEJVU19JU19FTVBMT1lFRCA9IGZhY3RvcihCVVNfSVNfRU1QTE9ZRUQgPT0gJ1knKQ0KICAgICwgQlVTX0hJR0hfTFZMX0pPQl9USVRMRSA9IGZhY3RvcihCVVNfSElHSF9MVkxfSk9CX1RJVExFICE9ICcnKQ0KICAgICwgQlVTX0NBUkVFUl9TUEVDX0ZJTkFOQ0UgPSBmYWN0b3IoQlVTX0NBUkVFUl9TUEVDX0ZJTkFOQ0UgIT0gJycpDQogICAgLCBCVVNfR0lGVF9NQVRDSCA9IGZhY3RvcihCVVNfR0lGVF9NQVRDSCA9PSAnWScpDQogICAgLCBIQVNfSE9NRV9BRERSID0gZmFjdG9yKEhBU19IT01FX0FERFIgPT0gJ1knKQ0KICAgICwgSEFTX0FMVF9IT01FX0FERFIgPSBmYWN0b3IoSEFTX0FMVF9IT01FX0FERFIgPT0gJ1knKQ0KICAgICwgSEFTX0JVU19BRERSID0gZmFjdG9yKEhBU19CVVNfQUREUiA9PSAnWScpDQogICAgLCBIQVNfU0VBU09OQUxfQUREUiA9IGZhY3RvcihIQVNfU0VBU09OQUxfQUREUiA9PSAnWScpDQogICAgLCBIQVNfSE9NRV9QSE9ORSA9IGZhY3RvcihIQVNfSE9NRV9QSE9ORSA9PSAnWScpDQogICAgLCBIQVNfQlVTX1BIT05FID0gZmFjdG9yKEhBU19CVVNfUEhPTkUgPT0gJ1knKQ0KICAgICwgSEFTX01PQklMRV9QSE9ORSA9IGZhY3RvcihIQVNfTU9CSUxFX1BIT05FID09ICdZJykNCiAgICAsIEhBU19IT01FX0VNQUlMID0gZmFjdG9yKEhBU19IT01FX0VNQUlMID09ICdZJykNCiAgICAsIEhBU19CVVNfRU1BSUwgPSBmYWN0b3IoSEFTX0JVU19FTUFJTCA9PSAnWScpDQogICAgLCBLU01fUFJPU1BFQ1RfQUNUSVZFID0gZmFjdG9yKEtTTV9QUk9TUEVDVF9BQ1RJVkUgPT0gJ1knKQ0KICAgICwgS1NNX1BST1NQRUNUX0FOWSA9IGZhY3RvcihLU01fUFJPU1BFQ1RfQU5ZID09ICdZJykNCiAgKQ0KYGBgDQoNCiJGYWlsZWQgdG8gcGFyc2UiIG1lYW5zIGBET0JgIGlzIE5BIGR1ZSB0byBpbnZhbGlkIGBCSVJUSF9EVGAgZm9ybWF0Lg0KDQojIERhdGEgRXhwbG9yYXRpb24NCg0K</div>
 
 
 

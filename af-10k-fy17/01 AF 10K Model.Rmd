@@ -20,22 +20,22 @@ sessionInfo()
 My code makes use of several packages:
 
 ```{r get.packages}
-scan("PACKAGES.txt", what="character")
+scan('PACKAGES.txt', what = 'character')
 ```
 
 This code will install and load them as necessary. First, install `devtools` and my `wranglR` package:
 
 ```{r get.wranglR}
 # Check to see if devtools is unavailable
-if (!("devtools" %in% utils::installed.packages()[, "Package"])) {
+if (!('devtools' %in% utils::installed.packages()[, 'Package'])) {
   # If unavailable, install it
-  install.packages("devtools")
+  install.packages('devtools')
 }
 
 # Check to see if wranglR is unavailable
-if (!("wranglR" %in% utils::installed.packages()[, "Package"])) {
+if (!('wranglR' %in% utils::installed.packages()[, 'Package'])) {
   # If unavailable, use devtools to install it via GitHub
-  devtools::install_github("phively/wranglR")
+  devtools::install_github('phively/wranglR')
 }
 ```
 
@@ -46,5 +46,65 @@ Now load `wranglR` and use it to install or load the other required packages:
 library(wranglR)
 
 # Feed the libraries specified in PACKAGES.txt into wranglR's Libraries() function
-Libraries(scan(file="PACKAGES.txt", what="character"))
+Libraries(scan(file = 'PACKAGES.txt', what = 'character'))
 ```
+
+## Data preparation
+
+```{r load.data}
+### Import the data
+full.data <- read.csv('data/2017-11-29 AF 10K Model.csv', stringsAsFactors = FALSE, strip.white = TRUE,
+                      colClasses = c('ID_NUMBER' = 'character',
+                                     'HOUSEHOLD_ID' = 'character',
+                                     'BIRTH_DT' = 'character')) %>%
+  # Drop any null rows
+  filter(!is.na(RN)) %>%
+  # Drop row numbers
+  select(-RN)
+
+### Clean the data
+full.data <- full.data %>%
+  # Convert NA to 0
+  mutate_all(
+    funs(
+      ifelse(is.na(.), 0, .)
+    )
+  ) %>%
+  # Convert to date
+  mutate(
+      DOB = ToDate(BIRTH_DT, method = 'ymd')
+  ) %>%
+  # Convert certain character to factor
+  mutate(
+    # Factors
+      RECORD_STATUS_CODE = factor(RECORD_STATUS_CODE) %>% relevel(ref = 'A') # Active
+    , HOUSEHOLD_RECORD = factor(HOUSEHOLD_RECORD) %>% relevel(ref = 'AL') # Alumni
+    , PROGRAM_GROUP = factor(PROGRAM_GROUP) %>% relevel(ref = 'FT') # Full-Time
+    , PREF_ADDR_TYPE_CODE = factor(PREF_ADDR_TYPE_CODE) %>% relevel(ref = 'H') # Home
+    , HOUSEHOLD_STATE = factor(HOUSEHOLD_STATE) %>% relevel(ref = 'IL') # Illinois
+    , HOUSEHOLD_COUNTRY = factor(HOUSEHOLD_COUNTRY) %>% relevel(ref = 'United States')
+    , HOUSEHOLD_CONTINENT = factor(HOUSEHOLD_CONTINENT) %>% relevel(ref = 'North America')
+    , EVALUATION_RATING = factor(EVALUATION_RATING) %>% relevel(ref = '') # Unrated
+    # Indicators
+    , BUS_IS_EMPLOYED = factor(BUS_IS_EMPLOYED == 'Y')
+    , BUS_HIGH_LVL_JOB_TITLE = factor(BUS_HIGH_LVL_JOB_TITLE != '')
+    , BUS_CAREER_SPEC_FINANCE = factor(BUS_CAREER_SPEC_FINANCE != '')
+    , BUS_GIFT_MATCH = factor(BUS_GIFT_MATCH == 'Y')
+    , HAS_HOME_ADDR = factor(HAS_HOME_ADDR == 'Y')
+    , HAS_ALT_HOME_ADDR = factor(HAS_ALT_HOME_ADDR == 'Y')
+    , HAS_BUS_ADDR = factor(HAS_BUS_ADDR == 'Y')
+    , HAS_SEASONAL_ADDR = factor(HAS_SEASONAL_ADDR == 'Y')
+    , HAS_HOME_PHONE = factor(HAS_HOME_PHONE == 'Y')
+    , HAS_BUS_PHONE = factor(HAS_BUS_PHONE == 'Y')
+    , HAS_MOBILE_PHONE = factor(HAS_MOBILE_PHONE == 'Y')
+    , HAS_HOME_EMAIL = factor(HAS_HOME_EMAIL == 'Y')
+    , HAS_BUS_EMAIL = factor(HAS_BUS_EMAIL == 'Y')
+    , KSM_PROSPECT_ACTIVE = factor(KSM_PROSPECT_ACTIVE == 'Y')
+    , KSM_PROSPECT_ANY = factor(KSM_PROSPECT_ANY == 'Y')
+  )
+```
+
+"Failed to parse" means `DOB` is NA due to invalid `BIRTH_DT` format.
+
+# Data Exploration
+
