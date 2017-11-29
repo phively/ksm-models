@@ -1,3 +1,5 @@
+Create Or Replace View af_10k_model As
+
 With
 
 /*************************
@@ -410,8 +412,9 @@ Prospect information
 *************************/
 
 Select
+  rownum As rn
   -- Identifiers
-    hh.id_number
+  , hh.id_number
   , hh.report_name
   , hh.record_status_code
   , hh.household_record
