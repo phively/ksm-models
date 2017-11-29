@@ -1,0 +1,50 @@
+---
+title: "Annual Fund $10K Model Data Exploration"
+output: html_notebook
+---
+
+# Goal
+
+Clean up and explore the dataset generated with the `ksm-af-10k-data.sql` query with reusable R code.
+
+# Setup
+
+## R version
+
+```{r get.sessionInfo}
+sessionInfo()
+```
+
+## Required packages
+
+My code makes use of several packages:
+
+```{r get.packages}
+scan("PACKAGES.txt", what="character")
+```
+
+This code will install and load them as necessary. First, install `devtools` and my `wranglR` package:
+
+```{r get.wranglR}
+# Check to see if devtools is unavailable
+if (!("devtools" %in% utils::installed.packages()[, "Package"])) {
+  # If unavailable, install it
+  install.packages("devtools")
+}
+
+# Check to see if wranglR is unavailable
+if (!("wranglR" %in% utils::installed.packages()[, "Package"])) {
+  # If unavailable, use devtools to install it via GitHub
+  devtools::install_github("phively/wranglR")
+}
+```
+
+Now load `wranglR` and use it to install or load the other required packages:
+
+```{r load.packages, warning=FALSE, message=FALSE}
+# Load wranglR
+library(wranglR)
+
+# Feed the libraries specified in PACKAGES.txt into wranglR's Libraries() function
+Libraries(scan(file="PACKAGES.txt", what="character"))
+```
