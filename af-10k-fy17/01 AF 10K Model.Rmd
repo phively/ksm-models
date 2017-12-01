@@ -53,7 +53,7 @@ Libraries(scan(file = 'PACKAGES.txt', what = 'character'))
 
 ```{r load.data}
 ### Import the data
-full.data <- read.csv('data/2017-11-29 AF 10K Model.csv', stringsAsFactors = FALSE, strip.white = TRUE,
+full.data <- read.csv('data/2017-12-01 AF 10K Model.csv', stringsAsFactors = FALSE, strip.white = TRUE,
                       colClasses = c('ID_NUMBER' = 'character',
                                      'HOUSEHOLD_ID' = 'character',
                                      'BIRTH_DT' = 'character')) %>%
@@ -107,4 +107,34 @@ full.data <- full.data %>%
 "Failed to parse" means `DOB` is NA due to invalid `BIRTH_DT` format.
 
 # Data Exploration
+
+**Observations** from `summary(full.data)`
+
+  * Need to be cautious about the inserted 0s; e.g. discretize years?
+  * Should gift amounts be inflation-indexed? (CPI-U adjustment)
+  * DOB missing and impossible values: impute?
+
+```{r plot.grad.year}
+full.data %>% filter(FIRST_KSM_YEAR != 0) %>%
+  ggplot(aes(x = FIRST_KSM_YEAR, fill = RECORD_STATUS_CODE)) + geom_histogram(alpha = .5, binwidth = 1) +
+  facet_grid(RECORD_STATUS_CODE ~ .) + scale_y_log10()
+```
+
+  * Check 1800 grad year
+  
+```{r plot.dob}
+full.data %>% filter(!is.na(DOB) & year(DOB) != 0) %>%
+  ggplot(aes(x = year(DOB), fill = RECORD_STATUS_CODE)) + geom_histogram(alpha = .5, binwidth = 1) +
+  facet_grid(RECORD_STATUS_CODE ~ .) + scale_y_log10()
+```
+
+  * Check the person with DOB year 0
+  * Check people with DOB after 2000...or in general after they graduated?
+
+```{r plot.amt.by.year}
+full.data %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
+  ggplot(aes(x = GIVING_MAX_CASH_YR, y = GIVING_MAX_CASH_AMT)) +
+  geom_point() + geom_jitter(width = .25, height = 0) +
+  scale_y_log10(breaks = 10^(-2:7)) + geom_smooth()
+```
 
