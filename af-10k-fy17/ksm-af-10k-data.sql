@@ -39,7 +39,11 @@ cal As (
     , sum(Case When fiscal_year = ksm_giving_yr.first_year And tx_gypm_ind = 'P'
         Then hh_recognition_credit End) As giving_first_year_pledge_amt
     , max(Case When tx_gypm_ind <> 'P' Then hh_recognition_credit End) As giving_max_cash_amt
-    , max(Case When tx_gypm_ind = 'P' Then hh_recognition_credit End) As giving_max_pledge_amt 
+    , min(fiscal_year) keep(dense_rank First
+        Order By (Case When tx_gypm_ind <> 'P' Then hh_recognition_credit End) Desc) As giving_max_cash_yr
+    , max(Case When tx_gypm_ind = 'P' Then hh_recognition_credit End) As giving_max_pledge_amt
+    , min(fiscal_year) keep(dense_rank First
+        Order By (Case When tx_gypm_ind = 'P' Then hh_recognition_credit End) Desc) As giving_max_pledge_yr
     , sum(Case When tx_gypm_ind = 'P' Then 0 Else hh_recognition_credit End) As giving_cash_total
     , sum(Case When tx_gypm_ind = 'P' Then hh_recognition_credit Else 0 End) As giving_pledge_total
     , sum(Case When tx_gypm_ind <> 'Y' Then hh_recognition_credit Else 0 End) As giving_ngc_total
@@ -459,7 +463,9 @@ Select
   , ksm_giving.giving_first_year
   , ksm_giving.giving_first_year_cash_amt
   , ksm_giving.giving_first_year_pledge_amt
+  , Case When ksm_giving.giving_max_cash_amt Is Not Null Then ksm_giving.giving_max_cash_yr End As giving_max_cash_yr
   , ksm_giving.giving_max_cash_amt
+  , Case When ksm_giving.giving_max_pledge_amt Is Not Null Then ksm_giving.giving_max_pledge_yr End As giving_max_pledge_yr
   , ksm_giving.giving_max_pledge_amt
   , ksm_giving.giving_cash_total
   , ksm_giving.giving_pledge_total
