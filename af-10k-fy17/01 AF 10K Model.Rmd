@@ -108,6 +108,8 @@ full.data <- full.data %>%
 
 # Data Exploration
 
+## Diagnostics
+
 **Observations** from `summary(full.data)`
 
   * Need to be cautious about the inserted 0s; e.g. discretize years?
@@ -131,10 +133,98 @@ full.data %>% filter(!is.na(DOB) & year(DOB) != 0) %>%
   * Check the person with DOB year 0
   * Check people with DOB after 2000...or in general after they graduated?
 
+## Inflation adjustment exploration
+
+Plot largest nominal cash gift from each donor against the year in which it was made.
+
 ```{r plot.amt.by.year}
 full.data %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
   ggplot(aes(x = GIVING_MAX_CASH_YR, y = GIVING_MAX_CASH_AMT)) +
   geom_point() + geom_jitter(width = .25, height = 0) +
-  scale_y_log10(breaks = 10^(-2:7)) + geom_smooth()
+  scale_y_log10(breaks = 10^(-2:7)) + geom_smooth() +
+   # Red line is linear trend
+  geom_smooth(method = 'lm', color = 'red') +
+  labs(title = "Nominal dollars by year")
 ```
+
+Slight upward slope over the last 30-40 years.
+
+```{r infl.adjust}
+# Load historical CPI-U data
+cpi.u <- read.csv('data/CPI 2017-09-01.csv', strip.white = TRUE) %>%
+  mutate(
+    AS_OF = mdy(AS_OF)
+    , YEAR = CALENDAR_YEAR
+  )
+cpi.max <- cpi.u %>% filter(CALENDAR_YEAR == max(CALENDAR_YEAR)) %>% select(CPI_U_AVG) %>% as.numeric()
+```
+
+Plot largest inflation-adjusted cash gift (Sept 2017 dollars) from each donor against the year in which it was made.
+
+```{r plot.cpiu.amt.by.year}
+full.data %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
+  # Join CPI-U columns
+  mutate(YEAR = GIVING_MAX_CASH_YR) %>%
+  inner_join(cpi.u, by = c('YEAR')) %>%
+  # Compute inflation-adjusted amount
+  mutate(CPIU_MAX_CASH_AMT = GIVING_MAX_CASH_AMT * cpi.max/CPI_U_AVG) %>%
+  # Plot results
+  ggplot(aes(x = YEAR, y = CPIU_MAX_CASH_AMT)) +
+  geom_point() + geom_jitter(width = .25, height = 0) +
+  scale_y_log10(breaks = 10^(-2:7)) + geom_smooth() +
+  # Red line is linear trend
+  geom_smooth(method = 'lm', color = 'red') +
+  labs(title = "September 2017 dollars by year")
+```
+
+Inflation-adjusted there's a slight *downward* slope over time. Does look remarkably consistent over time.
+
+## Response variable transformations
+
+For Annual Giving, largest single cash gift is the logical response variable.
+
+```{r summary2}
+summary2 <- function(x) {
+  summary(x) %>% c(
+    StDev = sd(x)
+    , Skewnewss = e1071::skewness(x)
+    , Kurtosis = e1071::kurtosis(x)
+  ) %>% print(digits = 3)
+}
+```
+```{r rv.stats}
+full.data$GIVING_MAX_CASH_AMT %>% summary2()
+# Log10 transformation, no 0
+{full.data %>% filter(GIVING_MAX_CASH_AMT > 0)}$GIVING_MAX_CASH_AMT %>% log10() %>% summary2()
+# Log10 transformation, with 0
+{full.data$GIVING_MAX_CASH_AMT + 1} %>% log10() %>% summary2()
+```
+
+Giving is left-truncated at 0. I'd previously looked into alternate distributions with different datasets but the additional complexity was not worth it.
+
+```{r rv.trans.plot}
+# Density histogram
+full.data %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
+  ggplot(aes(x = GIVING_MAX_CASH_AMT)) +
+  geom_histogram(aes(y = ..density..), bins = 50, alpha = .5) +
+  geom_density() +
+  scale_x_log10(breaks = 10^(-2:7),
+                minor_breaks = c(.25 * 10^(-2:7), .5 * 10^(-2:7), .75 * 10^(-2:7)),
+                labels = scales::dollar) +
+  theme(panel.grid.minor.x = element_line(linetype = 'dashed')) +
+  labs(title = 'No 0')
+```
+
+Log scale appears to be a decent choice, though it's still right-skewed.
+
+```{r rv.boxcox}
+# Box-Cox analysis
+bc <- lm(log10(GIVING_MAX_CASH_AMT) ~ GIVING_MAX_CASH_YR, data = full.data %>% filter(GIVING_MAX_CASH_AMT > 1)) %>%
+  MASS::boxcox()
+bc$x[which(bc$y == max(bc$y))]
+```
+
+According to this the best transformation on a 1-variable model is approximately $\sqrt[4]{\log(x)}$, which is quite hard to interpret. Log transformation is likely sufficient and has a reasonable explanation (error term $\epsilon$ enters multiplicatively).
+
+## Response variable correlations
 
