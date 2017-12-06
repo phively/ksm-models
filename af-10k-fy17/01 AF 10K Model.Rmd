@@ -224,7 +224,213 @@ bc <- lm(log10(GIVING_MAX_CASH_AMT) ~ GIVING_MAX_CASH_YR, data = full.data %>% f
 bc$x[which(bc$y == max(bc$y))]
 ```
 
-According to this the best transformation on a 1-variable model is approximately $\sqrt[4]{\log(x)}$, which is quite hard to interpret. Log transformation is likely sufficient and has a reasonable explanation (error term $\epsilon$ enters multiplicatively).
+According to this the best transformation on the 1-variable model is approximately $\sqrt[4]{\log(x)}$, which is quite hard to interpret. Log transformation is likely sufficient and has a reasonable explanation (error term $\epsilon$ enters multiplicatively).
 
 ## Response variable correlations
+
+```{r rv.boxplotter}
+boxplotter <- function(cname) {
+  full.data %>% select(GIVING_MAX_CASH_AMT) %>% cbind(x = full.data[, cname]) %>%
+    filter(GIVING_MAX_CASH_AMT > 0) %>%
+    ggplot(aes(x = x, y = GIVING_MAX_CASH_AMT)) +
+    geom_boxplot(alpha = .6) +
+    scale_y_log10(breaks = 10^(-2:7), labels = scales::dollar) +
+    labs(x = cname)
+}
+```
+
+### Categorical variables
+
+```{r rv.cat.rsc}
+summary(full.data$RECORD_STATUS_CODE)
+boxplotter('RECORD_STATUS_CODE')
+```
+
+Good number within each factor and a meaningful indicator.
+
+```{r rv.cat.hhr}
+summary(full.data$HOUSEHOLD_RECORD)
+boxplotter('HOUSEHOLD_RECORD')
+```
+
+Only a few students; good number of nonalumni.
+**Consider combining AL and ST**
+
+```{r rv.cat.hhprim}
+summary(full.data$HH_PRIMARY %>% as.factor())
+boxplotter('HH_PRIMARY')
+```
+
+Should not include `N` in analysis as it duplicates a `Y` elsewhere in the file.
+**EXCLUDE**
+
+```{r rv.cat.pg}
+summary(full.data$PROGRAM_GROUP)
+boxplotter('PROGRAM_GROUP')
+```
+
+Only 20 UNK; others have a good number of rows.
+**Consider dropping UNK or treating as nonalum**
+
+```{r rv.cat.patc}
+summary(full.data$PREF_ADDR_TYPE_CODE)
+boxplotter('PREF_ADDR_TYPE_CODE')
+```
+
+Several with very few examples; a few options here. Could combine all the Home-like and Business-like, and leave an Other for seasonal etc. Could also roll all the < 500, say, into an Other.
+**Consider combining categories**
+
+```{r rv.cat.hhs}
+summary(full.data$HOUSEHOLD_STATE)
+boxplotter('HOUSEHOLD_STATE')
+```
+
+This appears to include Canadian and Australian states. Could also combine some of the lower-population areas.
+**Consider combining, perhaps based on region**
+
+```{r rv.cat.hhc}
+summary(full.data$HOUSEHOLD_CONTINENT)
+boxplotter('HOUSEHOLD_CONTINENT')
+```
+
+Clear difference between those with and without an address; probably fine to include in model to suss out other differences.
+
+```{r rv.cat.bie}
+summary(full.data$BUS_IS_EMPLOYED)
+boxplotter('BUS_IS_EMPLOYED')
+```
+
+Looks fine.
+
+```{r rv.cat.bhljt}
+summary(full.data$BUS_HIGH_LVL_JOB_TITLE)
+boxplotter('BUS_HIGH_LVL_JOB_TITLE')
+```
+
+Looks fine.
+
+```{r rv.cat.bcsf}
+summary(full.data$BUS_CAREER_SPEC_FINANCE)
+boxplotter('BUS_CAREER_SPEC_FINANCE')
+```
+
+Looks fine.
+
+```{r rv.cat.bgm}
+summary(full.data$BUS_GIFT_MATCH)
+boxplotter('BUS_GIFT_MATCH')
+```
+
+Very few that have matching companies; apparently this is not tracked consistently?
+**EXCLUDE**
+
+```{r rv.cat.hha}
+summary(full.data$HAS_HOME_ADDR)
+boxplotter('HAS_HOME_ADDR')
+```
+
+Looks fine.
+
+```{r rv.cat.haha}
+summary(full.data$HAS_ALT_HOME_ADDR)
+boxplotter('HAS_ALT_HOME_ADDR')
+```
+
+Looks fine.
+
+```{r rv.cat.hba}
+summary(full.data$HAS_BUS_ADDR)
+boxplotter('HAS_BUS_ADDR')
+```
+
+Looks fine.
+
+```{r rv.cat.hsa}
+summary(full.data$HAS_SEASONAL_ADDR)
+boxplotter('HAS_SEASONAL_ADDR')
+```
+
+Low count.
+**Consider combining with alternate home address**
+
+```{r rv.cat.hhp}
+summary(full.data$HAS_HOME_PHONE)
+boxplotter('HAS_HOME_PHONE')
+```
+
+Looks fine.
+
+```{r rv.cat.hbp}
+summary(full.data$HAS_BUS_PHONE)
+boxplotter('HAS_BUS_PHONE')
+```
+
+Looks fine.
+
+```{r rv.cat.hmp}
+summary(full.data$HAS_MOBILE_PHONE)
+boxplotter('HAS_MOBILE_PHONE')
+```
+
+
+
+```{r rv.cat.hhe}
+summary(full.data$HAS_HOME_EMAIL)
+boxplotter('HAS_HOME_EMAIL')
+```
+
+Looks fine.
+
+```{r rv.cat.hbe}
+summary(full.data$HAS_BUS_EMAIL)
+boxplotter('HAS_BUS_EMAIL')
+```
+
+Looks fine.
+
+```{r rv.cat.eval}
+summary(full.data$EVALUATION_RATING)
+boxplotter('EVALUATION_RATING')
+```
+
+Would likely combine all the $1M+ levels. Note that the evaluation rating process is causally associated with solicitations and thus gift size.
+**CAUTION - endogenous**
+
+```{r rv.cat.kpact}
+summary(full.data$KSM_PROSPECT_ACTIVE)
+boxplotter('KSM_PROSPECT_ACTIVE')
+```
+
+Looks fine.
+
+```{r rv.cat.kpany}
+summary(full.data$KSM_PROSPECT_ANY)
+boxplotter('KSM_PROSPECT_ANY')
+```
+
+Looks fine.
+**Consider making a new factor combining `KSM_PROSPECT_ACTIVE` and `KSM_PROSPECT_ANY`**
+
+```{r rv.cat.kpanyall}
+# Derived variable
+full.data <- full.data %>% mutate(
+  KSM_PROSPECT = case_when(
+    KSM_PROSPECT_ACTIVE == TRUE ~ 'Current'
+    , KSM_PROSPECT_ANY == TRUE ~ 'Past'
+    , TRUE ~ 'No') %>% factor()
+)
+summary(full.data$KSM_PROSPECT)
+boxplotter('KSM_PROSPECT')
+
+```
+
+Looks good.
+
+### Numeric variables
+
+```{r rv.numeric}
+# Numeric
+```
+
+
 
