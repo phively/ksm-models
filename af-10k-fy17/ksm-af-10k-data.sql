@@ -12,10 +12,28 @@ cal As (
   From v_current_calendar
 )
 
-/* Householded transactions */
+/* Householded transactions, summing together split allocations within the same receipt number */
 , giving_hh As (
-  Select *
+  Select
+    household_id
+    , tx_number
+    , tx_gypm_ind
+    , payment_type
+    , allocation_code
+    , date_of_record
+    , fiscal_year
+    , hh_recognition_credit
   From v_ksm_giving_trans_hh
+)
+, giving_hh_amt As (
+  Select
+    household_id As hhid
+    , tx_number As txn
+    , sum(hh_recognition_credit) As hhrc
+  From giving_hh
+  Group By
+    household_id
+    , tx_number
 )
 
 /* First year of Kellogg giving */
@@ -38,18 +56,22 @@ cal As (
         Then hh_recognition_credit End) As giving_first_year_cash_amt
     , sum(Case When fiscal_year = ksm_giving_yr.first_year And tx_gypm_ind = 'P'
         Then hh_recognition_credit End) As giving_first_year_pledge_amt
-    , max(Case When tx_gypm_ind <> 'P' Then hh_recognition_credit End) As giving_max_cash_amt
+    , max(Case When tx_gypm_ind Not In ('P', 'M') Then hhrc End) As giving_max_cash_amt
     , min(fiscal_year) keep(dense_rank First
-        Order By (Case When tx_gypm_ind <> 'P' Then hh_recognition_credit End) Desc) As giving_max_cash_yr
-    , max(Case When tx_gypm_ind = 'P' Then hh_recognition_credit End) As giving_max_pledge_amt
+        Order By (Case When tx_gypm_ind Not In ('P', 'M') Then hhrc Else 0 End) Desc, date_of_record Desc) As giving_max_cash_fy
+    , min(date_of_record) keep(dense_rank First
+        Order By (Case When tx_gypm_ind Not In ('P', 'M') Then hhrc Else 0 End) Desc, date_of_record Desc) As giving_max_cash_dt
+    , max(Case When tx_gypm_ind = 'P' Then hhrc End) As giving_max_pledge_amt
     , min(fiscal_year) keep(dense_rank First
-        Order By (Case When tx_gypm_ind = 'P' Then hh_recognition_credit End) Desc) As giving_max_pledge_yr
+        Order By (Case When tx_gypm_ind = 'P' Then hhrc Else 0 End) Desc, date_of_record Desc) As giving_max_pledge_fy
+    , min(date_of_record) keep(dense_rank First
+        Order By (Case When tx_gypm_ind = 'P' Then hhrc Else 0 End) Desc, date_of_record Desc) As giving_max_pledge_dt
     , sum(Case When tx_gypm_ind = 'P' Then 0 Else hh_recognition_credit End) As giving_cash_total
     , sum(Case When tx_gypm_ind = 'P' Then hh_recognition_credit Else 0 End) As giving_pledge_total
     , sum(Case When tx_gypm_ind <> 'Y' Then hh_recognition_credit Else 0 End) As giving_ngc_total
-    , sum(Case When payment_type = 'Cash / Check' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then 1 End) As gifts_cash
-    , sum(Case When payment_type = 'Credit Card' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then 1 End) As gifts_credit_card
-    , sum(Case When payment_type = 'Securities' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then 1 End) As gifts_stock
+    , count(Distinct Case When payment_type = 'Cash / Check' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then tx_number End) As gifts_cash
+    , count(Distinct Case When payment_type = 'Credit Card' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then tx_number End) As gifts_credit_card
+    , count(Distinct Case When payment_type = 'Securities' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then tx_number End) As gifts_stock
     , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 1 Then hh_recognition_credit End) As cash_pfy1
     , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 2 Then hh_recognition_credit End) As cash_pfy2
     , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 3 Then hh_recognition_credit End) As cash_pfy3
@@ -62,6 +84,8 @@ cal As (
     , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 5 Then hh_recognition_credit End) As ngc_pfy5
   From giving_hh
   Cross Join cal
+  Inner Join giving_hh_amt On giving_hh_amt.hhid = giving_hh.household_id
+    And giving_hh_amt.txn = giving_hh.tx_number
   Left Join ksm_giving_yr On ksm_giving_yr.household_id = giving_hh.household_id
   Group By giving_hh.household_id
 )
@@ -463,9 +487,11 @@ Select
   , ksm_giving.giving_first_year
   , ksm_giving.giving_first_year_cash_amt
   , ksm_giving.giving_first_year_pledge_amt
-  , Case When ksm_giving.giving_max_cash_amt Is Not Null Then ksm_giving.giving_max_cash_yr End As giving_max_cash_yr
+  , Case When ksm_giving.giving_max_cash_amt Is Not Null Then ksm_giving.giving_max_cash_fy End As giving_max_cash_fy
+  , Case When ksm_giving.giving_max_cash_amt Is Not Null Then ksm_giving.giving_max_cash_dt End As giving_max_cash_dt
   , ksm_giving.giving_max_cash_amt
-  , Case When ksm_giving.giving_max_pledge_amt Is Not Null Then ksm_giving.giving_max_pledge_yr End As giving_max_pledge_yr
+  , Case When ksm_giving.giving_max_pledge_amt Is Not Null Then ksm_giving.giving_max_pledge_fy End As giving_max_pledge_fy
+  , Case When ksm_giving.giving_max_pledge_amt Is Not Null Then ksm_giving.giving_max_pledge_dt End As giving_max_pledge_dt
   , ksm_giving.giving_max_pledge_amt
   , ksm_giving.giving_cash_total
   , ksm_giving.giving_pledge_total
