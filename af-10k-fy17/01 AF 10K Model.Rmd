@@ -200,7 +200,7 @@ summary2 <- function(x) {
     StDev = sd(x)
     , Skewnewss = e1071::skewness(x)
     , Kurtosis = e1071::kurtosis(x)
-  ) %>% print(digits = 3)
+  ) %>% signif(digits = 3)
 }
 ```
 ```{r rv.stats}
@@ -261,7 +261,6 @@ scatterplotter <- function(cname, data = full.data) {
     scale_y_log10(breaks = 10^(-2:7), labels = scales::dollar) +
     labs(x = cname)
 }
-  
 ```
 
 
@@ -460,6 +459,8 @@ Looks good.
 
 ### Numeric variables
 
+Uses $\log_{10}$ transformation for dollars and $\sqrt{\ \ }$ transformation for counts.
+
 ```{r rv.num.ksmyr}
 summary2(full.data$FIRST_KSM_YEAR)
 scatterplotter('FIRST_KSM_YEAR', full.data %>% filter(FIRST_KSM_YEAR > 0))
@@ -490,6 +491,347 @@ summary2(full.data %>% select(GIVING_FIRST_YEAR_PLEDGE_AMT) %>%
 scatterplotter('GIVING_FIRST_YEAR_PLEDGE_AMT'
                , full.data %>% filter(GIVING_FIRST_YEAR_PLEDGE_AMT > 0)) +
   scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+```
+
+
+
+```{r rv.num.gct}
+summary2(full.data %>% select(GIVING_CASH_TOTAL) %>%
+  filter(GIVING_CASH_TOTAL > 0) %>% unlist() %>% log10())
+scatterplotter('GIVING_CASH_TOTAL'
+               , full.data %>% filter(GIVING_CASH_TOTAL > 0)) +
+  scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+```
+
+```{r rv.num.gpt}
+summary2(full.data %>% select(GIVING_PLEDGE_TOTAL) %>%
+  filter(GIVING_PLEDGE_TOTAL > 0) %>% unlist() %>% log10())
+scatterplotter('GIVING_PLEDGE_TOTAL'
+               , full.data %>% filter(GIVING_PLEDGE_TOTAL > 0)) +
+  scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+```
+
+
+
+```{r rv.num.gngct}
+summary2(full.data %>% select(GIVING_NGC_TOTAL) %>%
+  filter(GIVING_NGC_TOTAL > 0) %>% unlist() %>% log10())
+scatterplotter('GIVING_NGC_TOTAL'
+               , full.data %>% filter(GIVING_NGC_TOTAL > 0)) +
+  scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+```
+
+
+
+```{r rv.num.gallocs}
+summary2(full.data$GIFTS_ALLOCS_SUPPORTED %>% sqrt())
+scatterplotter('GIFTS_ALLOCS_SUPPORTED') +
+  scale_x_sqrt()
+```
+
+
+
+```{r rv.num.gfys}
+summary2(full.data$GIFTS_FYS_SUPPORTED %>% sqrt())
+scatterplotter('GIFTS_FYS_SUPPORTED') +
+  scale_x_sqrt()
+```
+
+
+
+```{r rv.num.gcash}
+summary2(full.data$GIFTS_CASH %>% sqrt())
+scatterplotter('GIFTS_CASH') +
+  scale_x_sqrt()
+```
+
+
+
+```{r rv.num.gccard}
+summary2(full.data$GIFTS_CREDIT_CARD %>% sqrt())
+scatterplotter('GIFTS_CREDIT_CARD') +
+  scale_x_sqrt()
+```
+
+
+
+```{r rv.num.gstock}
+summary2(full.data$GIFTS_STOCK %>% sqrt())
+scatterplotter('GIFTS_STOCK') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.cpfy1}
+rbind(
+    summary2(full.data %>% select(CASH_PFY1) %>% filter(CASH_PFY1 > 0) %>% unlist() %>% log10())
+  , summary2(full.data %>% select(CASH_PFY2) %>% filter(CASH_PFY2 > 0) %>% unlist() %>% log10())
+  , summary2(full.data %>% select(CASH_PFY3) %>% filter(CASH_PFY3 > 0) %>% unlist() %>% log10())
+  , summary2(full.data %>% select(CASH_PFY4) %>% filter(CASH_PFY4 > 0) %>% unlist() %>% log10())
+  , summary2(full.data %>% select(CASH_PFY5) %>% filter(CASH_PFY5 > 0) %>% unlist() %>% log10())
+)
+
+# Grid plot
+grid.arrange(
+    scatterplotter('CASH_PFY1', full.data %>% filter(CASH_PFY1 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+  , scatterplotter('CASH_PFY2', full.data %>% filter(CASH_PFY2 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+  , scatterplotter('CASH_PFY3', full.data %>% filter(CASH_PFY3 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+  , scatterplotter('CASH_PFY4', full.data %>% filter(CASH_PFY4 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+  , scatterplotter('CASH_PFY5', full.data %>% filter(CASH_PFY5 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+)
+```
+
+
+
+```{r rv.num.ngcpfy1}
+rbind(
+    summary2(full.data %>% select(NGC_PFY1) %>% filter(NGC_PFY1 > 0) %>% unlist() %>% log10())
+  , summary2(full.data %>% select(NGC_PFY2) %>% filter(NGC_PFY2 > 0) %>% unlist() %>% log10())
+  , summary2(full.data %>% select(NGC_PFY3) %>% filter(NGC_PFY3 > 0) %>% unlist() %>% log10())
+  , summary2(full.data %>% select(NGC_PFY4) %>% filter(NGC_PFY4 > 0) %>% unlist() %>% log10())
+  , summary2(full.data %>% select(NGC_PFY5) %>% filter(NGC_PFY5 > 0) %>% unlist() %>% log10())
+)
+
+# Grid plot
+grid.arrange(
+    scatterplotter('NGC_PFY1', full.data %>% filter(NGC_PFY1 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+  , scatterplotter('NGC_PFY2', full.data %>% filter(NGC_PFY2 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+  , scatterplotter('NGC_PFY3', full.data %>% filter(NGC_PFY3 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+  , scatterplotter('NGC_PFY4', full.data %>% filter(NGC_PFY4 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+  , scatterplotter('NGC_PFY5', full.data %>% filter(NGC_PFY5 > 0)) +
+      scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+)
+```
+
+
+
+```{r rv.num.klc}
+summary2(full.data$GIFT_CLUB_KLC_YRS %>% sqrt())
+scatterplotter('GIFT_CLUB_KLC_YRS') +
+  scale_x_sqrt()
+```
+
+
+
+```{r rv.num.beq}
+summary2(full.data$GIFT_CLUB_BEQUEST_YRS %>% sqrt())
+scatterplotter('GIFT_CLUB_BEQUEST_YRS') +
+  scale_x_sqrt()
+```
+
+
+
+```{r rv.num.loy}
+summary2(full.data$GIFT_CLUB_LOYAL_YRS %>% sqrt())
+scatterplotter('GIFT_CLUB_LOYAL_YRS') +
+  scale_x_sqrt()
+```
+
+
+
+```{r rv.num.nulc}
+summary2(full.data$GIFT_CLUB_NU_LDR_YRS %>% sqrt())
+scatterplotter('GIFT_CLUB_NU_LDR_YRS') +
+  scale_x_sqrt()
+```
+
+
+
+```{r rv.num.visits}
+rbind(
+    summary2(full.data$VISITS_PFY1 %>% sqrt())
+  , summary2(full.data$VISITS_PFY2 %>% sqrt())
+  , summary2(full.data$VISITS_PFY3 %>% sqrt())
+  , summary2(full.data$VISITS_PFY4 %>% sqrt())
+  , summary2(full.data$VISITS_PFY5 %>% sqrt())
+)
+
+# Grid plot
+grid.arrange(
+    scatterplotter('VISITS_PFY1') + scale_x_sqrt()
+  , scatterplotter('VISITS_PFY2') + scale_x_sqrt()
+  , scatterplotter('VISITS_PFY3') + scale_x_sqrt()
+  , scatterplotter('VISITS_PFY4') + scale_x_sqrt()
+  , scatterplotter('VISITS_PFY5') + scale_x_sqrt()
+)
+```
+
+Hard to see what's going on past 6 visits; seems to be about linear until then in each case. Try combining 5 years of visit counts.
+
+```{r rv.num.totvisits}
+full.data <- full.data %>% mutate(
+  VISITS = VISITS_PFY1 + VISITS_PFY2 + VISITS_PFY3 + VISITS_PFY4 + VISITS_PFY5
+)
+summary2(full.data$VISITS)
+scatterplotter('VISITS') + scale_x_sqrt()
+```
+
+More of a logarithmic relationship.
+**Consider log transformation**
+
+```{r rv.num.visitors}
+rbind(
+    summary2(full.data$VISITORS_PFY1 %>% sqrt())
+  , summary2(full.data$VISITORS_PFY2 %>% sqrt())
+  , summary2(full.data$VISITORS_PFY3 %>% sqrt())
+  , summary2(full.data$VISITORS_PFY4 %>% sqrt())
+  , summary2(full.data$VISITORS_PFY5 %>% sqrt())
+)
+
+# Grid plot
+grid.arrange(
+    scatterplotter('VISITORS_PFY1') + scale_x_sqrt()
+  , scatterplotter('VISITORS_PFY2') + scale_x_sqrt()
+  , scatterplotter('VISITORS_PFY3') + scale_x_sqrt()
+  , scatterplotter('VISITORS_PFY4') + scale_x_sqrt()
+  , scatterplotter('VISITORS_PFY5') + scale_x_sqrt()
+)
+```
+
+Try combining 5 years of visitor counts.
+
+```{r rv.num.totvisitors}
+full.data <- full.data %>% mutate(
+  VISITORS = VISITORS_PFY1 + VISITORS_PFY2 + VISITORS_PFY3 + VISITORS_PFY4 + VISITORS_PFY5
+)
+summary2(full.data$VISITORS)
+scatterplotter('VISITORS') + scale_x_sqrt()
+```
+
+Looks ok.
+
+```{r rv.num.cmteenud}
+summary2(full.data$COMMITTEE_NU_DISTINCT %>% sqrt())
+scatterplotter('COMMITTEE_NU_DISTINCT') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.cmteenua}
+summary2(full.data$COMMITTEE_NU_ACTIVE %>% sqrt())
+scatterplotter('COMMITTEE_NU_ACTIVE') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.cmteenuyr}
+summary2(full.data$COMMITTEE_NU_YEARS %>% sqrt())
+scatterplotter('COMMITTEE_NU_YEARS') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.cmteeksmd}
+summary2(full.data$COMMITTEE_KSM_DISTINCT %>% sqrt())
+scatterplotter('COMMITTEE_KSM_DISTINCT') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.cmteeksma}
+summary2(full.data$COMMITTEE_KSM_ACTIVE %>% sqrt())
+scatterplotter('COMMITTEE_KSM_ACTIVE') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.cmteeksmyr}
+summary2(full.data$COMMITTEE_KSM_YEARS %>% sqrt())
+scatterplotter('COMMITTEE_KSM_YEARS') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.cmteeksmldr}
+summary2(full.data$COMMITTEE_KSM_LDR %>% sqrt())
+scatterplotter('COMMITTEE_KSM_LDR') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.cmteeksmldra}
+summary2(full.data$COMMITTEE_KSM_LDR_ACTIVE %>% sqrt())
+scatterplotter('COMMITTEE_KSM_LDR_ACTIVE') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.eventa}
+summary2(full.data$KSM_EVENTS_ATTENDED %>% sqrt())
+scatterplotter('KSM_EVENTS_ATTENDED') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.eventyr}
+summary2(full.data$KSM_EVENTS_YRS %>% sqrt())
+scatterplotter('KSM_EVENTS_YRS') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.event3fy}
+summary2(full.data$KSM_EVENTS_PREV_3_FY %>% sqrt())
+scatterplotter('KSM_EVENTS_PREV_3_FY') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.eventreun}
+summary2(full.data$KSM_EVENTS_REUNIONS %>% sqrt())
+scatterplotter('KSM_EVENTS_REUNIONS') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.spkyrs}
+summary2(full.data$KSM_SPEAKER_YEARS %>% sqrt())
+scatterplotter('KSM_SPEAKER_YEARS') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.spktimes}
+summary2(full.data$KSM_SPEAKER_TIMES %>% sqrt())
+summary(full.data$KSM_SPEAKER_TIMES %>% factor())
+scatterplotter('KSM_SPEAKER_TIMES') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.featyrs}
+summary2(full.data$KSM_FEATURED_COMM_YEARS %>% sqrt())
+scatterplotter('KSM_FEATURED_COMM_YEARS') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.feattimes}
+summary2(full.data$KSM_FEATURED_COMM_TIMES %>% sqrt())
+summary(full.data$KSM_FEATURED_COMM_TIMES %>% factor())
+scatterplotter('KSM_FEATURED_COMM_TIMES') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.corpyrs}
+summary2(full.data$KSM_CORP_RECRUITER_YEARS %>% sqrt())
+scatterplotter('KSM_CORP_RECRUITER_YEARS') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.corptimes}
+summary2(full.data$KSM_CORP_RECRUITER_TIMES %>% sqrt())
+summary(full.data$KSM_CORP_RECRUITER_TIMES %>% factor())
+scatterplotter('KSM_CORP_RECRUITER_TIMES') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.athyrs}
+summary2(full.data$ATHLETICS_TICKET_YEARS %>% sqrt())
+summary(full.data$ATHLETICS_TICKET_YEARS %>% factor())
+scatterplotter('ATHLETICS_TICKET_YEARS') +
+  scale_x_sqrt()
+```
+
+```{r rv.num.athtimes}
+summary2(full.data %>% filter(ATHLETICS_TICKET_LAST > 0) %>% select(ATHLETICS_TICKET_LAST) %>%
+           unlist())
+scatterplotter('ATHLETICS_TICKET_LAST'
+               , data = full.data %>% filter(ATHLETICS_TICKET_LAST > 0)) +
+  scale_x_continuous(breaks = 2000:2050)
 ```
 
 # Data file cleanup
