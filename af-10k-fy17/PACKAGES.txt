@@ -4,5 +4,6 @@ dplyr
 tidyr
 lubridate
 ggplot2
+gridExtra
 knitr
 Boruta
