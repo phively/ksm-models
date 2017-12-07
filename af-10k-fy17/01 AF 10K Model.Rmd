@@ -39,6 +39,8 @@ if (!('wranglR' %in% utils::installed.packages()[, 'Package'])) {
 }
 ```
 
+## Load libraries
+
 Now load `wranglR` and use it to install or load the other required packages:
 
 ```{r load.packages, warning=FALSE, message=FALSE}
@@ -228,16 +230,31 @@ According to this the best transformation on the 1-variable model is approximate
 
 ## Response variable correlations
 
-```{r rv.boxplotter}
-boxplotter <- function(cname) {
-  full.data %>% select(GIVING_MAX_CASH_AMT) %>% cbind(x = full.data[, cname]) %>%
+```{r rv.plotter}
+# ggplot2 boxplotting function from colname
+boxplotter <- function(cname, data = full.data) {
+  data %>% select(GIVING_MAX_CASH_AMT) %>% cbind(x = data[, cname]) %>%
     filter(GIVING_MAX_CASH_AMT > 0) %>%
     ggplot(aes(x = x, y = GIVING_MAX_CASH_AMT)) +
     geom_boxplot(alpha = .6) +
     scale_y_log10(breaks = 10^(-2:7), labels = scales::dollar) +
     labs(x = cname)
 }
+
+# ggplot2 scatterplotting function from colname
+scatterplotter <- function(cname, data = full.data) {
+  data %>% select(GIVING_MAX_CASH_AMT) %>% cbind(x = data[, cname]) %>%
+    filter(GIVING_MAX_CASH_AMT > 0) %>%
+    ggplot(aes(x = x, y = GIVING_MAX_CASH_AMT)) +
+    geom_point(alpha = .6) +
+    geom_smooth() +
+    geom_smooth(method = 'lm', color = 'red') +
+    scale_y_log10(breaks = 10^(-2:7), labels = scales::dollar) +
+    labs(x = cname)
+}
+  
 ```
+
 
 ### Categorical variables
 
@@ -428,9 +445,37 @@ Looks good.
 
 ### Numeric variables
 
-```{r rv.numeric}
-# Numeric
+```{r rv.num.ksmyr}
+summary2(full.data$FIRST_KSM_YEAR)
+scatterplotter('FIRST_KSM_YEAR', full.data %>% filter(FIRST_KSM_YEAR > 0))
 ```
 
 
 
+```{r rv.num.gfirstyr}
+summary2(full.data$GIVING_FIRST_YEAR)
+scatterplotter('GIVING_FIRST_YEAR')
+```
+
+
+
+```{r rv.num.gfirstcashamt}
+summary2(full.data$GIVING_FIRST_YEAR_CASH_AMT)
+scatterplotter('GIVING_FIRST_YEAR_CASH_AMT'
+               , full.data %>% filter(GIVING_FIRST_YEAR_CASH_AMT > 0)) +
+  scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+```
+
+
+
+```{r rv.num.gfirstplgamt}
+summary2(full.data$GIVING_FIRST_YEAR_PLEDGE_AMT)
+scatterplotter('GIVING_FIRST_YEAR_PLEDGE_AMT'
+               , full.data %>% filter(GIVING_FIRST_YEAR_PLEDGE_AMT > 0)) +
+  scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
+```
+
+# Data file cleanup
+
+  * R script to clean data file for processing
+  * Should include a function taking data file path as an argument
