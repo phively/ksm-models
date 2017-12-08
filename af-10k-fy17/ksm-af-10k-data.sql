@@ -52,20 +52,23 @@ cal As (
     , count(Distinct Case When hh_recognition_credit > 0 Then allocation_code End) As gifts_allocs_supported
     , count(Distinct Case When hh_recognition_credit > 0 Then fiscal_year End) As gifts_fys_supported
     , min(Case When hh_recognition_credit > 0 Then fiscal_year End) As giving_first_year
+    -- First year giving
     , sum(Case When fiscal_year = ksm_giving_yr.first_year And tx_gypm_ind <> 'P'
         Then hh_recognition_credit End) As giving_first_year_cash_amt
     , sum(Case When fiscal_year = ksm_giving_yr.first_year And tx_gypm_ind = 'P'
         Then hh_recognition_credit End) As giving_first_year_pledge_amt
     , max(Case When tx_gypm_ind Not In ('P', 'M') Then hhrc End) As giving_max_cash_amt
+    -- Take largest transaction, combining receipts into one amount. In event of a tie, take earliest date of record.
     , min(fiscal_year) keep(dense_rank First
-        Order By (Case When tx_gypm_ind Not In ('P', 'M') Then hhrc Else 0 End) Desc, date_of_record Desc) As giving_max_cash_fy
+        Order By (Case When tx_gypm_ind Not In ('P', 'M') Then hhrc Else 0 End) Desc, date_of_record Asc) As giving_max_cash_fy
     , min(date_of_record) keep(dense_rank First
-        Order By (Case When tx_gypm_ind Not In ('P', 'M') Then hhrc Else 0 End) Desc, date_of_record Desc) As giving_max_cash_dt
+        Order By (Case When tx_gypm_ind Not In ('P', 'M') Then hhrc Else 0 End) Desc, date_of_record Asc) As giving_max_cash_dt
     , max(Case When tx_gypm_ind = 'P' Then hhrc End) As giving_max_pledge_amt
     , min(fiscal_year) keep(dense_rank First
-        Order By (Case When tx_gypm_ind = 'P' Then hhrc Else 0 End) Desc, date_of_record Desc) As giving_max_pledge_fy
+        Order By (Case When tx_gypm_ind = 'P' Then hhrc Else 0 End) Desc, date_of_record Asc) As giving_max_pledge_fy
     , min(date_of_record) keep(dense_rank First
-        Order By (Case When tx_gypm_ind = 'P' Then hhrc Else 0 End) Desc, date_of_record Desc) As giving_max_pledge_dt
+        Order By (Case When tx_gypm_ind = 'P' Then hhrc Else 0 End) Desc, date_of_record Asc) As giving_max_pledge_dt
+    -- Totals
     , sum(Case When tx_gypm_ind = 'P' Then 0 Else hh_recognition_credit End) As giving_cash_total
     , sum(Case When tx_gypm_ind = 'P' Then hh_recognition_credit Else 0 End) As giving_pledge_total
     , sum(Case When tx_gypm_ind <> 'Y' Then hh_recognition_credit Else 0 End) As giving_ngc_total
