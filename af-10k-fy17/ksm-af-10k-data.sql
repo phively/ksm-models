@@ -20,7 +20,7 @@ cal As (
     , tx_gypm_ind
     , payment_type
     , allocation_code
-    , date_of_record
+    , trunc(date_of_record) As date_of_record
     , fiscal_year
     , hh_recognition_credit
   From v_ksm_giving_trans_hh

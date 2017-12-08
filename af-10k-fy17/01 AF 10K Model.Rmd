@@ -55,7 +55,7 @@ Libraries(scan(file = 'PACKAGES.txt', what = 'character'))
 
 ```{r load.data}
 ### Import the data
-full.data <- read.csv('data/2017-12-07 AF 10K Model.csv', stringsAsFactors = FALSE, strip.white = TRUE,
+full.data <- read.csv('data/2017-12-08 AF 10K Model.csv', stringsAsFactors = FALSE, strip.white = TRUE,
                       colClasses = c('ID_NUMBER' = 'character'
                                      , 'HOUSEHOLD_ID' = 'character'
                                      , 'BIRTH_DT' = 'character'
@@ -466,14 +466,14 @@ summary2(full.data$FIRST_KSM_YEAR)
 scatterplotter('FIRST_KSM_YEAR', full.data %>% filter(FIRST_KSM_YEAR > 0))
 ```
 
-
+Appears approximately linear until people graduating ~10 years ago.
 
 ```{r rv.num.gfirstyr}
 summary2(full.data$GIVING_FIRST_YEAR)
 scatterplotter('GIVING_FIRST_YEAR')
 ```
 
-
+Same as previous.
 
 ```{r rv.num.gfirstcashamt}
 summary2(full.data %>% select(GIVING_FIRST_YEAR_CASH_AMT) %>%
@@ -483,7 +483,8 @@ scatterplotter('GIVING_FIRST_YEAR_CASH_AMT'
   scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
 ```
 
-
+Nearly an $x = y$ dividing line; not expected to be exact given that `GIVING_MAX_CASH_AMT` is single gifts.
+**CAUTION - endogenous**
 
 ```{r rv.num.gfirstplgamt}
 summary2(full.data %>% select(GIVING_FIRST_YEAR_PLEDGE_AMT) %>%
@@ -493,7 +494,8 @@ scatterplotter('GIVING_FIRST_YEAR_PLEDGE_AMT'
   scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
 ```
 
-
+Looks ok, but probably need a cutoff.
+**CAUTION - endogenous**
 
 ```{r rv.num.gct}
 summary2(full.data %>% select(GIVING_CASH_TOTAL) %>%
@@ -503,6 +505,9 @@ scatterplotter('GIVING_CASH_TOTAL'
   scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
 ```
 
+Linear trend bounded by $y = x$ as expected.
+**EXCLUDE**
+
 ```{r rv.num.gpt}
 summary2(full.data %>% select(GIVING_PLEDGE_TOTAL) %>%
   filter(GIVING_PLEDGE_TOTAL > 0) %>% unlist() %>% log10())
@@ -511,7 +516,8 @@ scatterplotter('GIVING_PLEDGE_TOTAL'
   scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
 ```
 
-
+Appears linear or piecewise linear, which follows given pledge payments.
+**EXCLUDE**
 
 ```{r rv.num.gngct}
 summary2(full.data %>% select(GIVING_NGC_TOTAL) %>%
@@ -521,7 +527,8 @@ scatterplotter('GIVING_NGC_TOTAL'
   scale_x_log10(breaks = 10^(-2:7), labels = scales::dollar)
 ```
 
-
+Same as previous.
+**EXCLUDE**
 
 ```{r rv.num.gallocs}
 summary2(full.data$GIFTS_ALLOCS_SUPPORTED %>% sqrt())
@@ -529,7 +536,7 @@ scatterplotter('GIFTS_ALLOCS_SUPPORTED') +
   scale_x_sqrt()
 ```
 
-
+Looks ok.
 
 ```{r rv.num.gfys}
 summary2(full.data$GIFTS_FYS_SUPPORTED %>% sqrt())
@@ -537,7 +544,7 @@ scatterplotter('GIFTS_FYS_SUPPORTED') +
   scale_x_sqrt()
 ```
 
-
+Looks ok.
 
 ```{r rv.num.gcash}
 summary2(full.data$GIFTS_CASH %>% sqrt())
@@ -545,7 +552,8 @@ scatterplotter('GIFTS_CASH') +
   scale_x_sqrt()
 ```
 
-
+Would want to exclude the influential point around $x = 300$ if this is used.
+**Consider additional transformation**
 
 ```{r rv.num.gccard}
 summary2(full.data$GIFTS_CREDIT_CARD %>% sqrt())
@@ -553,13 +561,17 @@ scatterplotter('GIFTS_CREDIT_CARD') +
   scale_x_sqrt()
 ```
 
-
+Looks ok; candidate for discretizing.
+**Consider additional transformation**
 
 ```{r rv.num.gstock}
 summary2(full.data$GIFTS_STOCK %>% sqrt())
 scatterplotter('GIFTS_STOCK') +
   scale_x_sqrt()
 ```
+
+Completely different 0 and 1+ slopes. Could be a candidate for binary indicator.
+**Consider additional transformation**
 
 ```{r rv.num.cpfy1}
 rbind(
@@ -585,7 +597,8 @@ grid.arrange(
 )
 ```
 
-
+High year-to-year correlations as expected.
+**CAUTION - endogenous**
 
 ```{r rv.num.ngcpfy1}
 rbind(
@@ -611,7 +624,8 @@ grid.arrange(
 )
 ```
 
-
+Same as above.
+**CAUTION - endogenous**
 
 ```{r rv.num.klc}
 summary2(full.data$GIFT_CLUB_KLC_YRS %>% sqrt())
@@ -619,7 +633,7 @@ scatterplotter('GIFT_CLUB_KLC_YRS') +
   scale_x_sqrt()
 ```
 
-
+Surprisingly close to linear; looks ok.
 
 ```{r rv.num.beq}
 summary2(full.data$GIFT_CLUB_BEQUEST_YRS %>% sqrt())
@@ -627,7 +641,8 @@ scatterplotter('GIFT_CLUB_BEQUEST_YRS') +
   scale_x_sqrt()
 ```
 
-
+Only 1 point with 2, so good candidate for binary indicator.
+**Consider additional transformation**
 
 ```{r rv.num.loy}
 summary2(full.data$GIFT_CLUB_LOYAL_YRS %>% sqrt())
@@ -635,7 +650,8 @@ scatterplotter('GIFT_CLUB_LOYAL_YRS') +
   scale_x_sqrt()
 ```
 
-
+Looks ok but check how many are at each level.
+**Consider additional transformation**
 
 ```{r rv.num.nulc}
 summary2(full.data$GIFT_CLUB_NU_LDR_YRS %>% sqrt())
@@ -643,7 +659,8 @@ scatterplotter('GIFT_CLUB_NU_LDR_YRS') +
   scale_x_sqrt()
 ```
 
-
+Looks ok but check how many are at each level.
+**Consider additional transformation**
 
 ```{r rv.num.visits}
 rbind(
@@ -714,11 +731,17 @@ scatterplotter('COMMITTEE_NU_DISTINCT') +
   scale_x_sqrt()
 ```
 
+Looks like it might be piecewise-linear; consider discretizing.
+**Consider additional transformation**
+
 ```{r rv.num.cmteenua}
 summary2(full.data$COMMITTEE_NU_ACTIVE %>% sqrt())
 scatterplotter('COMMITTEE_NU_ACTIVE') +
   scale_x_sqrt()
 ```
+
+Likely unhelpful since I don't know committees the year largest gift was made.
+**EXCLUDE**
 
 ```{r rv.num.cmteenuyr}
 summary2(full.data$COMMITTEE_NU_YEARS %>% sqrt())
@@ -726,11 +749,16 @@ scatterplotter('COMMITTEE_NU_YEARS') +
   scale_x_sqrt()
 ```
 
+Looks fine.
+
 ```{r rv.num.cmteeksmd}
 summary2(full.data$COMMITTEE_KSM_DISTINCT %>% sqrt())
 scatterplotter('COMMITTEE_KSM_DISTINCT') +
   scale_x_sqrt()
 ```
+
+Can probably get away with linear, or discretize.
+**Consider additional transformation**
 
 ```{r rv.num.cmteeksma}
 summary2(full.data$COMMITTEE_KSM_ACTIVE %>% sqrt())
@@ -738,11 +766,16 @@ scatterplotter('COMMITTEE_KSM_ACTIVE') +
   scale_x_sqrt()
 ```
 
+Likely unhelpful since I don't know committees the year largest gift was made.
+**EXCLUDE**
+
 ```{r rv.num.cmteeksmyr}
 summary2(full.data$COMMITTEE_KSM_YEARS %>% sqrt())
 scatterplotter('COMMITTEE_KSM_YEARS') +
   scale_x_sqrt()
 ```
+
+Looks fine.
 
 ```{r rv.num.cmteeksmldr}
 summary2(full.data$COMMITTEE_KSM_LDR %>% sqrt())
@@ -750,11 +783,17 @@ scatterplotter('COMMITTEE_KSM_LDR') +
   scale_x_sqrt()
 ```
 
+Looks ok but consider combining based on counts.
+**Consider additional transformation**
+
 ```{r rv.num.cmteeksmldra}
 summary2(full.data$COMMITTEE_KSM_LDR_ACTIVE %>% sqrt())
 scatterplotter('COMMITTEE_KSM_LDR_ACTIVE') +
   scale_x_sqrt()
 ```
+
+Nonlinear relationship; does that make sense? Artifact?
+**EXCLUDE**
 
 ```{r rv.num.eventa}
 summary2(full.data$KSM_EVENTS_ATTENDED %>% sqrt())
@@ -762,11 +801,15 @@ scatterplotter('KSM_EVENTS_ATTENDED') +
   scale_x_sqrt()
 ```
 
+Looks ok.
+
 ```{r rv.num.eventyr}
 summary2(full.data$KSM_EVENTS_YRS %>% sqrt())
 scatterplotter('KSM_EVENTS_YRS') +
   scale_x_sqrt()
 ```
+
+Looks ok.
 
 ```{r rv.num.event3fy}
 summary2(full.data$KSM_EVENTS_PREV_3_FY %>% sqrt())
@@ -774,17 +817,25 @@ scatterplotter('KSM_EVENTS_PREV_3_FY') +
   scale_x_sqrt()
 ```
 
+Looks ok.
+
 ```{r rv.num.eventreun}
 summary2(full.data$KSM_EVENTS_REUNIONS %>% sqrt())
 scatterplotter('KSM_EVENTS_REUNIONS') +
   scale_x_sqrt()
 ```
 
+Looks ok, but could also work as an indicator; how many people have really gone to 4+?
+**Consider additional transformation**
+
 ```{r rv.num.spkyrs}
 summary2(full.data$KSM_SPEAKER_YEARS %>% sqrt())
 scatterplotter('KSM_SPEAKER_YEARS') +
   scale_x_sqrt()
 ```
+
+Just started tracking. Good candidate for binary indicator.
+**Consider additional transformation**
 
 ```{r rv.num.spktimes}
 summary2(full.data$KSM_SPEAKER_TIMES %>% sqrt())
@@ -793,11 +844,17 @@ scatterplotter('KSM_SPEAKER_TIMES') +
   scale_x_sqrt()
 ```
 
+Good candidate for binary indicator, though that's duplicative with the above.
+**Consider additional transformation**
+
 ```{r rv.num.featyrs}
 summary2(full.data$KSM_FEATURED_COMM_YEARS %>% sqrt())
 scatterplotter('KSM_FEATURED_COMM_YEARS') +
   scale_x_sqrt()
 ```
+
+Good candidate for binary indicator.
+**Consider additional transformation**
 
 ```{r rv.num.feattimes}
 summary2(full.data$KSM_FEATURED_COMM_TIMES %>% sqrt())
@@ -806,11 +863,16 @@ scatterplotter('KSM_FEATURED_COMM_TIMES') +
   scale_x_sqrt()
 ```
 
+Good candidate for binary indicator, though that's duplicative with the above.
+**EXCLUDE**
+
 ```{r rv.num.corpyrs}
 summary2(full.data$KSM_CORP_RECRUITER_YEARS %>% sqrt())
 scatterplotter('KSM_CORP_RECRUITER_YEARS') +
   scale_x_sqrt()
 ```
+
+Looks fine; treat as binary indicator.
 
 ```{r rv.num.corptimes}
 summary2(full.data$KSM_CORP_RECRUITER_TIMES %>% sqrt())
@@ -819,12 +881,17 @@ scatterplotter('KSM_CORP_RECRUITER_TIMES') +
   scale_x_sqrt()
 ```
 
+Duplicative with above.
+**EXCLUDE**
+
 ```{r rv.num.athyrs}
 summary2(full.data$ATHLETICS_TICKET_YEARS %>% sqrt())
 summary(full.data$ATHLETICS_TICKET_YEARS %>% factor())
 scatterplotter('ATHLETICS_TICKET_YEARS') +
   scale_x_sqrt()
 ```
+
+Looks fine.
 
 ```{r rv.num.athtimes}
 summary2(full.data %>% filter(ATHLETICS_TICKET_LAST > 0) %>% select(ATHLETICS_TICKET_LAST) %>%
@@ -833,6 +900,8 @@ scatterplotter('ATHLETICS_TICKET_LAST'
                , data = full.data %>% filter(ATHLETICS_TICKET_LAST > 0)) +
   scale_x_continuous(breaks = 2000:2050)
 ```
+
+Looks fine.
 
 # Data file cleanup
 
