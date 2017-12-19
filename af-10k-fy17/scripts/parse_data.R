@@ -81,6 +81,7 @@ parse_data <- function(filepath) {
   # COMMITTEE_KSM_LDR_ACTIVE
   # KSM_FEATURED_COMM_TIMES
   # KSM_CORP_RECRUITER_TIMES
+  # KSM_SPEAKER_TIMES
   
   ### Transformed response variable GIVING_MAX_CASH_AMT
   # log10()
@@ -120,5 +121,17 @@ parse_data <- function(filepath) {
   
   ### Binary indicators
   # KSM_CORP_RECRUITER_YEARS
+  
+  ### Discretize GIFTS_CREDIT_CARD into 0, 1, 2+
+  
+  ### GIFTS_STOCK treated as binary
+  
+  ### GIFT_CLUB_BEQUEST_YRS treated as binary
+  
+  ### KSM_SPEAKER_YEARS treated as binary
+  
+  ### Discretize KSM_EVENTS_REUNIONS into 0, 1, 2, 3+
+  
+  ### KSM_FEATURED_COMM_YEARS treated as binary
   
 }

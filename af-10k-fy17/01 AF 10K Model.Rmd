@@ -239,6 +239,8 @@ According to this the best transformation on the 1-variable model is approximate
 
 ## Response variable correlations
 
+### Functions
+
 ```{r rv.plotter}
 # ggplot2 boxplotting function from colname
 boxplotter <- function(cname, data = full.data) {
@@ -259,6 +261,15 @@ scatterplotter <- function(cname, data = full.data) {
     geom_smooth() +
     geom_smooth(method = 'lm', color = 'red') +
     scale_y_log10(breaks = 10^(-2:7), labels = scales::dollar) +
+    labs(x = cname)
+}
+
+# ggplot2 histogram function from colname
+histogrammer <- function(cname, m = 30, data = full.data) {
+  data %>% cbind(x = data[, cname]) %>%
+    ggplot(aes(x = x)) +
+    geom_histogram(alpha = .6, bins = m) +
+    geom_density(aes(y = ..count..)) +
     labs(x = cname)
 }
 ```
@@ -903,18 +914,128 @@ scatterplotter('ATHLETICS_TICKET_LAST'
 
 Looks fine.
 
-### Numeric variables second look
+## Additional exploration
 
-Consider discretizing:
-GIFTS_CASH
-GIFTS_CREDIT_CARD
-GIFTS_STOCK (binary?)
-GIFT_CLUB_BEQUEST_YRS (binary?)
-COMMITTEE_KSM_LDR
-KSM_EVENTS_REUNIONS
-KSM_SPEAKER_YEARS (binary?)
-KSM_SPEAKER_TIMES
-KSM_FEATURED_COMM_YEARS
+### Count of cash gifts
+
+```{r rv2.gifts_cash_hist}
+full.data %>% filter(GIFTS_CASH > 0) %>% select(GIFTS_CASH) %>%
+  mutate(GIFTS_CASH = cut(GIFTS_CASH, 50)) %>% summary()
+
+histogrammer('GIFTS_CASH', data = full.data %>% filter(GIFTS_CASH > 0), m = 50)
+```
+
+Looks like around 95% of the donors have given no more than 25 cash gifts.
+
+```{r rv2.gifts_cash}
+# Full dataset regression line for comparison
+lmtmp <- full.data %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
+  lm(log10(GIVING_MAX_CASH_AMT) ~ sqrt(GIFTS_CASH), data = .)
+
+# Plot
+scatterplotter('GIFTS_CASH', data = full.data %>% filter(GIFTS_CASH < 25)) +
+  # Filtered data
+  geom_point(aes(x = GIFTS_CASH, y = GIVING_MAX_CASH_AMT),
+             data = full.data %>% filter(GIFTS_CASH >= 25),
+             color = 'gray', alpha = .5) +
+  scale_x_sqrt() +
+  geom_abline(slope = lmtmp$coefficients[2], intercept = lmtmp$coefficients[1],
+              linetype = 'solid', color = 'purple', alpha = .5)
+
+remove(lmtmp)
+```
+
+The red line is a linear regression for $x < 25$ (excluding gray points) while the purple line is for the full dataset. Turns out that the (relatively) extreme values really make no difference.
+
+### Count of credit card gifts
+
+```{r rv2.gifts_cc_hist}
+full.data %>% filter(GIFTS_CREDIT_CARD > 0) %>% select(GIFTS_CREDIT_CARD) %>%
+  mutate(GIFTS_CREDIT_CARD = cut(GIFTS_CREDIT_CARD, 25)) %>% summary()
+
+histogrammer('GIFTS_CREDIT_CARD', data = full.data %>% filter(GIFTS_CREDIT_CARD > 0), m = 25)
+
+quantile(full.data %>% filter(GIFTS_CREDIT_CARD > 0) %>% select(GIFTS_CREDIT_CARD) %>% unlist, .9)
+```
+
+90th quantile is at $x = 8$.
+
+```{r rv2.gifts_cc}
+full.data %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
+  mutate(
+    DISCRETE_CC = cut(GIFTS_CREDIT_CARD, breaks = c(-1:9, 1E99))
+  ) %>%
+boxplotter('DISCRETE_CC', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+Honestly seems like **discretizing into 0, 1, and 2+ would work fine.**
+I suspect that the dip for very high CC gift count entities is due to recurring (monthly) transactions.
+
+### Binary candidates
+
+```{r rv2.gifts_stock}
+full.data %>% mutate(DISCRETE_STOCK = cut(GIFTS_STOCK, c(-1:9, 1E99))) %>% 
+boxplotter('DISCRETE_STOCK', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+**Treat `GIFTS_STOCK` as binary.**
+
+```{r rv2.gift_clubs_beq}
+full.data %>% mutate(GIFT_CLUB_BEQUEST_YRS = cut(GIFT_CLUB_BEQUEST_YRS, c(-1:2))) %>% 
+boxplotter('GIFT_CLUB_BEQUEST_YRS', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+**Treat `GIFT_CLUB_BEQUEST_YRS` as binary.**
+
+```{r rv2.speaker_yrs}
+full.data %>% mutate(KSM_SPEAKER_YEARS = cut(KSM_SPEAKER_YEARS, c(-1:2, 1E99))) %>% 
+boxplotter('KSM_SPEAKER_YEARS', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+```{r rv2.speaker_times}
+full.data %>% mutate(KSM_SPEAKER_TIMES = cut(KSM_SPEAKER_TIMES, c(-1:8, 1E99))) %>% 
+boxplotter('KSM_SPEAKER_TIMES', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+**Use binary indicator on `KSM_SPEAKER_YEARS` and exclude `KSM_SPEAKER_TIMES`.**
+
+### KSM leadership committees
+
+```{r rv2.ksm_ldr_com}
+full.data %>% mutate(COMMITTEE_KSM_LDR = cut(COMMITTEE_KSM_LDR, c(-1:6, 1E99))) %>% 
+boxplotter('COMMITTEE_KSM_LDR', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+Seems fine to leave as is.
+
+### KSM Reunion attendance
+
+```{r rv2.reunion_attendance}
+full.data %>% mutate(KSM_EVENTS_REUNIONS = cut(KSM_EVENTS_REUNIONS, c(-1:6, 1E99))) %>% 
+boxplotter('KSM_EVENTS_REUNIONS', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+**Split `KSM_EVENTS_REUNIONS` into 0, 1, 2, 3+.**
+
+### Featured communication years count
+
+```{r rv2.featured_comms}
+full.data %>% mutate(KSM_FEATURED_COMM_YEARS = cut(KSM_FEATURED_COMM_YEARS, c(-1:3, 1E99))) %>% 
+boxplotter('KSM_FEATURED_COMM_YEARS', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+This is somewhat problematic because people are often featured because they gave. Might as well try it though.
+**Treat `KSM_FEATURED_COMM_YEARS` as binary.**
+
+
 
 GIFT_CLUB_LOYAL_YRS - how many per lvl
 GIFT_CLUB_NU_LDR_YRS - same
@@ -923,7 +1044,9 @@ VISITORS_PFY1-5 - try combining multi years of counts
 GIVING_MAX_CASH_AMT - piecewise linear?
 
 
-# Data file cleanup
+# Data file cleanup goals
 
   * R script to clean data file for processing
-  * Should include a function taking data file path as an argument
+  * Written as a function taking data file path as an argument
+  
+This is implemented in `parse_data.R`.
