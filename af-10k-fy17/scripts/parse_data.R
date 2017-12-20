@@ -134,4 +134,13 @@ parse_data <- function(filepath) {
   
   ### KSM_FEATURED_COMM_YEARS treated as binary
   
+  ### GIFT_CLUB_NU_LDR_YRS treated as binary
+  
+  ### log10(VISITS_PFY1 + VISITS_PFY2 + VISITS_PFY3 + VISITS_PFY4 + VISITS_PFY5)
+  
+  ### 1/5 * [1{CASH_PFY1 > 0} + 1{CASH_PFY2 > 0} + 1{CASH_PFY3 > 0} + 1{CASH_PFY4 > 0} + 1{CASH_PFY5 > 0}]
+  
+  ### UPGRADE3: net upgrades/downgrades in FY-1, FY-2, FY-3 (+2 to -2)
+  
+  
 }

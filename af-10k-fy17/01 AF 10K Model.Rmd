@@ -1035,13 +1035,143 @@ boxplotter('KSM_FEATURED_COMM_YEARS', data = .) +
 This is somewhat problematic because people are often featured because they gave. Might as well try it though.
 **Treat `KSM_FEATURED_COMM_YEARS` as binary.**
 
+### Loyal gift club
 
+```{r rv2.gc_loyal}
+full.data %>% mutate(GIFT_CLUB_LOYAL_YRS = cut(GIFT_CLUB_LOYAL_YRS, c(-1:6, 1E99))) %>%
+  select(GIFT_CLUB_LOYAL_YRS) %>% summary()
 
-GIFT_CLUB_LOYAL_YRS - how many per lvl
-GIFT_CLUB_NU_LDR_YRS - same
-VISITS - does it look better on sqrt or log scale
-VISITORS_PFY1-5 - try combining multi years of counts
-GIVING_MAX_CASH_AMT - piecewise linear?
+full.data %>% mutate(GIFT_CLUB_LOYAL_YRS = cut(GIFT_CLUB_LOYAL_YRS, c(-1:6, 1E99))) %>% 
+boxplotter('GIFT_CLUB_LOYAL_YRS', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+Looks fine as-is; good proportion within each bin.
+
+### Non-KSM NU leadership gift clubs
+
+```{r rv2.gc_nu_ldr}
+full.data %>% mutate(GIFT_CLUB_NU_LDR_YRS = cut(GIFT_CLUB_NU_LDR_YRS, c(-1:16, 1E99))) %>%
+  select(GIFT_CLUB_NU_LDR_YRS) %>% table()
+
+full.data %>% mutate(GIFT_CLUB_NU_LDR_YRS = cut(GIFT_CLUB_NU_LDR_YRS, c(-1:16, 1E99))) %>% 
+boxplotter('GIFT_CLUB_NU_LDR_YRS', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+Practically no difference between the 1+ groups; appears fine to treat as binary.
+**Treat `GIFT_CLUB_NU_LDR_YRS` as binary.**
+
+## Derived features
+
+### Visits
+
+Does total visits (in the last 5 FY) make sense as a sqrt or log10 variable?
+
+```{r rv2.visits}
+scatterplotter('VISITS') + scale_x_sqrt()
+scatterplotter('VISITS') + scale_x_log10()
+```
+
+Much more convincing on a log-10 scale.
+**Use summed `VISITS` on a log-10 scale.**
+
+### X out of 5 loyalty
+
+Does `GIVING_MAX_CASH_AMT` vary with number of years giving in last 5?
+
+Let $FY_t$ denote fiscal year cash giving in year $t$. If $\mathbf{1}$ is the indicator function:
+
+$$ P_5 = \frac{1}{5} \left[ \sum_{i=0}^{4} \mathbf{1}\left\{ FY_{t-i} > 0 \right\} \right] $$
+
+```{r rv2.x5_loyalty}
+full.data %>% mutate(
+  LAST_5_PCT = 1/5 * (
+    ifelse(CASH_PFY1 > 0, 1, 0)
+    + ifelse(CASH_PFY2 > 0, 1, 0)
+    + ifelse(CASH_PFY3 > 0, 1, 0)
+    + ifelse(CASH_PFY4 > 0, 1, 0)
+    + ifelse(CASH_PFY5 > 0, 1, 0)
+  )
+) %>% select(LAST_5_PCT) %>% table()
+
+full.data %>% mutate(
+  LAST_5_PCT = {1/5 * (
+    ifelse(CASH_PFY1 > 0, 1, 0)
+    + ifelse(CASH_PFY2 > 0, 1, 0)
+    + ifelse(CASH_PFY3 > 0, 1, 0)
+    + ifelse(CASH_PFY4 > 0, 1, 0)
+    + ifelse(CASH_PFY5 > 0, 1, 0)
+  )} %>% factor()
+) %>% boxplotter('LAST_5_PCT', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+Very nice linear trend.
+**Include `LAST_5_PCT` as a variable.**
+
+### Upgrade behavior
+
+Does `GIVING_MAX_CASH_AMT` vary as a function of upgrades/downgrades?
+
+$$ U_5 = \sum_{i=0}^{4} \text{sign}\left( FY_{t-i} - FY_{t-i-1} \right) $$
+
+```{r rv2.upgrade_5}
+full.data %>% mutate(
+  UPGRADE5 =
+      sign(CASH_PFY1 - CASH_PFY2)
+    + sign(CASH_PFY2 - CASH_PFY3)
+    + sign(CASH_PFY3 - CASH_PFY4)
+    + sign(CASH_PFY4 - CASH_PFY5)
+) %>% select(UPGRADE5) %>% table()
+
+full.data %>% mutate(
+  UPGRADE5 = factor(
+      sign(CASH_PFY1 - CASH_PFY2)
+    + sign(CASH_PFY2 - CASH_PFY3)
+    + sign(CASH_PFY3 - CASH_PFY4)
+    + sign(CASH_PFY4 - CASH_PFY5)
+  )
+) %>% boxplotter('UPGRADE5', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+Clearly nonlinear. Based on the counts, probably treat this as -2 to +2.
+
+Try 3 years:
+
+```{r rv2.upgrade_3}
+full.data %>% mutate(
+  UPGRADE3 =
+      sign(CASH_PFY1 - CASH_PFY2)
+    + sign(CASH_PFY2 - CASH_PFY3)
+) %>% select(UPGRADE3) %>% table()
+
+full.data %>% mutate(
+  UPGRADE3 = factor(
+      sign(CASH_PFY1 - CASH_PFY2)
+    + sign(CASH_PFY2 - CASH_PFY3)
+  )
+) %>% boxplotter('UPGRADE3', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+This is somewhat counterintuitive; people who have downgraded are more likely to have given a large gift compared to constant donors? Is this a Reunion effect?
+**Include `UPGRADE3` giving behaviors.**
+
+### Giving velocity
+
+I'll use the [Blackbaud](https://www.kb.blackbaud.com/articles/Article/57194) definition, which compares last to three previous years of giving.
+
+$$ V_3 = \left\{
+  \begin{array}{l l}
+    \frac{FY_t}{\frac{1}{3} \sum_{i=1}^{3}FY_{t-i}} \text{  when  } \sum_{i=1}^{3}FY_{t-i} > 0 \\
+    1 \text{  otherwise}
+  \end{array}
+  \right.$$
+
+### Age imputation
+
 
 
 # Data file cleanup goals
@@ -1049,4 +1179,4 @@ GIVING_MAX_CASH_AMT - piecewise linear?
   * R script to clean data file for processing
   * Written as a function taking data file path as an argument
   
-This is implemented in `parse_data.R`.
+This is implemented in [parse_data.R](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/scripts/parse_data.R).
