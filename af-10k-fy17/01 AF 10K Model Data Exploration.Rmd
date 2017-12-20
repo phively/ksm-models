@@ -1156,7 +1156,7 @@ full.data %>% mutate(
   stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
 ```
 
-This is somewhat counterintuitive; people who have downgraded are more likely to have given a large gift compared to constant donors? Is this a Reunion effect?
+This is rather counterintuitive: people who have downgraded are more likely to have given a large gift compared to constant donors? Is this a Reunion effect?
 **Include `UPGRADE3` giving behaviors.**
 
 ### Giving velocity
@@ -1168,9 +1168,88 @@ $$ V_3 = \left\{
     \frac{FY_t}{\frac{1}{3} \sum_{i=1}^{3}FY_{t-i}} \text{  when  } \sum_{i=1}^{3}FY_{t-i} > 0 \\
     1 \text{  otherwise}
   \end{array}
-  \right.$$
+  \right. $$
+
+```{r rv2.velocity_3}
+full.data %>% mutate(
+    denom = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
+  , VELOCITY3 = CASH_PFY1 / ifelse(denom == 0, max(CASH_PFY1, 1E-99), denom)
+) %>% histogrammer('VELOCITY3', data = ., m = 50) +
+  scale_x_log10(breaks = 10^(-5:5))
+
+full.data %>% mutate(
+    denom = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
+  , VELOCITY3 = CASH_PFY1 / ifelse(denom == 0, max(CASH_PFY1, 1E-99), denom)
+) %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
+  scatterplotter('VELOCITY3', data = .) +
+    scale_x_log10(breaks = 10^(-5:5))
+```
+
+Well, that's unexpected. There are likely interactions with age and Reunion cycle. Evidence for 4-6 clusters.
+
+  * Nondonors during the entire period
+  * V3 = -Inf (?)
+  * 1E-8 < V3 < 1E-2
+  * 1E-2 < V3 < 1
+  * V3 = 1 (?)
+  * V3 > 1
+
+```{r rv2.velocity_discrete}
+full.data %>% mutate(
+    denom = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
+  , VELOCITY3 = CASH_PFY1 / ifelse(denom == 0, max(CASH_PFY1, 1E-99), denom)
+  , VELOCITY_DISCR = case_when(
+      CASH_PFY1 == 0 & denom == 0 ~ 'A. Non'
+    , VELOCITY3 < 1E-8 ~ 'B. Way down'
+    , VELOCITY3 < 1E-2 ~ 'C. Moderate down'
+    , VELOCITY3 < 1 ~ 'D. Slight down'
+    , VELOCITY3 == 1 ~ 'E. Unchanged'
+    , VELOCITY3 > 1 ~ 'F. Up'
+  )
+) %>% select(VELOCITY_DISCR) %>% table()
+
+full.data %>% mutate(
+    denom = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
+  , VELOCITY3 = CASH_PFY1 / ifelse(denom == 0, max(CASH_PFY1, 1E-99), denom)
+  , VELOCITY_DISCR = case_when(
+      CASH_PFY1 == 0 & denom == 0 ~ 'A. Non'
+    , VELOCITY3 < 1E-8 ~ 'B. Way down'
+    , VELOCITY3 < 1E-2 ~ 'C. Moderate down'
+    , VELOCITY3 < 1 ~ 'D. Slight down'
+    , VELOCITY3 == 1 ~ 'E. Unchanged'
+    , VELOCITY3 > 1 ~ 'F. Up'
+  )
+) %>% boxplotter('VELOCITY_DISCR', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
+```
+
+Not super-clean but might as well see if it has any predictive power.
+**Include `VELOCITY3`.**
+**Include `VELOCITY_DISCR` as a factor.**
+
+Alternate velocity definition: take *difference* between last year and average giving, rather than the ratio?
+
+```{r rv2.velocity2_3}
+full.data %>% mutate(
+    avg = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
+  , VELOCITY3B = CASH_PFY1 - avg
+) %>% histogrammer('VELOCITY3B', data = ., m = 50) +
+  scale_x_log10()
+
+full.data %>% mutate(
+    avg = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
+  , VELOCITY3B = CASH_PFY1 - avg
+) %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
+  scatterplotter('VELOCITY3B', data = .) +
+    scale_x_log10()
+```
+
+Wonder why Blackbaud doesn't use this? So much cleaner.
+**Include `VELOCITY3B` as numeric.**
 
 ### Age imputation
+
+Issue: various entities are either missing age or have something unreasonable (2 years old when receiving their MBA).
 
 
 
@@ -1180,3 +1259,4 @@ $$ V_3 = \left\{
   * Written as a function taking data file path as an argument
   
 This is implemented in [parse_data.R](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/scripts/parse_data.R).
+

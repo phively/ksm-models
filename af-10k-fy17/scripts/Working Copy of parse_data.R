@@ -144,5 +144,6 @@ parse_data <- function(filepath) {
   
   ### VELOCITY3
   ### Also VELOCITY_DISCR
+  ### Also VELOCITY3B (difference rather than ratio)
   
 }
