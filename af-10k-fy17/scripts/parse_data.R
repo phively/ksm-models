@@ -3,25 +3,31 @@ parse_data <- function(filepath) {
   # Filepath argument is from the working folder, e.g. 'data/2017-12-01.csv', not from root
   
   ### Import the data
+  
   full.data <- read.csv(
-    'filepath'
+      filepath
     , stringsAsFactors = FALSE
     , strip.white = TRUE
     , colClasses = c(
-        'ID_NUMBER' = 'character'
+          'ID_NUMBER' = 'character'
         , 'HOUSEHOLD_ID' = 'character'
         , 'BIRTH_DT' = 'character'
+        , 'ENTITY_DT_ADDED' = 'character'
         , 'GIVING_MAX_CASH_DT' = 'character'
         , 'GIVING_MAX_PLEDGE_DT' = 'character'
       )
     ) %>%
+    
     # Drop any null rows
     filter(!is.na(RN)) %>%
+    
     # Drop row numbers
     select(-RN)
   
   ### Set column types
+  
   full.data <- full.data %>%
+    
     # Convert NA to 0
     mutate_all(
       funs(
@@ -30,19 +36,23 @@ parse_data <- function(filepath) {
     ) %>%
     # Convert to date
     mutate(
-      DOB = ToDate(BIRTH_DT, method = 'ymd')
+        DOB = ToDate(BIRTH_DT, method = 'ymd')
+      , ENTITY_DT = ToDate(ENTITY_DT_ADDED, method = 'mdy')
       , GIVING_MAX_CASH_DT = ToDate(GIVING_MAX_CASH_DT, method = 'mdy')
       , GIVING_MAX_PLEDGE_DT = ToDate(GIVING_MAX_CASH_DT, method = 'mdy')
     ) %>%
+    
     # Extract dates
     mutate(
-      GIVING_MAX_CASH_YR = year(GIVING_MAX_CASH_DT)
+        GIVING_MAX_CASH_YR = year(GIVING_MAX_CASH_DT)
       , GIVING_MAX_CASH_MO = month(GIVING_MAX_CASH_DT) %>% factor()
     ) %>%
+    
     # Convert certain character to factor
     mutate(
+      
       # Factors
-      RECORD_STATUS_CODE = factor(RECORD_STATUS_CODE) %>% relevel(ref = 'A') # Active
+        RECORD_STATUS_CODE = factor(RECORD_STATUS_CODE) %>% relevel(ref = 'A') # Active
       , HOUSEHOLD_RECORD = factor(HOUSEHOLD_RECORD) %>% relevel(ref = 'AL') # Alumni
       , PROGRAM_GROUP = factor(PROGRAM_GROUP) %>% relevel(ref = 'FT') # Full-Time
       , PREF_ADDR_TYPE_CODE = factor(PREF_ADDR_TYPE_CODE) %>% relevel(ref = 'H') # Home
@@ -50,6 +60,7 @@ parse_data <- function(filepath) {
       , HOUSEHOLD_COUNTRY = factor(HOUSEHOLD_COUNTRY) %>% relevel(ref = 'United States')
       , HOUSEHOLD_CONTINENT = factor(HOUSEHOLD_CONTINENT) %>% relevel(ref = 'North America')
       , EVALUATION_RATING = factor(EVALUATION_RATING) %>% relevel(ref = '') # Unrated
+      
       # Indicators
       , BUS_IS_EMPLOYED = factor(BUS_IS_EMPLOYED == 'Y')
       , BUS_HIGH_LVL_JOB_TITLE = factor(BUS_HIGH_LVL_JOB_TITLE != '')
@@ -67,36 +78,73 @@ parse_data <- function(filepath) {
       , KSM_PROSPECT_ACTIVE = factor(KSM_PROSPECT_ACTIVE == 'Y')
       , KSM_PROSPECT_ANY = factor(KSM_PROSPECT_ANY == 'Y')
     )
-
-  ### Filter out HH_PRIMARY = 'N'
   
-  ### Drop fields with unhelpful or very limited data
-  # HH_PRIMARY
-  # BUS_GIFT_MATCH
-  # GIVING_CASH_TOTAL
-  # GIVING_PLEDGE_TOTAL
-  # GIVING_NGC_TOTAL
-  # COMMITTEE_NU_ACTIVE
-  # COMMITTEE_KSM_ACTIVE
-  # COMMITTEE_KSM_LDR_ACTIVE
-  # KSM_FEATURED_COMM_TIMES
-  # KSM_CORP_RECRUITER_TIMES
-  # KSM_SPEAKER_TIMES
+  ### Modeling data
   
-  ### Transformed response variable GIVING_MAX_CASH_AMT
-  # log10()
+  mdata <- full.data %>%
     
-  ### Derived age from DOB or class year
+    # Filter out HH_PRIMARY = 'N'
+    filter(HH_PRIMARY == 'Y') %>%
+    
+    # Drop fields with unhelpful or very limited data
+    select(
+        -HH_PRIMARY
+      , -BUS_GIFT_MATCH
+      , -GIVING_CASH_TOTAL
+      , -GIVING_PLEDGE_TOTAL
+      , -GIVING_NGC_TOTAL
+      , -COMMITTEE_NU_ACTIVE
+      , -COMMITTEE_KSM_ACTIVE
+      , -COMMITTEE_KSM_LDR_ACTIVE
+      , -KSM_FEATURED_COMM_TIMES
+      , -KSM_CORP_RECRUITER_TIMES
+      , -KSM_SPEAKER_TIMES
+    ) %>%
+    
+    # Derived variables
+    mutate(
+      
+      # Record year based on class year, giving year, or record year
+        RECORD_YR = case_when(
+            FIRST_KSM_YEAR == 0 ~ ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, year(ENTITY_DT))
+          , FIRST_KSM_YEAR < 1908 ~ 1908
+          , TRUE ~ FIRST_KSM_YEAR
+        )
+        
+      # HOUSEHOLD_RECORD: combine AL(umni) and ST(udent) levels
+      , HOUSEHOLD_RECORD = fct_collapse(HOUSEHOLD_RECORD, AL = c('AL', 'ST'))
+      
+      # PROGRAM_GROUP: treat UNK as NULL
+      , PROGRAM_GROUP = fct_collapse(PROGRAM_GROUP, NONE = c('UNK', ''))
+      
+      # For PREF_ADDR_TYPE_CODE combine:
+      # H, UH into home (home, unverified home)
+      # A, AH, S, UX into alternate home (alternate, alternate home, seasonal, unverified alt home)
+      # AB, B, C, UB into business (alternate business, business, business 2, unverified business)
+      # Drop P, R, X, Z (past home, past alternate, email, telephone)
+      , PREF_ADDR_TYPE_CODE2 = fct_collapse(PREF_ADDR_TYPE_CODE
+          , HOM = c('H', 'UH')
+          , ALT = c('A', 'AH', 'S', 'UX')
+          , BUS = c('AB', 'B', 'C', 'UB')
+          , UNK = c('P', 'R', 'X', 'Z')
+      )
+      
+      # Combine KSM_PROSPECT_ACTIVE and KSM_PROSPECT_ANY
+      , KSM_PROSPECT = case_when(
+            KSM_PROSPECT_ACTIVE == TRUE ~ 'Current'
+          , KSM_PROSPECT_ANY == TRUE ~ 'Past'
+          , TRUE ~ 'No') %>% factor()
+    ) %>%
+    
+    # Clean up columns that are no longer needed
+    select(
+        -DOB
+      , -ENTITY_DT
+      , -KSM_PROSPECT_ACTIVE
+      , -KSM_PROSPECT_ANY
+    )
+
   
-  ### Combine AL(umni) and ST(udent) HOUSEHOLD_RECORD
-  
-  ### Treat UNK as NULL (PROGRAM_GROUP)
-  
-  ### For PREF_ADDR_TYPE_CODE combine:
-  # H, UH into home (home, unverified home)
-  # A, AH, S, UX into alternate home (alternate, alternate home, seasonal, unverified alt home)
-  # AB, B, C, UB into business (alternate business, business, business 2, unverified business)
-  # Drop P, R, X, Z (past home, past alternate, email, telephone)
   
   # Also: indicator combining HAS_SEASONAL_ADDR with HAS_ALT_HOME_ADDR
   
@@ -104,20 +152,6 @@ parse_data <- function(filepath) {
   # AB, ACT, AE, AP, BC, MB, MP, NL, NS, NSW, ON, QC, QLD, SA, SK, TAS, VIC, WAU
   
   # Also: derived regions? E.g. census area for smaller states?
-  
-  ### Combine KSM_PROSPECT_ACTIVE and KSM_PROSPECT_ANY
-  full.data <- full.data %>%
-    mutate(
-      KSM_PROSPECT = case_when(
-        KSM_PROSPECT_ACTIVE == TRUE ~ 'Current'
-        , KSM_PROSPECT_ANY == TRUE ~ 'Past'
-        , TRUE ~ 'No') %>% factor()
-  ) %>%
-  # Drop fields that were transformed above
-  select(
-    -KSM_PROSPECT_ACTIVE
-    , -KSM_PROSPECT_ANY
-  )
   
   ### Binary indicators
   # KSM_CORP_RECRUITER_YEARS
@@ -144,5 +178,9 @@ parse_data <- function(filepath) {
   
   ### VELOCITY3
   ### Also VELOCITY_DISCR
+  ### Also VELOCITY3B_SGN (signed difference rather than ratio)
   
+  ### RECORD_YEAR = first_ksm_year (min of 1908), or first gift year, or record creation year
+  
+  return(mdata)
 }
