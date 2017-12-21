@@ -55,10 +55,11 @@ Libraries(scan(file = 'PACKAGES.txt', what = 'character'))
 
 ```{r load.data}
 ### Import the data
-full.data <- read.csv('data/2017-12-08 AF 10K Model.csv', stringsAsFactors = FALSE, strip.white = TRUE,
+full.data <- read.csv('data/2017-12-21 AF 10K Model.csv', stringsAsFactors = FALSE, strip.white = TRUE,
                       colClasses = c('ID_NUMBER' = 'character'
                                      , 'HOUSEHOLD_ID' = 'character'
                                      , 'BIRTH_DT' = 'character'
+                                     , 'ENTITY_DT_ADDED' = 'character'
                                      , 'GIVING_MAX_CASH_DT' = 'character'
                                      , 'GIVING_MAX_PLEDGE_DT' = 'character')) %>%
   # Drop any null rows
@@ -77,6 +78,7 @@ full.data <- full.data %>%
   # Convert to date
   mutate(
       DOB = ToDate(BIRTH_DT, method = 'ymd')
+    , ENTITY_DT = ToDate(ENTITY_DT_ADDED, method = 'mdy')
     , GIVING_MAX_CASH_DT = ToDate(GIVING_MAX_CASH_DT, method = 'mdy')
     , GIVING_MAX_PLEDGE_DT = ToDate(GIVING_MAX_CASH_DT, method = 'mdy')
   ) %>%
@@ -1230,28 +1232,76 @@ Not super-clean but might as well see if it has any predictive power.
 Alternate velocity definition: take *difference* between last year and average giving, rather than the ratio?
 
 ```{r rv2.velocity2_3}
-full.data %>% mutate(
-    avg = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
+full.data <- full.data %>% mutate(
+  avg = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
   , VELOCITY3B = CASH_PFY1 - avg
-) %>% histogrammer('VELOCITY3B', data = ., m = 50) +
-  scale_x_log10()
+)
 
-full.data %>% mutate(
-    avg = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
-  , VELOCITY3B = CASH_PFY1 - avg
-) %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
-  scatterplotter('VELOCITY3B', data = .) +
+full.data %>%
+  histogrammer('VELOCITY3B', data = ., m = 50) +
+  scale_y_sqrt()
+
+full.data %>% filter(GIVING_MAX_CASH_AMT > 0) %>%
+  scatterplotter('VELOCITY3B', data = .)
+
+grid.arrange(
+  full.data %>% filter(GIVING_MAX_CASH_AMT > 0, VELOCITY3B > 0) %>%
+    ggplot(aes(x = VELOCITY3B, y = GIVING_MAX_CASH_AMT)) +
+    geom_point(alpha = .6, color = 'darkgreen') +
+    geom_smooth() +
+    geom_smooth(method = 'lm', color = 'green') +
+    scale_y_log10(breaks = 20^(-2:7), labels = scales::dollar) +
     scale_x_log10()
+, full.data %>% filter(GIVING_MAX_CASH_AMT > 0, VELOCITY3B < 0) %>%
+    ggplot(aes(x = abs(VELOCITY3B), y = GIVING_MAX_CASH_AMT)) +
+    geom_point(alpha = .6, color = 'darkred') +
+    geom_smooth() +
+    geom_smooth(method = 'lm', color = 'red') +
+    scale_y_log10(breaks = 20^(-2:7), labels = scales::dollar) +
+    scale_x_log10()
+)
+
+# Log10 scale preserving sign
+full.data %>% mutate(VELOCITY3B_SGN = log10(abs(VELOCITY3B) + 1) * sign(VELOCITY3B)) %>%
+  scatterplotter('VELOCITY3B_SGN', data = .)
+
+full.data %>% mutate(VELOCITY3B_SGN_DOUBLING = {log2(abs(VELOCITY3B) + 1) * sign(VELOCITY3B)} %>%
+                       round() %>% factor()) %>%
+  boxplotter('VELOCITY3B_SGN_DOUBLING', data = .) +
+  stat_summary(fun.y = mean, geom = 'point', size = 1, color = 'blue')
 ```
 
 Wonder why Blackbaud doesn't use this? So much cleaner.
-**Include `VELOCITY3B` as numeric.**
+**Include `VELOCITY3B_SGN` as numeric.** Consider truncating to e.g. $\pm 4$
 
 ### Age imputation
 
 Issue: various entities are either missing age or have something unreasonable (2 years old when receiving their MBA).
 
+```{r age_nas}
+full.data %>% select(DOB) %>% is.na() %>% sum()
+```
 
+Over 27,000 unknown age.
+
+```{r age_impossible_DOB}
+full.data %>% mutate(under_21 = FIRST_KSM_YEAR - year(DOB) < 21) %>%
+  filter(year(DOB) > 1000 & FIRST_KSM_YEAR > 1000) %>% select(under_21) %>%
+  unlist() %>% na.omit() %>% sum()
+
+full.data %>% mutate(DOB_yr = year(DOB)) %>% filter(DOB_yr > 1000 & FIRST_KSM_YEAR > 1000) %>%
+  ggplot(aes(x = DOB_yr, y = FIRST_KSM_YEAR)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 21, color = 'green') +
+  geom_abline(slope = 1, intercept = 15, color = 'yellow') +
+  geom_abline(slope = 1, intercept = 0, color = 'red')
+```
+
+Between green and yellow lines are supposedly people < 21 when graduating; yellow and red are people < 15; under red line means graduation year is before they were born.
+
+Two possibilities: age imputation, or use a comparable but more accurate metric.
+
+Proposal: record year, defined as `FIRST_KSM_YEAR` for graduates, first year of giving for nongraduates if available, else record creation date. All grad years < 1908 can be set to 1908 (founding year).
 
 # Data file cleanup goals
 

@@ -455,6 +455,7 @@ Select
   , hh.institutional_suffix
   , hh.first_ksm_year
   , entity.birth_dt
+  , trunc(entity.date_added) As entity_dt_added
   , hh.degrees_concat
   , trim(hh.program_group) As program_group
   , hh.spouse_first_ksm_year
