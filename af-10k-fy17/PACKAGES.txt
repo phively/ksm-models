@@ -1,9 +1,7 @@
 devtools
 wranglR
-dplyr
-tidyr
+tidyverse
 lubridate
-ggplot2
 gridExtra
 knitr
 Boruta
