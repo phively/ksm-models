@@ -206,6 +206,51 @@ parse_data <- function(filepath) {
       , GIFT_CLUB_NU_LDR_YRS = discretizer(GIFT_CLUB_NU_LDR_YRS, 1)
           %>% factor()
       
+      # Log10 of total visits
+      , LOG10_VISITS_5FY = log10(VISITS_PFY1 + VISITS_PFY2 + VISITS_PFY3 + VISITS_PFY4 + VISITS_PFY5)
+      
+      # Total visitors
+      , VISITORS_5FY = VISITORS_PFY1 + VISITORS_PFY2 + VISITORS_PFY3 + VISITORS_PFY4 + VISITORS_PFY5
+      
+      # X-out-of-5 loyalty
+      # 1/5 * [1{CASH_PFY1 > 0} + 1{CASH_PFY2 > 0} + 1{CASH_PFY3 > 0} + 1{CASH_PFY4 > 0} + 1{CASH_PFY5 > 0}]
+      , LOYAL_5_PCT = 1/5 * {
+          ifelse(CASH_PFY1 > 0, 1, 0)
+        + ifelse(CASH_PFY2 > 0, 1, 0)
+        + ifelse(CASH_PFY3 > 0, 1, 0)
+        + ifelse(CASH_PFY4 > 0, 1, 0)
+        + ifelse(CASH_PFY5 > 0, 1, 0)
+      }
+      
+      # UPGRADE3: net upgrades/downgrades in FY-1, FY-2, FY-3 (+2 to -2)
+      # sign(FY1 - FY2)  + sign(FY2 - FY1)
+      # 2 downgrades in a row would be -2, a downgrade followed by steady or steady then downgrade is -1,
+      # no change or a downgrade followed by an upgrade or upgrade then downgrade is 0, etc.
+      , UPGRADE3 = {
+          sign(CASH_PFY1 - CASH_PFY2) + sign(CASH_PFY2 - CASH_PFY3)
+      } %>% factor()
+      
+      # Giving velocity definitions
+      
+      # VELOCITY3 is the Blackbaud definition
+      , vdenom = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
+      , VELOCITY3 = CASH_PFY1 / ifelse(vdenom == 0, max(CASH_PFY1, 1E-99), vdenom)
+        
+      # VELOCITY3 discretized based on data exploration
+      , VELOCITY_BINS = case_when(
+          CASH_PFY1 == 0 & vdenom == 0 ~ 'A. Non'
+        , VELOCITY3 < 1E-8 ~ 'B. Way down'
+        , VELOCITY3 < 1E-2 ~ 'C. Moderate down'
+        , VELOCITY3 < 1 ~ 'D. Slight down'
+        , VELOCITY3 == 1 ~ 'E. Unchanged'
+        , VELOCITY3 > 1 ~ 'F. Up'
+      ) %>% factor()
+      
+      # Alternate velocity definition: linear signed difference rather than ratio
+      , vavg = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
+      , VELOCITY3_LIN = CASH_PFY1 - vavg
+      , VELOCITY3_LIN = log10(abs(VELOCITY3_LIN) + 1) * sign(VELOCITY3_LIN)
+      
     ) %>%
     
     ## Clean up columns that are no longer needed
@@ -216,20 +261,23 @@ parse_data <- function(filepath) {
       , -KSM_PROSPECT_ANY
       , -HAS_ALT_HOME_ADDR
       , -HAS_SEASONAL_ADDR
+      , -VISITS_PFY1
+      , -VISITS_PFY2
+      , -VISITS_PFY3
+      , -VISITS_PFY4
+      , -VISITS_PFY5
+      , -VISITORS_PFY1
+      , -VISITORS_PFY2
+      , -VISITORS_PFY3
+      , -VISITORS_PFY4
+      , -VISITORS_PFY5
+      , -vdenom
+      , -vavg
     )
     
     ## Reorder remaining columns
-
-
-  ### log10(VISITS_PFY1 + VISITS_PFY2 + VISITS_PFY3 + VISITS_PFY4 + VISITS_PFY5)
-  
-  ### 1/5 * [1{CASH_PFY1 > 0} + 1{CASH_PFY2 > 0} + 1{CASH_PFY3 > 0} + 1{CASH_PFY4 > 0} + 1{CASH_PFY5 > 0}]
-  
-  ### UPGRADE3: net upgrades/downgrades in FY-1, FY-2, FY-3 (+2 to -2)
-  
-  ### VELOCITY3
-  ### Also VELOCITY_DISCR
-  ### Also VELOCITY3B_SGN (signed difference rather than ratio)
+    
   
   return(mdata)
+  
 }
