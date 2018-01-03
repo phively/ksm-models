@@ -34,6 +34,7 @@ parse_data <- function(filepath) {
         ifelse(is.na(.), 0, .)
       )
     ) %>%
+    
     # Convert to date
     mutate(
         DOB = ToDate(BIRTH_DT, method = 'ymd')
@@ -134,6 +135,34 @@ parse_data <- function(filepath) {
             KSM_PROSPECT_ACTIVE == TRUE ~ 'Current'
           , KSM_PROSPECT_ANY == TRUE ~ 'Past'
           , TRUE ~ 'No') %>% factor()
+      
+      # Indicator combining HAS_SEASONAL_ADDR with HAS_ALT_HOME_ADDR
+      , HAS_ALT_HOME_OR_SEASONAL_ADDR = case_when(
+            HAS_ALT_HOME_ADDR == 'TRUE' ~ 'TRUE'
+          , HAS_SEASONAL_ADDR == 'TRUE' ~ 'TRUE'
+          , TRUE ~ 'FALSE') %>% factor()
+      
+      # Drop international HOUSEHOLD_STATE values
+      , HOUSEHOLD_STATE = fct_collapse(HOUSEHOLD_STATE
+          , INTL = c(
+              'AB', 'ACT', 'AE', 'AP', 'BC', 'MB', 'MP', 'NL', 'NS', 'NSW', 'ON', 'QC',
+              'QLD', 'SA', 'SK', 'TAS', 'VIC', 'WAU'
+            )
+      )
+      
+      # Group U.S. states into Census regions
+      , HOUSEHOLD_REGION = fct_collapse(HOUSEHOLD_STATE
+          , NEWENG = c('CT', 'ME', 'MA', 'NH', 'RI', 'VT')
+          , MIDATL = c('NJ', 'NY', 'PA')
+          , MIDENC = c('IL', 'IN', 'MI', 'OH', 'WI')
+          , MIDWNC = c('IA', 'KS', 'MN', 'MO', 'NE', 'ND', 'SD')
+          , SOUATL = c('DE', 'DC', 'FL', 'GA', 'MD', 'NC', 'SC', 'VA', 'WV')
+          , SOUESC = c('AL', 'KY', 'MS', 'TN')
+          , SOUWSC = c('AR', 'LA', 'OK', 'TX')
+          , WSTMNT = c('AZ', 'CO', 'ID', 'MT', 'NV', 'NM', 'UT', 'WY')
+          , WSTPAC = c('AK', 'CA', 'HI', 'OR', 'WA')
+          , INTL = c('INTL', 'PR', 'VI', 'AA', 'AE', 'AP')
+      )
     ) %>%
     
     # Clean up columns that are no longer needed
@@ -142,16 +171,11 @@ parse_data <- function(filepath) {
       , -ENTITY_DT
       , -KSM_PROSPECT_ACTIVE
       , -KSM_PROSPECT_ANY
+      , -HAS_ALT_HOME_ADDR
+      , - HAS_SEASONAL_ADDR
     )
-
-  
-  
-  # Also: indicator combining HAS_SEASONAL_ADDR with HAS_ALT_HOME_ADDR
-  
-  ### Drop international HOUSEHOLD_STATE
-  # AB, ACT, AE, AP, BC, MB, MP, NL, NS, NSW, ON, QC, QLD, SA, SK, TAS, VIC, WAU
-  
-  # Also: derived regions? E.g. census area for smaller states?
+    
+    # Reorder remaining columns
   
   ### Binary indicators
   # KSM_CORP_RECRUITER_YEARS
