@@ -2,6 +2,16 @@ parse_data <- function(filepath) {
 
   # Filepath argument is from the working folder, e.g. 'data/2017-12-01.csv', not from root
   
+  ### Numeric discretizer helper function
+  discretizer <- function(variable, n) {
+    case_when(
+      # Every entry >= n is replaced by string 'n+'
+      variable >= n ~ paste(n, '+', sep = '')
+      # Every other entry is converted to string
+      , TRUE ~ paste(variable)
+    )
+  }
+  
   ### Import the data
   
   full.data <- read.csv(
@@ -84,10 +94,10 @@ parse_data <- function(filepath) {
   
   mdata <- full.data %>%
     
-    # Filter out HH_PRIMARY = 'N'
+    ## Filter out HH_PRIMARY = 'N'
     filter(HH_PRIMARY == 'Y') %>%
     
-    # Drop fields with unhelpful or very limited data
+    ## Drop fields with unhelpful or very limited data
     select(
         -HH_PRIMARY
       , -BUS_GIFT_MATCH
@@ -102,7 +112,7 @@ parse_data <- function(filepath) {
       , -KSM_SPEAKER_TIMES
     ) %>%
     
-    # Derived variables
+    ## Derived variables
     mutate(
       
       # Record year based on class year, giving year, or record year
@@ -161,39 +171,56 @@ parse_data <- function(filepath) {
           , SOUWSC = c('AR', 'LA', 'OK', 'TX')
           , WSTMNT = c('AZ', 'CO', 'ID', 'MT', 'NV', 'NM', 'UT', 'WY')
           , WSTPAC = c('AK', 'CA', 'HI', 'OR', 'WA')
-          , INTL = c('INTL', 'PR', 'VI', 'AA', 'AE', 'AP')
+          , INTL = c('INTL', 'PR', 'VI')
       )
+      
+      # KSM_CORP_RECRUITER_YEARS treated as binary
+      , KSM_CORP_RECRUITER_YEARS = discretizer(KSM_CORP_RECRUITER_YEARS, 1)
+          %>% factor()
+      
+      # Discretize GIFTS_CREDIT_CARD into 0, 1, 2+
+      , GIFTS_CREDIT_CARD = discretizer(GIFTS_CREDIT_CARD, 2)
+          %>% factor()
+      
+      # GIFTS_STOCK treated as binary
+      , GIFTS_STOCK = discretizer(GIFTS_STOCK, 1)
+          %>% factor()
+      
+      # GIFT_CLUB_BEQUEST_YRS treated as binary
+      , GIFT_CLUB_BEQUEST_YRS = discretizer(GIFT_CLUB_BEQUEST_YRS, 1)
+          %>% factor()
+      
+      # KSM_SPEAKER_YEARS treated as binary
+      , KSM_SPEAKER_YEARS = discretizer(KSM_SPEAKER_YEARS, 1)
+          %>% factor()
+      
+      # Discretize KSM_EVENTS_REUNIONS into 0, 1, 2, 3+
+      , KSM_EVENTS_REUNIONS = discretizer(KSM_EVENTS_REUNIONS, 3)
+          %>% factor()
+      
+      # KSM_FEATURED_COMM_YEARS treated as binary
+      , KSM_FEATURED_COMM_YEARS = discretizer(KSM_FEATURED_COMM_YEARS, 1)
+          %>% factor()
+      
+      # GIFT_CLUB_NU_LDR_YRS treated as binary
+      , GIFT_CLUB_NU_LDR_YRS = discretizer(GIFT_CLUB_NU_LDR_YRS, 1)
+          %>% factor()
+      
     ) %>%
     
-    # Clean up columns that are no longer needed
+    ## Clean up columns that are no longer needed
     select(
         -DOB
       , -ENTITY_DT
       , -KSM_PROSPECT_ACTIVE
       , -KSM_PROSPECT_ANY
       , -HAS_ALT_HOME_ADDR
-      , - HAS_SEASONAL_ADDR
+      , -HAS_SEASONAL_ADDR
     )
     
-    # Reorder remaining columns
-  
-  ### Binary indicators
-  # KSM_CORP_RECRUITER_YEARS
-  
-  ### Discretize GIFTS_CREDIT_CARD into 0, 1, 2+
-  
-  ### GIFTS_STOCK treated as binary
-  
-  ### GIFT_CLUB_BEQUEST_YRS treated as binary
-  
-  ### KSM_SPEAKER_YEARS treated as binary
-  
-  ### Discretize KSM_EVENTS_REUNIONS into 0, 1, 2, 3+
-  
-  ### KSM_FEATURED_COMM_YEARS treated as binary
-  
-  ### GIFT_CLUB_NU_LDR_YRS treated as binary
-  
+    ## Reorder remaining columns
+
+
   ### log10(VISITS_PFY1 + VISITS_PFY2 + VISITS_PFY3 + VISITS_PFY4 + VISITS_PFY5)
   
   ### 1/5 * [1{CASH_PFY1 > 0} + 1{CASH_PFY2 > 0} + 1{CASH_PFY3 > 0} + 1{CASH_PFY4 > 0} + 1{CASH_PFY5 > 0}]
@@ -203,8 +230,6 @@ parse_data <- function(filepath) {
   ### VELOCITY3
   ### Also VELOCITY_DISCR
   ### Also VELOCITY3B_SGN (signed difference rather than ratio)
-  
-  ### RECORD_YEAR = first_ksm_year (min of 1908), or first gift year, or record creation year
   
   return(mdata)
 }
