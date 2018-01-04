@@ -1,0 +1,23 @@
+---
+title: "Annual Fund $10K Variable Selection"
+output: html_notebook
+---
+
+# Goal
+
+Explore variable correlations and importance with a variety of techniques using resuable R code.
+
+# Setup
+
+Load [required packages](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/PACKAGES.txt) and scripts.
+
+```{r load_packages}
+source('scripts/load_packages.R')
+source('scripts/parse_data.R')
+```
+
+Create the modeling data file. This relies on the [script](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/scripts/parse_data.R) created during [data exploration](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/01%20AF%2010K%20Model%20Data%20Exploration.Rmd).
+
+```{r format_data}
+dat <- parse_data('data/2017-12-21 AF 10K Model.csv')
+```
