@@ -206,8 +206,8 @@ parse_data <- function(filepath) {
       , GIFT_CLUB_NU_LDR_YRS = discretizer(GIFT_CLUB_NU_LDR_YRS, 1)
           %>% factor()
       
-      # Log10 of total visits
-      , LOG10_VISITS_5FY = log10(VISITS_PFY1 + VISITS_PFY2 + VISITS_PFY3 + VISITS_PFY4 + VISITS_PFY5)
+      # Total visits
+      , VISITS_5FY = VISITS_PFY1 + VISITS_PFY2 + VISITS_PFY3 + VISITS_PFY4 + VISITS_PFY5
       
       # Total visitors
       , VISITORS_5FY = VISITORS_PFY1 + VISITORS_PFY2 + VISITORS_PFY3 + VISITORS_PFY4 + VISITORS_PFY5
@@ -250,6 +250,9 @@ parse_data <- function(filepath) {
       , vavg = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
       , VELOCITY3_LIN = CASH_PFY1 - vavg
       , VELOCITY3_LIN = log10(abs(VELOCITY3_LIN) + 1) * sign(VELOCITY3_LIN)
+      
+      # Binary indicator for $10K+ cash donors
+      , GAVE_10K = GIVING_MAX_CASH_AMT >= 10000
       
     ) %>%
     
