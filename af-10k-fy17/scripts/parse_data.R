@@ -53,12 +53,6 @@ parse_data <- function(filepath) {
       , GIVING_MAX_PLEDGE_DT = ToDate(GIVING_MAX_CASH_DT, method = 'mdy')
     ) %>%
     
-    # Extract dates
-    mutate(
-        GIVING_MAX_CASH_YR = year(GIVING_MAX_CASH_DT)
-      , GIVING_MAX_CASH_MO = month(GIVING_MAX_CASH_DT) %>% factor()
-    ) %>%
-    
     # Convert certain character to factor
     mutate(
       
@@ -121,6 +115,11 @@ parse_data <- function(filepath) {
           , FIRST_KSM_YEAR < 1908 ~ 1908
           , TRUE ~ FIRST_KSM_YEAR
         )
+      
+      # Extract dates
+      , GIVING_MAX_CASH_YR = ifelse(is.na(GIVING_MAX_CASH_DT), RECORD_YR, year(GIVING_MAX_CASH_DT))
+      , GIVING_MAX_CASH_MO = ifelse(is.na(GIVING_MAX_CASH_DT), month(ENTITY_DT), month(GIVING_MAX_CASH_DT))
+          %>% factor()
         
       # HOUSEHOLD_RECORD: combine AL(umni) and ST(udent) levels
       , HOUSEHOLD_RECORD = fct_collapse(HOUSEHOLD_RECORD, AL = c('AL', 'ST'))
@@ -252,7 +251,7 @@ parse_data <- function(filepath) {
       , VELOCITY3_LIN = log10(abs(VELOCITY3_LIN) + 1) * sign(VELOCITY3_LIN)
       
       # Binary indicator for $10K+ cash donors
-      , GAVE_10K = GIVING_MAX_CASH_AMT >= 10000
+      , GAVE_10K = ifelse(GIVING_MAX_CASH_AMT >= 10000, 1, 0)
       
     ) %>%
     
