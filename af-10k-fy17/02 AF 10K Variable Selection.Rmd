@@ -7,6 +7,8 @@ output: html_notebook
 
 Explore variable correlations and importance with a variety of techniques using resuable R code.
 
+One school of thought is to use feature extraction methods, e.g. PCA on numeric variables, but simplicity and interpretability are desirable for the baseline model.
+
 # Setup
 
 Load [required packages](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/PACKAGES.txt) and scripts.
@@ -21,3 +23,75 @@ Create the modeling data file. This relies on the [script](https://github.com/ph
 ```{r format_data}
 dat <- parse_data('data/2017-12-21 AF 10K Model.csv')
 ```
+
+Drop features that are not useful for modeling.
+
+```{r modeling_data}
+# Drop all character and date variables
+keep <- lapply(dat, class) %>% unlist() %>% str_to_lower() %nin% c('character', 'date')
+mdat <- dat[, keep]
+remove(keep)
+```
+
+# Random forest variable importance
+
+See e.g. [Sauve & Tuleau-Malot (2014)](https://hal-unice.archives-ouvertes.fr/hal-00551375/document). Define variable importance in a random forest as the change in MSE when permuting a given observation vector. One nice feature is that highly correlated variables should be similarly important.
+
+```{r rf.feature, cache = TRUE}
+# Sample rows
+set.seed(64629)
+samp <- sample_n(mdat, size = nrow(mdat)/5)
+
+# Run Boruta algorithm
+(rf.vars <- Boruta(
+    y = samp$GAVE_10K
+    , x = samp %>% select(-GAVE_10K)
+    , seed = 13529
+  )
+)
+```
+
+Plot of results.
+
+```{r rf.plot.function}
+Borutaplotter <- function(boruta.results) {
+  data.frame(Importance = boruta.results$ImpHistory) %>%
+  gather('Variable', 'Importance') %>%
+  # Remove Importance. from the front of every variable name
+  mutate(Variable = gsub('Importance.', '', Variable)) %>%
+  # Append decision to the data frame
+  left_join(
+    data.frame(
+        Decision = boruta.results$finalDecision %>% relevel('Confirmed')
+      , Variable = names(boruta.results$finalDecision)
+    ) %>% mutate(Variable = as.character(Variable))
+    , by = 'Variable'
+  ) %>%
+  # Label shadow variables Reference
+  mutate(Decision = factor(Decision, levels = c(levels(Decision), 'Reference'))) %>%
+  ReplaceValues(old.val = NA, new.val = 'Reference') %>%
+  # Drop uninformative variables and -Inf rows
+  filter(Variable != 'GIVING_MAX_CASH_AMT' & Importance != -Inf) %>%
+# Plot results
+ggplot(., aes(x = reorder(Variable, Importance, FUN = median), y = Importance, fill = Decision)) +
+  geom_boxplot(alpha = .3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)
+          , panel.grid.minor = element_line(linetype = 'dotted')) +
+  scale_fill_manual(values = c('green', 'yellow', 'red', 'black')) +
+  labs(title = 'Variable importances under Boruta algorithm', x = 'Variable', y = 'Importance') %>%
+  suppressMessages() %>%
+# Return results
+return()
+}
+```
+
+```{r rf.plot, fig.width = 12, fig.height = 8}
+Borutaplotter(rf.vars)
+```
+
+
+# Correlation structure
+
+
+# LASSO
+
