@@ -274,9 +274,6 @@ parse_data <- function(filepath) {
       , -vdenom
       , -vavg
     )
-    
-    ## Reorder remaining columns
-    
   
   return(mdata)
   
