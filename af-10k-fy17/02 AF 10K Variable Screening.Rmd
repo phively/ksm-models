@@ -1,5 +1,5 @@
 ---
-title: "Annual Fund $10K Variable Selection"
+title: "Annual Fund $10K Variable Screening"
 output: html_notebook
 ---
 
