@@ -54,7 +54,7 @@ samp <- sample_n(mdat, size = nrow(mdat)/5)
 Plot of results.
 
 ```{r rf.plot.function}
-Borutaplotter <- function(boruta.results) {
+Borutadata <- function(boruta.results) {
   data.frame(Importance = boruta.results$ImpHistory) %>%
   gather('Variable', 'Importance') %>%
   # Remove Importance. from the front of every variable name
@@ -72,26 +72,122 @@ Borutaplotter <- function(boruta.results) {
   ReplaceValues(old.val = NA, new.val = 'Reference') %>%
   # Drop uninformative variables and -Inf rows
   filter(Variable != 'GIVING_MAX_CASH_AMT' & Importance != -Inf) %>%
-# Plot results
-ggplot(., aes(x = reorder(Variable, Importance, FUN = median), y = Importance, fill = Decision)) +
-  geom_boxplot(alpha = .3) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)
-          , panel.grid.minor = element_line(linetype = 'dotted')) +
-  scale_fill_manual(values = c('green', 'yellow', 'red', 'black')) +
-  labs(title = 'Variable importances under Boruta algorithm', x = 'Variable', y = 'Importance') %>%
-  suppressMessages() %>%
-# Return results
-return()
+  # Return results
+  return()
+}
+
+Borutaplotter <- function(boruta.results, title = 'Variable importances under Boruta algorithm') {
+  # Plot results
+  ggplot(boruta.results, aes(x = reorder(Variable, Importance, FUN = median), y = Importance, fill = Decision)) +
+    geom_boxplot(alpha = .3) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)
+            , panel.grid.minor = element_line(linetype = 'dotted')) +
+    scale_fill_manual(values = c('green', 'yellow', 'red', 'black')) +
+    labs(title = title, x = 'Variable', y = 'Importance') %>%
+    suppressMessages() %>%
+  # Return results
+  return()
 }
 ```
 
 ```{r rf.plot, fig.width = 12, fig.height = 8}
-Borutaplotter(rf.vars)
+Borutadata(rf.vars) %>%
+  Borutaplotter(., title = 'Variable importances under Boruta algorithm (classification)')
 ```
 
+Try a regression tree.
+
+```{r rfr.feature, cache = TRUE}
+# Run Boruta algorithm
+(rfr.vars <- Boruta(
+    y = samp$GIVING_MAX_CASH_AMT
+    , x = samp %>% select(-GAVE_10K)
+    , seed = 41812
+  )
+)
+```
+
+```{r rfr.plot, fig.width = 12, fig.height = 8}
+Borutadata(rfr.vars) %>%
+  Borutaplotter(., title = 'Variable importances under Boruta algorithm (regression)')
+```
+
+I find it *very* surprising that `EVALUATION_RATING` doesn't register under either model. On the classification model, 37 variables are above `shadowMax`; excluding the 12 dollar amount ones leaves 25.
+
+The dollar amount variables should probably not be included (endogenous); **consider separate "ever made a pledge" and "made a first-year pledge" indicators**.
 
 # Correlation structure
 
+```{r interesting.vars}
+# Generate interesting vars above shadowMax
+interesting.vars <- Borutadata(rf.vars) %>%
+  mutate(Variable = factor(Variable)) %>%
+  group_by(Variable) %>%
+  summarise(median = median(Importance)) %>%
+  mutate(Variable = as.character(Variable))
+(interesting.vars <- interesting.vars %>%
+  filter(median > {interesting.vars %>% filter(Variable == 'shadowMax') %>% select(median) %>% unlist()}) %>%
+  arrange(desc(median)))
+```
+
+```{r mdat2}
+mdat2 <- mdat %>%
+  select(interesting.vars$Variable) %>%
+  mutate(
+      GIVING_PLEDGE_ANY = {GIVING_MAX_PLEDGE_AMT > 0} %>% factor()
+    , GIVING_PLEDGE_FIRST_YR = {GIVING_FIRST_YEAR_PLEDGE_AMT > 0} %>% factor()
+  ) %>%
+  select(
+      -GIVING_MAX_PLEDGE_AMT
+    , -GIVING_FIRST_YEAR_PLEDGE_AMT
+    , -NGC_PFY1
+    , -NGC_PFY2
+    , -NGC_PFY3
+    , -NGC_PFY4
+    , -NGC_PFY5
+    , -CASH_PFY1
+    , -CASH_PFY2
+    , -CASH_PFY3
+    , -CASH_PFY4
+    , -CASH_PFY5
+    , -GIVING_FIRST_YEAR_CASH_AMT
+    , -FIRST_KSM_YEAR
+  )
+
+str(mdat2)
+```
+
+```{r corrplot, fig.width = 8, fig.height = 8}
+# Include only numeric columns
+cors <- mdat2[, lapply(mdat2, FUN = function(x) class(x) == 'numeric') %>% unlist()] %>%
+  cor() %>% round(2)
+cors[lower.tri(cors)] <- NA
+diag(cors) <- NA
+# Plotting
+cors %>%
+  melt(., na.rm = TRUE) %>%
+  ggplot(aes(x = Var2, y = Var1, fill = value, label = value)) +
+  geom_tile() +
+  geom_text() +
+  coord_fixed() +
+  scale_fill_gradient2(low = 'blue', mid = 'white', high = 'red', limits = c (-1, 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3))
+remove(cors)
+```
+
+Nearly collinear:
+
+* `GIFTS_FYS_SUPPORTED` and `GIFTS_CASH`
+
+Highly correlated:
+
+* `GIVING_MAX_CASH_FY` and `GIVING_FIRST_YEAR`
+* `RECORD_YR` and `GIVING_MAX_CASH_YR`
+* `GIFTS_ALLOCS_SUPPORTED` and `GIVING_MAX_CASH_FY`
+* `GIFTS_ALLOCS_SUPPORTED` and `GIVING_FIRST_YEAR`
+* `GIFTS_ALLOCS_SUPPORTED` and `GIFTS_FYS_SUPPORTED`
+
+The velocity measures are nearly orthogonal to everything else.
 
 # LASSO
 
