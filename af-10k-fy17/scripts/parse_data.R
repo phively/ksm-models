@@ -132,7 +132,7 @@ parse_data <- function(filepath) {
       # A, AH, S, UX into alternate home (alternate, alternate home, seasonal, unverified alt home)
       # AB, B, C, UB into business (alternate business, business, business 2, unverified business)
       # Drop P, R, X, Z (past home, past alternate, email, telephone)
-      , PREF_ADDR_TYPE_CODE2 = fct_collapse(PREF_ADDR_TYPE_CODE
+      , PREF_ADDR_TYPE_CODE = fct_collapse(PREF_ADDR_TYPE_CODE
           , HOM = c('H', 'UH')
           , ALT = c('A', 'AH', 'S', 'UX')
           , BUS = c('AB', 'B', 'C', 'UB')

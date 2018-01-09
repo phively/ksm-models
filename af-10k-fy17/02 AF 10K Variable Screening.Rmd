@@ -155,34 +155,45 @@ mdat2 <- mdat %>%
     , -GIVING_FIRST_YEAR_CASH_AMT
     , -FIRST_KSM_YEAR
   )
+```
 
-str(mdat2)
+```{r corplotter}
+corplotter <- function(numeric.data) {
+  cors <- cor(numeric.data) %>% round(2)
+  # Do not fill in diagonal
+  diag(cors) <- NA
+  # Plot results
+  cors %>%
+    melt(., na.rm = TRUE) %>%
+    ggplot(aes(x = Var2, y = Var1, fill = value, label = value)) +
+    geom_tile() +
+    geom_text() +
+    coord_fixed() +
+    scale_fill_gradient2(low = 'blue', mid = 'white', high = 'red', limits = c (-1, 1)) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)) %>%
+  # Return results
+  return()
+}
+```
+
+```{r num.cors}
+mdat2[, lapply(mdat2, FUN = function(x) class(x) == 'numeric') %>% unlist()] %>%
+  str()
 ```
 
 ```{r corrplot, fig.width = 8, fig.height = 8}
 # Include only numeric columns
-cors <- mdat2[, lapply(mdat2, FUN = function(x) class(x) == 'numeric') %>% unlist()] %>%
-  cor() %>% round(2)
-diag(cors) <- NA
-# Plotting
-cors %>%
-  melt(., na.rm = TRUE) %>%
-  ggplot(aes(x = Var2, y = Var1, fill = value, label = value)) +
-  geom_tile() +
-  geom_text() +
-  coord_fixed() +
-  scale_fill_gradient2(low = 'blue', mid = 'white', high = 'red', limits = c (-1, 1)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3))
-remove(cors)
+mdat2[, lapply(mdat2, FUN = function(x) class(x) == 'numeric') %>% unlist()] %>%
+  corplotter()
 ```
 
-Nearly collinear:
+**Nearly collinear**
 
 * `GIVING_MAX_CASH_FY` and `GIVING_FIRST_YEAR`
 
 Note that these both have many conciding 0 entries. `GIVING_MAX_CASH_YR` may be a better choice as it fills in `RECORD_YR` for nondonors (first year of highest cash amount of $0).
 
-Highly correlated:
+**Highly correlated**
 
 * `GIFTS_FYS_SUPPORTED` and `GIFTS_CASH`
 * `RECORD_YR` and `GIVING_MAX_CASH_YR`
@@ -192,9 +203,35 @@ Highly correlated:
 
 The velocity measures are nearly orthogonal to everything else.
 
+```{r fac.cors}
+mdat2[, lapply(mdat2, FUN = function(x) class(x) == 'factor') %>% unlist()] %>%
+  str()
+```
+
+```{r corrplot.facs, fig.width = 8, fig.height = 8}
+# Include only factors; convert levels to numbers for comparison
+mdat2[, lapply(mdat2, FUN = function(x) class(x) == 'factor') %>% unlist()] %>%
+  mutate_all(funs(as.numeric)) %>%
+  corplotter()
+```
+
+**Highly correlated**
+
+* `GIVING_PLEDGE_ANY` and `GIVING_PLEDGE_FIRST_YR`
+* `HOUSEHOLD_COUNTRY` and `HOUSEHOLD_CONTINENT`
+* `HAS_HOME_ADDR` and `HAS_HOME_PHONE`
+
+Note that `HOUSEHOLD_COUNTRY` has 130 levels, so it's not suitable for conventional modeling. The others do measure distinct concepts.
+
 ## Recommendations
 
-Drop `GIVING_MAX_CASH_FY` and `GIVING_FIRST_YEAR`; the others look ok.
+* Drop `GIVING_MAX_CASH_FY` and `GIVING_FIRST_YEAR`; the other numeric variables look ok.
+* Drop `HOUSEHOLD_COUNTRY`
 
 # LASSO
+
+LASSO is a well-known shrinkage technique (e.g. [Tibshirani 1996](https://statweb.stanford.edu/~tibs/lasso/lasso.pdf)) that works well as a variable selection tool due to its L1 penalty term, which shrinks coefficients to 0.
+
+$$ \underset{\beta}{\text{argmin}} \left\{ f(X, Y, \beta) \right\} \text{ subject to } \|\beta \|_{1} \leq t $$
+
 
