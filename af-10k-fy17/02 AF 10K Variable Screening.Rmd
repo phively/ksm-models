@@ -230,8 +230,23 @@ Note that `HOUSEHOLD_COUNTRY` has 130 levels, so it's not suitable for conventio
 
 # LASSO
 
-LASSO is a well-known shrinkage technique (e.g. [Tibshirani 1996](https://statweb.stanford.edu/~tibs/lasso/lasso.pdf)) that works well as a variable selection tool due to its L1 penalty term, which shrinks coefficients to 0.
+LASSO is a well-known shrinkage technique (e.g. [Tibshirani 1996](https://statweb.stanford.edu/~tibs/lasso/lasso.pdf)) that works well as a variable selection tool due to its L1 penalty term, which shrinks coefficients to 0:
 
 $$ \underset{\beta}{\text{argmin}} \left\{ f(X, Y, \beta) \right\} \text{ subject to } \|\beta \|_{1} \leq t $$
 
+I can perform a LASSO regression on $Y$ and compare the results to Boruta above.
 
+```{r glm.mdat, cache = TRUE}
+m <- mdat2 %>%
+  select(-HOUSEHOLD_COUNTRY, -GIVING_MAX_CASH_FY, -GIVING_FIRST_YEAR) %>%
+  mutate(GAVE_10K = mdat$GAVE_10K) %>%
+  glm(GAVE_10K ~ ., data = ., family = binomial)
+
+m.lasso <- glmnet(x = model.matrix(m)[, -1], y = m$y)
+```
+
+```{r lasso.viz, fig.height = 8}
+plot_glmnet(m.lasso, label = 15)
+```
+
+The largest coefficients (absolute value) are the giving indicators, preferred address type, velocity, degree program, and gift clubs.

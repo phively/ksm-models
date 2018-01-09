@@ -6,3 +6,5 @@ reshape2
 gridExtra
 knitr
 Boruta
+glmnet
+plotmo
