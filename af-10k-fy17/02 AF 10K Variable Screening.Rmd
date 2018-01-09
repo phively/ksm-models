@@ -114,6 +114,8 @@ Borutadata(rfr.vars) %>%
 
 I find it *very* surprising that `EVALUATION_RATING` doesn't register under either model. On the classification model, 37 variables are above `shadowMax`; excluding the 12 dollar amount ones leaves 25.
 
+## Recommendations
+
 The dollar amount variables should probably not be included (endogenous); **consider separate "ever made a pledge" and "made a first-year pledge" indicators**.
 
 # Correlation structure
@@ -161,7 +163,6 @@ str(mdat2)
 # Include only numeric columns
 cors <- mdat2[, lapply(mdat2, FUN = function(x) class(x) == 'numeric') %>% unlist()] %>%
   cor() %>% round(2)
-cors[lower.tri(cors)] <- NA
 diag(cors) <- NA
 # Plotting
 cors %>%
@@ -177,17 +178,23 @@ remove(cors)
 
 Nearly collinear:
 
-* `GIFTS_FYS_SUPPORTED` and `GIFTS_CASH`
+* `GIVING_MAX_CASH_FY` and `GIVING_FIRST_YEAR`
+
+Note that these both have many conciding 0 entries. `GIVING_MAX_CASH_YR` may be a better choice as it fills in `RECORD_YR` for nondonors (first year of highest cash amount of $0).
 
 Highly correlated:
 
-* `GIVING_MAX_CASH_FY` and `GIVING_FIRST_YEAR`
+* `GIFTS_FYS_SUPPORTED` and `GIFTS_CASH`
 * `RECORD_YR` and `GIVING_MAX_CASH_YR`
 * `GIFTS_ALLOCS_SUPPORTED` and `GIVING_MAX_CASH_FY`
 * `GIFTS_ALLOCS_SUPPORTED` and `GIVING_FIRST_YEAR`
 * `GIFTS_ALLOCS_SUPPORTED` and `GIFTS_FYS_SUPPORTED`
 
 The velocity measures are nearly orthogonal to everything else.
+
+## Recommendations
+
+Drop `GIVING_MAX_CASH_FY` and `GIVING_FIRST_YEAR`; the others look ok.
 
 # LASSO
 
