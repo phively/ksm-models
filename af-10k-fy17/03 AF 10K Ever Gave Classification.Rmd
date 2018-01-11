@@ -1,0 +1,133 @@
+---
+title: "03 AF 10K Ever Gave Classification"
+output: html_notebook
+---
+
+# Goal
+
+Differentiate between those who have ever given $10K+ (cash) in a single year and those who haven't, using the variables deemed most important during [screening](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/02%20AF%2010K%20Variable%20Screening.Rmd).
+
+Cross-validated error will be used to compare modeling approaches. This is not intended to be a *great* model, just a starting point of comparison for later iterations.
+
+# Setup
+
+Load [required packages](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/PACKAGES.txt) and scripts.
+
+```{r load_packages}
+source('scripts/load_packages.R')
+source('scripts/parse_data.R')
+```
+
+Generate modeling data.
+
+```{r gen_data}
+mdat <- parse_data('data/2017-12-21 AF 10K Model.csv')
+source('scripts/parse_modeling_data.R')
+```
+
+# Bad model
+
+Throw everything in a GLM.
+
+```{r badmodel.splines_test}
+mbad <- mdat %>%
+  glm(GAVE_10K ~ RECORD_STATUS_CODE + ns(RECORD_YR, df = 12) + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE
+        + HOUSEHOLD_CONTINENT + BUS_IS_EMPLOYED + HAS_HOME_ADDR + HAS_HOME_PHONE + HAS_HOME_EMAIL
+        + GIVING_PLEDGE_ANY + GIVING_PLEDGE_FIRST_YR + ns(GIFTS_ALLOCS_SUPPORTED, df = 1)
+        + ns(GIVING_MAX_CASH_YR, df = 3) + ns(GIFTS_CASH, df = 1) + GIFTS_CREDIT_CARD
+        + GIFTS_STOCK + ns(GIFT_CLUB_KLC_YRS) + GIFT_CLUB_NU_LDR_YRS + ns(GIFT_CLUB_LOYAL_YRS)
+        + VELOCITY_BINS + ns(VELOCITY3_LIN, df = 3)
+      , data = .
+      , family = binomial)
+```
+
+How do predictions vary with `RECORD_YR`?
+
+```{r badmodel.preds_test}
+preds <- predict(mbad, type = 'response', newdata = data.frame(
+    RECORD_STATUS_CODE = 'A'
+  , RECORD_YR = 1901:2020
+  , PROGRAM_GROUP = 'FT'
+  , PREF_ADDR_TYPE_CODE = 'HOM'
+  , HOUSEHOLD_CONTINENT = 'North America'
+  , BUS_IS_EMPLOYED = 'FALSE'
+  , HAS_HOME_ADDR = 'FALSE'
+  , HAS_HOME_PHONE = 'FALSE'
+  , HAS_HOME_EMAIL = 'FALSE'
+  , GIVING_PLEDGE_ANY = 'FALSE'
+  , GIVING_PLEDGE_FIRST_YR = 'FALSE'
+  , GIFTS_ALLOCS_SUPPORTED = mean(mdat$GIFTS_ALLOCS_SUPPORTED)
+  , GIFTS_FYS_SUPPORTED = mean(mdat$GIFTS_FYS_SUPPORTED)
+  , GIVING_MAX_CASH_YR = mean(mdat$GIVING_MAX_CASH_YR)
+  , GIFTS_CASH = mean(mdat$GIFTS_CASH)
+  , GIFTS_CREDIT_CARD = '0'
+  , GIFTS_STOCK = '0'
+  , GIFT_CLUB_KLC_YRS = mean(mdat$GIFT_CLUB_KLC_YRS)
+  , GIFT_CLUB_NU_LDR_YRS = '0'
+  , GIFT_CLUB_LOYAL_YRS = mean(mdat$GIFT_CLUB_LOYAL_YRS)
+  , VELOCITY3 = mean(mdat$VELOCITY3)
+  , VELOCITY_BINS = 'A. Non'
+  , VELOCITY3_LIN = mean(mdat$VELOCITY3_LIN)
+))
+```
+
+```{r badmodel.test_plot}
+mdat %>% select(GAVE_10K, RECORD_YR) %>% mutate(preds = predict(mbad, type = 'response')) %>%
+  left_join(data.frame(RECORD_YR = 1901:2020, expected = preds), by = 'RECORD_YR') %>%
+  ggplot(aes(x = RECORD_YR, y = preds, color = factor(GAVE_10K))) +
+  geom_point(alpha = .1) +
+  geom_line(aes(y = expected), color = 'darkblue') +
+  geom_rug() +
+  scale_y_log10(breaks = 10^(0:-8)) +
+  scale_x_continuous(breaks = seq(1900, 2020, by = 10)) +
+  scale_color_manual(values = c('lightgray', 'red'))
+```
+
+For a two-class problem the naive decision threshold would be $p \geq 0.5$.
+
+```{r conf.matrix}
+conf_matrix <- function(model, newdata = NULL, threshold = .5) {
+  results <- data.frame(
+      pred = predict(model, newdata = newdata, type = 'response') >= threshold
+    , truth = model$y == 1
+  )
+  results_tbl <- table(truth = results$truth, prediction = results$pred)
+  precision <- results_tbl[2, 2] / sum(results_tbl[, 2])
+  sensitivity <- results_tbl[2, 2] / sum(results_tbl[2, ])
+  return(
+    list(
+      # Confusion matrix counts
+        conf_matrix = results_tbl
+      # Confusion matrix percents
+      , conf_matrix_pct = results_tbl / nrow(results)
+      # Statistics
+      , precision = precision
+      , sensitivity = sensitivity
+      , F1_score = (precision * sensitivity) / (precision + sensitivity)
+    )
+  )
+}
+```
+
+Threshold of 0.5.
+
+```{r badmodel.confusion_matrix_naive}
+conf_matrix(model = mbad, threshold = .5)
+```
+
+The base frequency for `GAVE_10K` is `r {sum(mdat$GAVE_10K) / nrow(mdat)} %>% round(4)`.
+
+```{r badmodel.confusion_matrix}
+conf_matrix(model = mbad, threshold = {sum(mdat$GAVE_10K) / nrow(mdat)})
+```
+
+# Full model
+
+**Notes**
+
+* ~10% holdout test sample
+* Sample from $10K, and not $10K+, 500 times each without replacement (undersampling; 1013 minority observations)
+* Splines vs. linear?
+* 10-fold cross-validation
+* Shrinkage/ridge penalty
+

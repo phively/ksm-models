@@ -8,3 +8,4 @@ knitr
 Boruta
 glmnet
 plotmo
+splines
