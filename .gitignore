@@ -28,6 +28,9 @@ $RECYCLE.BIN/
 *.csv
 *.xls*
 
+# Saved Rdata
+*/environment/*.Rdata
+
 # =========================
 # Operating System Files
 # =========================
