@@ -25,11 +25,13 @@ mdat <- parse_data('data/2017-12-21 AF 10K Model.csv')
 source('scripts/parse_modeling_data.R')
 ```
 
-# Bad model
+# Additional exploration
+
+## Bad model
 
 Throw everything in a GLM.
 
-```{r badmodel.splines_test}
+```{r badmodel.splines_test, cache = TRUE}
 mbad <- mdat %>%
   glm(GAVE_10K ~ RECORD_STATUS_CODE + ns(RECORD_YR, df = 12) + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE
         + HOUSEHOLD_CONTINENT + BUS_IS_EMPLOYED + HAS_HOME_ADDR + HAS_HOME_PHONE + HAS_HOME_EMAIL
@@ -43,7 +45,7 @@ mbad <- mdat %>%
 
 How do predictions vary with `RECORD_YR`?
 
-```{r badmodel.preds_test}
+```{r badmodel.preds_test, cache = TRUE}
 preds <- predict(mbad, type = 'response', newdata = data.frame(
     RECORD_STATUS_CODE = 'A'
   , RECORD_YR = 1901:2020
@@ -71,7 +73,7 @@ preds <- predict(mbad, type = 'response', newdata = data.frame(
 ))
 ```
 
-```{r badmodel.test_plot}
+```{r badmodel.test_plot, cache = TRUE}
 mdat %>% select(GAVE_10K, RECORD_YR) %>% mutate(preds = predict(mbad, type = 'response')) %>%
   left_join(data.frame(RECORD_YR = 1901:2020, expected = preds), by = 'RECORD_YR') %>%
   ggplot(aes(x = RECORD_YR, y = preds, color = factor(GAVE_10K))) +
@@ -88,10 +90,15 @@ For a two-class problem the naive decision threshold would be $p \geq 0.5$.
 ```{r conf.matrix}
 conf_matrix <- function(model, newdata = NULL, threshold = .5) {
   results <- data.frame(
-      pred = predict(model, newdata = newdata, type = 'response') >= threshold
-    , truth = model$y == 1
+    pred = predict(model, newdata = newdata, type = 'response') >= threshold
   )
+  if (is.null(newdata)) {
+    results$truth = model$y
+  } else {
+    results$truth = newdata$GAVE_10K
+  }
   results_tbl <- table(truth = results$truth, prediction = results$pred)
+  error <- (results_tbl[1, 2] + results_tbl[2, 1]) / sum(results_tbl)
   precision <- results_tbl[2, 2] / sum(results_tbl[, 2])
   sensitivity <- results_tbl[2, 2] / sum(results_tbl[2, ])
   return(
@@ -101,6 +108,7 @@ conf_matrix <- function(model, newdata = NULL, threshold = .5) {
       # Confusion matrix percents
       , conf_matrix_pct = results_tbl / nrow(results)
       # Statistics
+      , error = error
       , precision = precision
       , sensitivity = sensitivity
       , F1_score = (precision * sensitivity) / (precision + sensitivity)
@@ -121,13 +129,169 @@ The base frequency for `GAVE_10K` is `r {sum(mdat$GAVE_10K) / nrow(mdat)} %>% ro
 conf_matrix(model = mbad, threshold = {sum(mdat$GAVE_10K) / nrow(mdat)})
 ```
 
-# Full model
+## Train/test split
+
+Begin by creating a holdout sample for testing (10% of the data).
+
+```{r make.holdout}
+xv <- KFoldXVal(mdat, k = 2, prop = .1, seed = 91471)
+holdoutdat <- mdat[xv[[1]], ]
+traindat <- mdat[xv[[2]], ]
+remove(xv)
+```
+
+# Modeling ground rules
+
+* 10-fold cross-validation repeated 5 times.
+* Estimate prediction error with out-of-sample classification error.
+* $\theta_{1}$ threshold (donor) set to the empirical probability in the cross-validation set (debatable).
+
+```{r ground.rules}
+# 10-fold cross-validation
+folds = 10
+# 5 repetitions
+reps = 5
+```
+
+# Cross-validated logistic regression model
+
+Logistic regression has given good results on similar problems in the past, so I'll use it for the first approach.
+
+## Baseline model
+
+All explanatory variables with moderate natural spline degrees of freedom.
+
+```{r glm.baseline, cache = TRUE, warning = FALSE, message = FALSE}
+# Store model errors
+errs_glm_baseline <- data.frame(
+    reps = rep(1:reps, each = folds)
+  , folds = rep(1:folds, times = reps)
+  , error = 0
+  , precision = 0
+  , sensitivity = 0
+  , F1_score = 0
+)
+confus_glm_baseline <- rep(list(NULL), times = reps * folds)
+
+# Seed for reproducibility
+set.seed(6469548)
+
+for (rep in 1:reps) {
+  # Status report
+  paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  for (fold in 1:length(xv)) {
+    # Fit temp model
+    tmpmodel <- glm(GAVE_10K ~ RECORD_STATUS_CODE
+        + ns(RECORD_YR, df = 10)
+        + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT + BUS_IS_EMPLOYED
+        + HAS_HOME_ADDR + HAS_HOME_PHONE + HAS_HOME_EMAIL + GIVING_PLEDGE_ANY
+        + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+        + ns(GIVING_MAX_CASH_YR, df = 10)
+        + GIFTS_CASH + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+        + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS + VELOCITY_BINS
+        + ns(VELOCITY3_LIN, df = 3)
+      # Train while withholding some data
+      , data = traindat[-xv[[fold]], ]
+      , family = binomial) %>% suppressMessages()
+    # Prediction threshold
+    theta1 <- sum(traindat$GAVE_10K[-xv[[fold]]] == 1) / nrow(traindat[-xv[[fold]], ])
+    # Confusion matrix based on the withheld data
+    tmpconfus <- conf_matrix(tmpmodel, newdata = traindat[xv[[fold]], ], threshold = theta1)
+    # Write results to errors data frame
+    errs_glm_baseline <- errs_glm_baseline %>% mutate(
+        error = case_when(
+            reps == rep & folds == fold ~ tmpconfus$error
+          , TRUE ~ error)
+      , precision = case_when(
+            reps == rep & folds == fold ~ tmpconfus$precision
+          , TRUE ~ precision)
+      , sensitivity = case_when(
+            reps == rep & folds == fold ~ tmpconfus$sensitivity
+          , TRUE ~ sensitivity)
+      , F1_score = case_when(
+            reps == rep & folds == fold ~ tmpconfus$F1_score
+          , TRUE ~ F1_score)
+    )
+    # Write confusion matrix to list
+    confus_glm_baseline[[(rep - 1) * folds + fold]] <- tmpconfus$conf_matrix
+  }
+  # Status report
+  paste('-- Iteration', rep, 'ending at', Sys.time()) %>% print()
+}
+```
+
+Histograms of results.
+
+```{r error.histogrammer}
+histogrammer <- function(errordata, varname, h = .005, fill = 'gray') {
+  data.frame(x = errordata[, varname]) %>%
+  ggplot(aes(x = x)) +
+    geom_histogram(aes(y = ..density..), alpha = .5, binwidth = h, fill = fill) +
+    geom_density(alpha = .5) +
+    geom_vline(aes(xintercept = mean(x), color = 'mean')) +
+    geom_vline(aes(xintercept = median(x), color = 'median'), linetype = 'dashed') +
+    labs(x = varname)
+}
+```
+
+```{r glm.baseline.plots}
+grid.arrange(
+    histogrammer(errs_glm_baseline, 'error', h = .0005, fill = 'pink')
+  , histogrammer(errs_glm_baseline, 'precision', h = .005, fill = 'cyan')
+  , histogrammer(errs_glm_baseline, 'sensitivity', h = .005, fill = 'green')
+)
+```
+
+The numbers to beat are:
+
+```{r glm.baseline.stats}
+errs_glm_baseline %>% select(error, precision, sensitivity) %>% colMeans() %>% round(4)
+```
+
+## Trimmed model
+
+
+
+## Spline degrees of freedom
+
+I'll use natural splines on the numeric predictors but each variable should have some maximum degrees of freedom.
+
+```{r spline.test, cache = TRUE}
+mdat %>%
+  glm(GAVE_10K ~ RECORD_STATUS_CODE + ns(RECORD_YR, df = 20) + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE
+        + HOUSEHOLD_CONTINENT + BUS_IS_EMPLOYED + HAS_HOME_ADDR + HAS_HOME_PHONE + HAS_HOME_EMAIL
+        + GIVING_PLEDGE_ANY + GIVING_PLEDGE_FIRST_YR + ns(GIFTS_ALLOCS_SUPPORTED, df = 2)
+        + ns(GIVING_MAX_CASH_YR, df = 20) + ns(GIFTS_CASH, df = 2) + GIFTS_CREDIT_CARD
+        + GIFTS_STOCK + ns(GIFT_CLUB_KLC_YRS, df = 2) + GIFT_CLUB_NU_LDR_YRS
+        + ns(GIFT_CLUB_LOYAL_YRS, df = 2) + VELOCITY_BINS + ns(VELOCITY3_LIN, df = 5)
+      , data = .
+      , family = binomial) %>%
+  summary()
+```
+
+Proposed grid search:
+
+`RECORD_YR` $\in \left\{5, 10, 15, 20 \right\}$
+`GIFTS_ALLOCS_SUPPORTED` = 1
+`GIVING_MAX_CASH_YR` $\in \left\{5, 10, 15, 20 \right\}$
+`GIFTS_CASH` = 1
+`GIFT_CLUB_KLC_YRS` = 1
+`GIFT_CLUB_LOYAL_YRS` = 1
+`VELOCITY3_LIN` $\in \left\{2, 3, 4, 5 \right\}$
+
+This gives 4 * 4 * 4 = `r 4*4*4` possibilities.
+
+```{r grid.params}
+# Splines grid search parameters
+grid_params = list(
+    RECORD_YR = c(5, 10, 15, 20)
+  , GIVING_MAX_CASH_YR = c(5, 10, 15, 20)
+  , VELOCITY3_LIN = c(2, 3, 4, 5)
+)
+```
 
 **Notes**
 
-* ~10% holdout test sample
-* Sample from $10K, and not $10K+, 500 times each without replacement (undersampling; 1013 minority observations)
-* Splines vs. linear?
-* 10-fold cross-validation
 * Shrinkage/ridge penalty
-

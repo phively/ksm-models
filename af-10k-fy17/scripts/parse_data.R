@@ -131,12 +131,12 @@ parse_data <- function(filepath) {
       # H, UH into home (home, unverified home)
       # A, AH, S, UX into alternate home (alternate, alternate home, seasonal, unverified alt home)
       # AB, B, C, UB into business (alternate business, business, business 2, unverified business)
-      # Drop P, R, X, Z (past home, past alternate, email, telephone)
+      # Ignore P, R, X, Z (past home, past alternate, email, telephone)
       , PREF_ADDR_TYPE_CODE = fct_collapse(PREF_ADDR_TYPE_CODE
-          , HOM = c('H', 'UH')
+          , HOM = c('H', 'UH',
+                    'P', 'R', 'X', 'Z') # Unknown defaults to Home
           , ALT = c('A', 'AH', 'S', 'UX')
           , BUS = c('AB', 'B', 'C', 'UB')
-          , UNK = c('P', 'R', 'X', 'Z')
       )
       
       # Combine KSM_PROSPECT_ACTIVE and KSM_PROSPECT_ANY
