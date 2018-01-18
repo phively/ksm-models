@@ -250,7 +250,286 @@ The numbers to beat are:
 errs_glm_baseline %>% select(error, precision, sensitivity) %>% colMeans() %>% round(4)
 ```
 
+
 ## Trimmed model
+
+How does dropping apparently less-useful variables affect cross-validated error?
+
+```{r glm.baseline.fulldata}
+mbase <- glm(GAVE_10K ~ RECORD_STATUS_CODE
+        + ns(RECORD_YR, df = 10)
+        + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT + BUS_IS_EMPLOYED
+        + HAS_HOME_ADDR + HAS_HOME_PHONE + HAS_HOME_EMAIL + GIVING_PLEDGE_ANY
+        + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+        + ns(GIVING_MAX_CASH_YR, df = 10)
+        + GIFTS_CASH + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+        + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS + VELOCITY_BINS
+        + ns(VELOCITY3_LIN, df = 3)
+      , data = traindat
+      , family = binomial)
+summary(mbase)
+```
+
+Compare errors dropping `RECORD_STATUS_CODE`, `BUS_IS_EMPLOYED`, `HAS_HOME_ADDR`, `HAS_HOME_PHONE`, `HAS_HOME_EMAIL`.
+
+```{r glm.trimmed, cache = TRUE, warning = FALSE, message = FALSE}
+# Store model errors
+errs_glm_trimmed <- data.frame(
+    reps = rep(1:reps, each = folds)
+  , folds = rep(1:folds, times = reps)
+  , error = 0
+  , precision = 0
+  , sensitivity = 0
+  , F1_score = 0
+)
+confus_glm_trimmed <- rep(list(NULL), times = reps * folds)
+
+# Seed for reproducibility
+set.seed(8755737)
+
+for (rep in 1:reps) {
+  # Status report
+  paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  for (fold in 1:length(xv)) {
+    # Fit temp model
+    tmpmodel <- glm(GAVE_10K ~
+        + ns(RECORD_YR, df = 10)
+        + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+        + GIVING_PLEDGE_ANY
+        + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+        + ns(GIVING_MAX_CASH_YR, df = 10)
+        + GIFTS_CASH + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+        + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS + VELOCITY_BINS
+        + ns(VELOCITY3_LIN, df = 3)
+      # Train while withholding some data
+      , data = traindat[-xv[[fold]], ]
+      , family = binomial) %>% suppressMessages()
+    # Prediction threshold
+    theta1 <- sum(traindat$GAVE_10K[-xv[[fold]]] == 1) / nrow(traindat[-xv[[fold]], ])
+    # Confusion matrix based on the withheld data
+    tmpconfus <- conf_matrix(tmpmodel, newdata = traindat[xv[[fold]], ], threshold = theta1)
+    # Write results to errors data frame
+    errs_glm_trimmed <- errs_glm_trimmed %>% mutate(
+        error = case_when(
+            reps == rep & folds == fold ~ tmpconfus$error
+          , TRUE ~ error)
+      , precision = case_when(
+            reps == rep & folds == fold ~ tmpconfus$precision
+          , TRUE ~ precision)
+      , sensitivity = case_when(
+            reps == rep & folds == fold ~ tmpconfus$sensitivity
+          , TRUE ~ sensitivity)
+      , F1_score = case_when(
+            reps == rep & folds == fold ~ tmpconfus$F1_score
+          , TRUE ~ F1_score)
+    )
+    # Write confusion matrix to list
+    confus_glm_trimmed[[(rep - 1) * folds + fold]] <- tmpconfus$conf_matrix
+  }
+  # Status report
+  paste('-- Iteration', rep, 'ending at', Sys.time()) %>% print()
+}
+```
+
+```{r glm.compare2}
+data.frame(
+    baseline = errs_glm_baseline %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed = errs_glm_trimmed %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+)
+```
+
+This appears to be moving in the right direction.
+
+```{r glm.trimmed2.fulldata}
+mtrim <- glm(GAVE_10K ~
+        + ns(RECORD_YR, df = 10)
+        + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+        + GIVING_PLEDGE_ANY
+        + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+        + ns(GIVING_MAX_CASH_YR, df = 10)
+        + GIFTS_CASH + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+        + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS + VELOCITY_BINS
+        + ns(VELOCITY3_LIN, df = 3)
+      , data = traindat
+      , family = binomial)
+summary(mtrim)
+```
+
+## Trimmed 2
+
+Try without `VELOCITY_BINS`.
+
+```{r glm.trimmed2, cache = TRUE, warning = FALSE, message = FALSE}
+# Store model errors
+errs_glm_trimmed2 <- data.frame(
+    reps = rep(1:reps, each = folds)
+  , folds = rep(1:folds, times = reps)
+  , error = 0
+  , precision = 0
+  , sensitivity = 0
+  , F1_score = 0
+)
+confus_glm_trimmed2 <- rep(list(NULL), times = reps * folds)
+
+# Seed for reproducibility
+set.seed(2362746)
+
+for (rep in 1:reps) {
+  # Status report
+  paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  for (fold in 1:length(xv)) {
+    # Fit temp model
+    tmpmodel <- glm(GAVE_10K ~
+        + ns(RECORD_YR, df = 10)
+        + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+        + GIVING_PLEDGE_ANY
+        + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+        + ns(GIVING_MAX_CASH_YR, df = 10)
+        + GIFTS_CASH + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+        + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS
+        + ns(VELOCITY3_LIN, df = 3)
+      # Train while withholding some data
+      , data = traindat[-xv[[fold]], ]
+      , family = binomial) %>% suppressMessages()
+    # Prediction threshold
+    theta1 <- sum(traindat$GAVE_10K[-xv[[fold]]] == 1) / nrow(traindat[-xv[[fold]], ])
+    # Confusion matrix based on the withheld data
+    tmpconfus <- conf_matrix(tmpmodel, newdata = traindat[xv[[fold]], ], threshold = theta1)
+    # Write results to errors data frame
+    errs_glm_trimmed2 <- errs_glm_trimmed2 %>% mutate(
+        error = case_when(
+            reps == rep & folds == fold ~ tmpconfus$error
+          , TRUE ~ error)
+      , precision = case_when(
+            reps == rep & folds == fold ~ tmpconfus$precision
+          , TRUE ~ precision)
+      , sensitivity = case_when(
+            reps == rep & folds == fold ~ tmpconfus$sensitivity
+          , TRUE ~ sensitivity)
+      , F1_score = case_when(
+            reps == rep & folds == fold ~ tmpconfus$F1_score
+          , TRUE ~ F1_score)
+    )
+    # Write confusion matrix to list
+    confus_glm_trimmed2[[(rep - 1) * folds + fold]] <- tmpconfus$conf_matrix
+  }
+  # Status report
+  paste('-- Iteration', rep, 'ending at', Sys.time()) %>% print()
+}
+```
+
+```{r glm.compare3}
+data.frame(
+    baseline = errs_glm_baseline %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed = errs_glm_trimmed %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed2 = errs_glm_trimmed2 %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+)
+```
+
+How about dropping the spline and keeping the factor?
+
+```{r glm.trimmed3, cache = TRUE, warning = FALSE, message = FALSE}
+# Store model errors
+errs_glm_trimmed2b <- data.frame(
+    reps = rep(1:reps, each = folds)
+  , folds = rep(1:folds, times = reps)
+  , error = 0
+  , precision = 0
+  , sensitivity = 0
+  , F1_score = 0
+)
+confus_glm_trimmed2b <- rep(list(NULL), times = reps * folds)
+
+# Seed for reproducibility
+set.seed(702305)
+
+for (rep in 1:reps) {
+  # Status report
+  paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  for (fold in 1:length(xv)) {
+    # Fit temp model
+    tmpmodel <- glm(GAVE_10K ~
+        + ns(RECORD_YR, df = 10)
+        + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+        + GIVING_PLEDGE_ANY
+        + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+        + ns(GIVING_MAX_CASH_YR, df = 10)
+        + GIFTS_CASH + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+        + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS + VELOCITY_BINS
+      # Train while withholding some data
+      , data = traindat[-xv[[fold]], ]
+      , family = binomial) %>% suppressMessages()
+    # Prediction threshold
+    theta1 <- sum(traindat$GAVE_10K[-xv[[fold]]] == 1) / nrow(traindat[-xv[[fold]], ])
+    # Confusion matrix based on the withheld data
+    tmpconfus <- conf_matrix(tmpmodel, newdata = traindat[xv[[fold]], ], threshold = theta1)
+    # Write results to errors data frame
+    errs_glm_trimmed2b <- errs_glm_trimmed2b %>% mutate(
+        error = case_when(
+            reps == rep & folds == fold ~ tmpconfus$error
+          , TRUE ~ error)
+      , precision = case_when(
+            reps == rep & folds == fold ~ tmpconfus$precision
+          , TRUE ~ precision)
+      , sensitivity = case_when(
+            reps == rep & folds == fold ~ tmpconfus$sensitivity
+          , TRUE ~ sensitivity)
+      , F1_score = case_when(
+            reps == rep & folds == fold ~ tmpconfus$F1_score
+          , TRUE ~ F1_score)
+    )
+    # Write confusion matrix to list
+    confus_glm_trimmed2b[[(rep - 1) * folds + fold]] <- tmpconfus$conf_matrix
+  }
+  # Status report
+  paste('-- Iteration', rep, 'ending at', Sys.time()) %>% print()
+}
+```
+
+```{r glm.compare4}
+data.frame(
+    baseline = errs_glm_baseline %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed = errs_glm_trimmed %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed2 = errs_glm_trimmed2 %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed2b = errs_glm_trimmed2b %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+)
+```
+
+Trades off precision for sensitivity. Not a big fan of how the velocity bin coefficients bounce around; from exploration I am not convinced by discretization.
+
+```{r glm.trimmed3.fulldata}
+mtrim2 <- glm(GAVE_10K ~
+        + ns(RECORD_YR, df = 10)
+        + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+        + GIVING_PLEDGE_ANY
+        + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+        + ns(GIVING_MAX_CASH_YR, df = 10)
+        + GIFTS_CASH + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+        + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS
+        + ns(VELOCITY3_LIN, df = 3)
+      , data = traindat
+      , family = binomial)
+summary(mtrim2)
+```
+
+## Trimmed 3
+
+Drop `GIVING_MAX_CASH_YR`.
 
 
 
@@ -259,16 +538,16 @@ errs_glm_baseline %>% select(error, precision, sensitivity) %>% colMeans() %>% r
 I'll use natural splines on the numeric predictors but each variable should have some maximum degrees of freedom.
 
 ```{r spline.test, cache = TRUE}
-mdat %>%
-  glm(GAVE_10K ~ RECORD_STATUS_CODE + ns(RECORD_YR, df = 20) + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE
-        + HOUSEHOLD_CONTINENT + BUS_IS_EMPLOYED + HAS_HOME_ADDR + HAS_HOME_PHONE + HAS_HOME_EMAIL
-        + GIVING_PLEDGE_ANY + GIVING_PLEDGE_FIRST_YR + ns(GIFTS_ALLOCS_SUPPORTED, df = 2)
-        + ns(GIVING_MAX_CASH_YR, df = 20) + ns(GIFTS_CASH, df = 2) + GIFTS_CREDIT_CARD
-        + GIFTS_STOCK + ns(GIFT_CLUB_KLC_YRS, df = 2) + GIFT_CLUB_NU_LDR_YRS
-        + ns(GIFT_CLUB_LOYAL_YRS, df = 2) + VELOCITY_BINS + ns(VELOCITY3_LIN, df = 5)
-      , data = .
-      , family = binomial) %>%
-  summary()
+# mdat %>%
+#   glm(GAVE_10K ~ RECORD_STATUS_CODE + ns(RECORD_YR, df = 20) + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE
+#         + HOUSEHOLD_CONTINENT + BUS_IS_EMPLOYED + HAS_HOME_ADDR + HAS_HOME_PHONE + HAS_HOME_EMAIL
+#         + GIVING_PLEDGE_ANY + GIVING_PLEDGE_FIRST_YR + ns(GIFTS_ALLOCS_SUPPORTED, df = 2)
+#         + ns(GIVING_MAX_CASH_YR, df = 20) + ns(GIFTS_CASH, df = 2) + GIFTS_CREDIT_CARD
+#         + GIFTS_STOCK + ns(GIFT_CLUB_KLC_YRS, df = 2) + GIFT_CLUB_NU_LDR_YRS
+#         + ns(GIFT_CLUB_LOYAL_YRS, df = 2) + VELOCITY_BINS + ns(VELOCITY3_LIN, df = 5)
+#       , data = .
+#       , family = binomial) %>%
+#   summary()
 ```
 
 Proposed grid search:
@@ -285,11 +564,11 @@ This gives 4 * 4 * 4 = `r 4*4*4` possibilities.
 
 ```{r grid.params}
 # Splines grid search parameters
-grid_params = list(
-    RECORD_YR = c(5, 10, 15, 20)
-  , GIVING_MAX_CASH_YR = c(5, 10, 15, 20)
-  , VELOCITY3_LIN = c(2, 3, 4, 5)
-)
+# grid_params = list(
+#     RECORD_YR = c(5, 10, 15, 20)
+#   , GIVING_MAX_CASH_YR = c(5, 10, 15, 20)
+#   , VELOCITY3_LIN = c(2, 3, 4, 5)
+# )
 ```
 
 **Notes**
