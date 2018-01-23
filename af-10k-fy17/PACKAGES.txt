@@ -9,3 +9,5 @@ Boruta
 glmnet
 plotmo
 splines
+foreach
+doParallel
