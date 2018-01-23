@@ -872,21 +872,219 @@ data.frame(
     %>% colMeans() %>% round(4)
   , trimmed4 = errs_glm_trimmed4 %>% select(error, precision, sensitivity)
     %>% colMeans() %>% round(4)
-  , splines = errs_glm_splines %>% filter(vel_df == 4 & yr_df == 5) %>%
+  , splines = errs_glm_splines %>% filter(yr_df == 5 & vel_df == 4) %>%
     select(error, precision, sensitivity) %>% colMeans() %>% round(4)
 )
 ```
 
-Potential concern: is `VELOCITY3_LIN` with 4 df too good?
+Potential concern: is `VELOCITY3_LIN` with moderate to high df too correlated?
+
+```{r velocity3_lin.plot}
+traindat %>% select(GAVE_10K, VELOCITY3_LIN) %>%
+  ggplot(aes(x = VELOCITY3_LIN, y = GAVE_10K, color = GAVE_10K)) +
+  geom_point()
+```
+
+On the other hand, we do want to pay special attention to upgrades/downgrades.
 
 # Coefficient shrinkage
 
 ## Non-penalized GLM
 
+```{r glm.nonpen.xv}
+# Store model errors
+errs_glm_nonpen <- data.frame(NULL)
+
+# Seed for reproducibility
+set.seed(9860543)
+
+for (rep in 1:reps) {
+  # Status report
+  paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  foreach (fold = 1:length(xv)) %dopar% {
+    # Fit temp model
+    tmpmodel <- glm(GAVE_10K ~
+                        ns(RECORD_YR, df = 5)
+                      + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+                      + GIVING_PLEDGE_ANY
+                      + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+                      + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+                      + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS
+                      + ns(VELOCITY3_LIN, df = 4)
+                      # Train while withholding some data
+                      , data = traindat[-xv[[fold]], ]
+                      , family = binomial) %>% suppressMessages()
+    # Prediction threshold
+    theta1 <- sum(traindat$GAVE_10K[-xv[[fold]]] == 1) / nrow(traindat[-xv[[fold]], ])
+    # Confusion matrix based on the withheld data
+    tmpconfus <- conf_matrix(tmpmodel, newdata = traindat[xv[[fold]], ], threshold = theta1)
+    # Return results
+    return(
+      data.frame(
+          reps = rep
+        , folds = fold
+        , yr_df = yr
+        , vel_df = vel
+        , error = tmpconfus$error
+        , precision = tmpconfus$precision
+        , sensitivity = tmpconfus$sensitivity
+        , F1_score = tmpconfus$F1_score
+      )
+    )
+  }
+  # Write results to errors data frame
+  errs_glm_nonpen <- errs_glm_nonpen %>% rbind(prlout)
+  # Status report
+  paste('-- Iteration', rep, 'ending at', Sys.time()) %>% print()
+}
+```
+
 ## Penalized GLM
 
-glmnet
+Need a new function to construct a glmnet confusion matrix.
+
+```{r glmnet.confusion}
+conf_matrix_glmnet <- function(model, newdata = NULL, threshold = .5) {
+  results <- data.frame(
+    predict(model, newdata = newdata, type = 'response'
+            , s = 'lambda.1se') >= threshold
+  ) %>% select(pred = X1)
+  if (is.null(newdata)) {
+    results$truth = model$y
+  } else {
+    results$truth = newdata$GAVE_10K
+  }
+  results_tbl <- table(truth = results$truth, prediction = results$pred)
+  error <- (results_tbl[1, 2] + results_tbl[2, 1]) / sum(results_tbl)
+  precision <- results_tbl[2, 2] / sum(results_tbl[, 2])
+  sensitivity <- results_tbl[2, 2] / sum(results_tbl[2, ])
+  return(
+    list(
+      # Confusion matrix counts
+        conf_matrix = results_tbl
+      # Confusion matrix percents
+      , conf_matrix_pct = results_tbl / nrow(results)
+      # Statistics
+      , error = error
+      , precision = precision
+      , sensitivity = sensitivity
+      , F1_score = (precision * sensitivity) / (precision + sensitivity)
+    )
+  )
+}
+```
+
+```{r glmnet.xv}
+# Store model errors
+errs_glm_pen <- data.frame(NULL)
+
+# Seed for reproducibility
+set.seed(8774272)
+
+for (rep in 1:reps) {
+  # Status report
+  paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  foreach (fold = 1:length(xv)
+           , .packages = c('glmnet', 'glmnetUtils', 'dplyr', 'splines')) %dopar% {
+    # alpha = 0 is the ridge regression penalty
+    tmpmodel <- cv.glmnet(GAVE_10K ~
+                           ns(RECORD_YR, df = 5)
+                         + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+                         + GIVING_PLEDGE_ANY
+                         + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+                         + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+                         + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS
+                         + ns(VELOCITY3_LIN, df = 4)
+                         # Train while withholding some data
+                         , data = traindat[-xv[[fold]], ]
+                         , family = 'binomial'
+                         , alpha = 0
+                         , lambda = 2^(-8:5))
+    # Prediction threshold
+    theta1 <- sum(traindat$GAVE_10K[-xv[[fold]]] == 1) / nrow(traindat[-xv[[fold]], ])
+    # Confusion matrix based on the withheld data
+    tmpconfus <- conf_matrix_glmnet(tmpmodel, newdata = traindat[xv[[fold]], ], threshold = theta1)
+    # Return results
+    return(
+     data.frame(
+       reps = rep
+       , folds = fold
+       , yr_df = yr
+       , vel_df = vel
+       , error = tmpconfus$error
+       , precision = tmpconfus$precision
+       , sensitivity = tmpconfus$sensitivity
+       , F1_score = tmpconfus$F1_score
+     )
+    )
+    }
+  # Write results to errors data frame
+  errs_glm_pen <- errs_glm_pen %>% rbind(prlout)
+  # Status report
+  paste('-- Iteration', rep, 'ending at', Sys.time()) %>% print()
+}
+```
+
+```{r glm.compare8}
+data.frame(
+    baseline = errs_glm_baseline %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed = errs_glm_trimmed %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed2 = errs_glm_trimmed2 %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed3 = errs_glm_trimmed3 %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , trimmed4 = errs_glm_trimmed4 %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , splines = errs_glm_splines %>% filter(yr_df == 5 & vel_df == 4) %>%
+    select(error, precision, sensitivity) %>% colMeans() %>% round(4)
+  , nonpen = errs_glm_nonpen %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+  , pen = errs_glm_pen %>% select(error, precision, sensitivity)
+    %>% colMeans() %>% round(4)
+)
+```
+
+```{r penmods}
+mnpen <- glm(GAVE_10K ~
+                        ns(RECORD_YR, df = 5)
+                      + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+                      + GIVING_PLEDGE_ANY
+                      + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+                      + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+                      + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS
+                      + ns(VELOCITY3_LIN, df = 4)
+                      , data = traindat
+                      , family = binomial)
+mpen <- cv.glmnet(GAVE_10K ~
+                           ns(RECORD_YR, df = 5)
+                         + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+                         + GIVING_PLEDGE_ANY
+                         + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+                         + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+                         + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS
+                         + ns(VELOCITY3_LIN, df = 4)
+                         , data = traindat
+                         , alpha = 0)
+```
+
+```{r pen.coef.compare, warning = FALSE, message = FALSE}
+full_join(
+    data.frame(var = coef(mnpen) %>% names(), nopen = coef(mnpen))
+  , data.frame(var = coef(mpen)[, 1] %>% names(), pen = coef(mpen)[, 1])
+)
+```
 
 # Holdout data face-off
 
 It's now time for the moment we've all been waiting for! Error statistics will now be computed for each model on the heretofore unseen holdout data.
+
+```{r holdout.faceoff}
+# predict(mnpen, newdata = holdoutdat, type = 'response') %>% head()
+# predict(mpen, newdata = holdoutdat, type = 'response', s = 'lambda.1se') %>% head()
+```

@@ -7,6 +7,7 @@ gridExtra
 knitr
 Boruta
 glmnet
+glmnetUtils
 plotmo
 splines
 foreach
