@@ -13,9 +13,12 @@ Cross-validated error will be used to compare modeling approaches. This is not i
 
 Load [required packages](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/PACKAGES.txt) and scripts.
 
+For parallelization: set number of workers to ncores - 1.
+
 ```{r load_packages}
 source('scripts/load_packages.R')
 source('scripts/parse_data.R')
+registerDoParallel(detectCores() - 1)
 ```
 
 Generate modeling data.
@@ -735,12 +738,6 @@ grid_params = list(
 
 ## Spine df grid search
 
-For parallelization: set number of workers to ncores - 1.
-
-```{r parallel.cores}
-registerDoParallel(detectCores() - 1)
-```
-
 ```{r glm.splines, cache = TRUE, warning = FALSE, message = FALSE}
 # Store model errors
 errs_glm_splines <- data.frame(NULL)
@@ -903,7 +900,9 @@ for (rep in 1:reps) {
   paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
   # Create cross-validation indices
   xv <- KFoldXVal(traindat, k = folds)
-  foreach (fold = 1:length(xv)) %dopar% {
+  prlout <- foreach (fold = 1:length(xv)
+                     , .combine = rbind
+                     , .packages = c('dplyr', 'splines')) %dopar% {
     # Fit temp model
     tmpmodel <- glm(GAVE_10K ~
                         ns(RECORD_YR, df = 5)
@@ -988,10 +987,11 @@ for (rep in 1:reps) {
   paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
   # Create cross-validation indices
   xv <- KFoldXVal(traindat, k = folds)
-  foreach (fold = 1:length(xv)
+  prlout <- foreach (fold = 1:length(xv)
+           , .combine = rbind
            , .packages = c('glmnet', 'glmnetUtils', 'dplyr', 'splines')) %dopar% {
     # alpha = 0 is the ridge regression penalty
-    tmpmodel <- cv.glmnet(GAVE_10K ~
+    tmpmodel <- cv.glmnet(as.factor(GAVE_10K) ~
                            ns(RECORD_YR, df = 5)
                          + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
                          + GIVING_PLEDGE_ANY
@@ -1050,6 +1050,8 @@ data.frame(
 )
 ```
 
+The penalized model apparently sacrifices precision for sensitivity.
+
 ```{r penmods}
 mnpen <- glm(GAVE_10K ~
                         ns(RECORD_YR, df = 5)
@@ -1061,7 +1063,7 @@ mnpen <- glm(GAVE_10K ~
                       + ns(VELOCITY3_LIN, df = 4)
                       , data = traindat
                       , family = binomial)
-mpen <- cv.glmnet(GAVE_10K ~
+mpen <- cv.glmnet(as.factor(GAVE_10K) ~
                            ns(RECORD_YR, df = 5)
                          + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
                          + GIVING_PLEDGE_ANY
@@ -1070,21 +1072,31 @@ mpen <- cv.glmnet(GAVE_10K ~
                          + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS
                          + ns(VELOCITY3_LIN, df = 4)
                          , data = traindat
-                         , alpha = 0)
+                         , family = 'binomial'
+                         , alpha = 0
+                         , lambda = 2^(-8:5))
 ```
 
+Coefficient comparison:
+
 ```{r pen.coef.compare, warning = FALSE, message = FALSE}
+
 full_join(
     data.frame(var = coef(mnpen) %>% names(), nopen = coef(mnpen))
   , data.frame(var = coef(mpen)[, 1] %>% names(), pen = coef(mpen)[, 1])
 )
 ```
 
+The penalization appears to be fairly strong. Note that the penalized model included dummy coding for the factor base levels (i.e. not folded into the intercept term).
+
 # Holdout data face-off
 
 It's now time for the moment we've all been waiting for! Error statistics will now be computed for each model on the heretofore unseen holdout data.
 
 ```{r holdout.faceoff}
-# predict(mnpen, newdata = holdoutdat, type = 'response') %>% head()
-# predict(mpen, newdata = holdoutdat, type = 'response', s = 'lambda.1se') %>% head()
+
 ```
+
+
+
+
