@@ -1079,24 +1079,79 @@ mpen <- cv.glmnet(as.factor(GAVE_10K) ~
 
 Coefficient comparison:
 
-```{r pen.coef.compare, warning = FALSE, message = FALSE}
+```{r pen.coef.compare, warning = FALSE, message = FALSE, fig.height = 6}
+neg_sqrt_trans <- function() scales::trans_new(
+    'neg_sqrt' # Transformation nickname
+  , function(x) {sign(x) * sqrt(abs(x))} # Negative square root
+  , function(x) {sign(x) * x^2} # Inverse
+)
+
 
 full_join(
-    data.frame(var = coef(mnpen) %>% names(), nopen = coef(mnpen))
-  , data.frame(var = coef(mpen)[, 1] %>% names(), pen = coef(mpen)[, 1])
-)
+    data.frame(var = coef(mnpen) %>% names(), unpenalized = coef(mnpen))
+  , data.frame(var = coef(mpen)[, 1] %>% names(), shrinkage = coef(mpen)[, 1])
+) %>% gather(model, 'coefficient', 2:3) %>%
+  na.omit() %>%
+  arrange(abs(coefficient) %>% desc()) %>%
+  ggplot(aes(x = var %>% reorder(-abs(coefficient)), y = coefficient, color = model)) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
+  geom_point(alpha = .5) +
+  scale_y_continuous(trans = 'neg_sqrt', breaks = c(-50, -40, -30, seq(-20, 20, by = 5), -2, -.5, .5, 2)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)
+            , panel.grid.minor = element_line(linetype = 'dotted')) +
+  labs(x = 'var')
 ```
 
 The penalization appears to be fairly strong. Note that the penalized model included dummy coding for the factor base levels (i.e. not folded into the intercept term).
+
+Also note in the nonpenalized model the velocity coefficients are on the order of 10E1 which is extremely high compared to the average.
 
 # Holdout data face-off
 
 It's now time for the moment we've all been waiting for! Error statistics will now be computed for each model on the heretofore unseen holdout data.
 
 ```{r holdout.faceoff}
+# Training data proportion
+theta <- sum(traindat$GAVE_10K) / nrow(traindat)
 
+confus_test <- list(
+    bad = conf_matrix(mbad, newdata = holdoutdat, threshold = theta)
+  , baseline = conf_matrix(mbad, newdata = holdoutdat, threshold = theta)
+  , trimmed = conf_matrix(mtrim3, newdata = holdoutdat, threshold = theta)
+  , nonpenalized = conf_matrix(mnpen, newdata = holdoutdat, threshold = theta)
+  , penalized = conf_matrix_glmnet(mpen, newdata = holdoutdat, threshold = theta)
+)
 ```
 
+## Results
 
+```{r holdout.results.confmatrices}
+with(confus_test,
+  list(
+      bad = bad$conf_matrix
+    , baseline = baseline$conf_matrix
+    , trimmed = trimmed$conf_matrix
+    , nonpenalized = nonpenalized$conf_matrix
+    , penalized = penalized$conf_matrix
+  )
+)
+```
 
+```{r holdout.results.table}
+with(confus_test,
+  rbind(
+      bad = data.frame(error = bad$error, precision = bad$precision, sensitivity = bad$sensitivity, F1 = bad$F1_score)
+    , baseline = c(baseline$error, baseline$precision, baseline$sensitivity, baseline$F1_score)
+    , trimmed = c(trimmed$error, trimmed$precision, trimmed$sensitivity, trimmed$F1_score)
+    , nonpenalized = c(nonpenalized$error, nonpenalized$precision, nonpenalized$sensitivity, nonpenalized$F1_score)
+    , penalized = c(penalized$error, penalized$precision, penalized$sensitivity, penalized$F1_score)
+  )
+) %>% round(4)
+```
+
+Reassuringly, these results mirror those obtained during cross-validation.
+
+The central question: prioritize low error or high sensitivity? This determines whether the nonpenalized or penalized model is "best." Also recall that the nonpenalized model leans very heavily on `VELOCITY3_LIN` which is a point against.
+
+## Calibration
 
