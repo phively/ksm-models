@@ -237,12 +237,10 @@ $$ \underset{\beta}{\text{argmin}} \left\{ f(X, Y, \beta) \right\} \text{ subjec
 I can perform a LASSO regression on $Y$ and compare the results to Boruta above.
 
 ```{r glm.mdat, cache = TRUE}
-m <- mdat2 %>%
+m.lasso <- mdat2 %>%
   select(-HOUSEHOLD_COUNTRY, -GIVING_MAX_CASH_FY, -GIVING_FIRST_YEAR) %>%
   mutate(GAVE_10K = mdat$GAVE_10K) %>%
-  glm(GAVE_10K ~ ., data = ., family = binomial)
-
-m.lasso <- glmnet(x = model.matrix(m)[, -1], y = m$y)
+  glmnet(as.factor(GAVE_10K) ~ . , data = ., family = 'binomial', alpha = 1)
 ```
 
 ```{r lasso.viz, fig.height = 8}
