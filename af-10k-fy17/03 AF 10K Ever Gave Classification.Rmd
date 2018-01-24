@@ -1155,3 +1155,70 @@ The central question: prioritize low error or high sensitivity? This determines 
 
 ## Calibration
 
+The basic idea: regress classification on fitted predictions and see if there are poorly-calibrated areas, e.g. of the points with a predicted probability around 30% only 10% are donors.
+
+### Internal calibration
+
+A.k.a. in-sample results
+
+```{r int.cal.nonpen}
+# Nonpenalized data frame
+data.frame(
+    class = traindat$GAVE_10K
+  , prediction = predict(mnpen, newdata = traindat, type = 'response')
+) %>%
+# Plot results
+ggplot(aes(x = prediction, y = class)) +
+  geom_point(aes(color = as.factor(class))) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, k = 5)) +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(title = 'GAM smoother, nonpenalized coefficients', color = 'class')
+```
+
+```{r int.cal.pen}
+# Penalized data frame
+data.frame(
+    class = traindat$GAVE_10K
+  , prediction = predict(mpen, newdata = traindat, type = 'response')
+) %>% mutate(prediction = X1) %>%
+# Plot results
+ggplot(aes(x = prediction, y = class)) +
+  geom_point(aes(color = as.factor(class))) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, k = 5)) +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(title = 'GAM smoother, penalized coefficients', color = 'class')
+```
+
+### External calibration
+
+A.k.a. out-of-sample results
+
+```{r ext.cal.nonpen}
+# Nonpenalized data frame
+data.frame(
+    class = holdoutdat$GAVE_10K
+  , prediction = predict(mnpen, newdata = holdoutdat, type = 'response')
+) %>%
+# Plot results
+ggplot(aes(x = prediction, y = class)) +
+  geom_point(aes(color = as.factor(class))) +
+  geom_smooth(method = 'loess') +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(title = 'OOS Loess smoother, nonpenalized coefficients', color = 'class')
+```
+
+```{r ext.cal.pen}
+# Penalized data frame
+data.frame(
+    class = holdoutdat$GAVE_10K
+  , prediction = predict(mpen, newdata = holdoutdat, type = 'response')
+) %>% mutate(prediction = X1) %>%
+# Plot results
+ggplot(aes(x = prediction, y = class)) +
+  geom_point(aes(color = as.factor(class))) +
+  geom_smooth(method = 'loess') +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(title = 'OOS Loess smoother, penalized coefficients', color = 'class')
+```
+
+We have ourselves a finalist: the penalized model wins hands down.
