@@ -1,0 +1,82 @@
+---
+title: "04 AF baseline penalized splines model"
+output: html_notebook
+---
+
+# Goal
+
+This code reproducibly recreates the best model identified during the previous [cross-validation steps](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/03%20AF%2010K%20Ever%20Gave%20Classification.Rmd).
+
+# Setup
+
+```{r load_packages}
+source('scripts/load_packages.R')
+source('scripts/parse_data.R')
+```
+
+Generate modeling data.
+
+```{r gen_data}
+full <- parse_data('data/2017-12-21 AF 10K Model.csv')
+mdat <- full
+source('scripts/parse_modeling_data.R')
+```
+
+# Modeling
+
+Build the baseline penalized splines model using glmnet.
+
+```{r model}
+# Parallelize to ncores - 1
+registerDoParallel(detectCores() - 1)
+
+mbaseline <- cv.glmnet(as.factor(GAVE_10K) ~
+                           ns(RECORD_YR, df = 5)
+                         + PROGRAM_GROUP + PREF_ADDR_TYPE_CODE + HOUSEHOLD_CONTINENT
+                         + GIVING_PLEDGE_ANY
+                         + GIVING_PLEDGE_FIRST_YR + GIFTS_ALLOCS_SUPPORTED
+                         + GIFTS_CREDIT_CARD + GIFTS_STOCK + GIFT_CLUB_KLC_YRS
+                         + GIFT_CLUB_NU_LDR_YRS + GIFT_CLUB_LOYAL_YRS
+                         + ns(VELOCITY3_LIN, df = 4)
+                         , data = mdat
+                         , family = 'binomial'
+                         , alpha = 0
+                         , lambda = NULL # Not specified; try a variety
+                         , parallel = TRUE
+)
+```
+
+Create predictions.
+
+```{r preds}
+preds <- predict(mbaseline, newdata = mdat, type = 'response', s = 'lambda.1se') %>%
+  data.frame() %>%
+  mutate(fitted = X1) %>%
+  select(fitted)
+```
+
+Verify calibration results still hold.
+
+```{r calibration}
+# Penalized data frame
+data.frame(
+    class = mdat$GAVE_10K
+  , prediction = preds$fitted
+) %>%
+# Plot results
+ggplot(aes(x = prediction, y = class)) +
+  geom_point(aes(color = as.factor(class))) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, k = 5)) +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(title = 'GAM smoother, penalized coefficients', color = 'class')
+```
+
+Looks fine.
+
+# Save results
+
+Save to csv.
+
+```{r save}
+write.csv(cbind(preds, full), 'data/results.csv', row.names = FALSE)
+```
