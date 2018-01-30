@@ -1,7 +1,18 @@
 With
 
+-- Prospect entity, active only
+pe As (
+  Select
+    pe.prospect_id
+    , pe.id_number
+    , pe.primary_ind
+  From prospect_entity pe
+  Inner Join prospect On prospect.prospect_id = pe.prospect_id
+  Where prospect.active_ind = 'Y' -- Active prospects only
+)
+
 -- Active trustee definition
-trustee As (
+, trustee As (
   Select
     affiliation.id_number
     , Case
@@ -34,14 +45,14 @@ trustee As (
 , assign As (
   Select Distinct
     assignment.prospect_id
-    , prospect_entity.id_number
+    , pe.id_number
     , office_code
     , assignment_id_number
     , staff.report_name
   From assignment
   Inner Join table(rpt_pbh634.ksm_pkg.tbl_frontline_ksm_staff) staff On staff.id_number = assignment.assignment_id_number
-  Inner Join prospect_entity On prospect_entity.prospect_id = assignment.prospect_id
-  Where active_ind = 'Y' -- Active assignments only
+  Inner Join pe On pe.prospect_id = assignment.prospect_id
+  Where assignment.active_ind = 'Y' -- Active assignments only
     And assignment_type In ('PP', 'PM', 'AF') -- Program Manager (PP), Prospect Manager (PM), Annual Fund Officer (AF)
 )
 , assign_conc As (
@@ -56,7 +67,7 @@ trustee As (
 -- Active Kellogg proposal
 , ksm_prop As (
   Select
-    prospect_id
+    ph.prospect_id
     , max(proposal_status)
       keep(dense_rank First Order By hierarchy_order Desc, close_date Asc, proposal_id Asc)
       As furthest_proposal
@@ -65,10 +76,11 @@ trustee As (
       As furthest_proposal_close_dt
     , count(Distinct proposal_id) As total_proposals
     , sum(ksm_or_univ_ask) As total_asks
-  From v_ksm_proposal_history
+  From v_ksm_proposal_history ph
+  Inner Join pe On pe.prospect_id = ph.prospect_id
   Where proposal_in_progress = 'Y'
     And proposal_active = 'Y'
-  Group By prospect_id
+  Group By ph.prospect_id
 )
 
 -- Active pledge
@@ -115,7 +127,7 @@ trustee As (
     From assign
   Union
     Select id_number
-    From (Select pe.id_number From ksm_prop kp Inner Join prospect_entity pe On pe.prospect_id = kp.prospect_id)
+    From (Select id_number From pe Inner Join ksm_prop On pe.prospect_id = ksm_prop.prospect_id)
   Union
     Select id_number
     From ksm_plg
@@ -125,7 +137,7 @@ trustee As (
 )
 
 -- Main query
-Select
+Select Distinct
   ids.id_number
   , pe.prospect_id
   , pe.primary_ind
@@ -148,7 +160,7 @@ Select
   , ksm_af_cyd.af_pfy5
   , ksm_af_cyd.af_status
 From ids
-Left Join prospect_entity pe On pe.id_number = ids.id_number
+Left Join pe On pe.id_number = ids.id_number
 Left Join trustee On trustee.id_number = ids.id_number
 Left Join gab On gab.id_number = ids.id_number
 Left Join kac On kac.id_number = ids.id_number
