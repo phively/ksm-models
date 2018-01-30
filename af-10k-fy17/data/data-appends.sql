@@ -115,7 +115,7 @@ trustee As (
     From assign
   Union
     Select id_number
-    From (Select pe.id_number From ksm_prop kp Inner Join prospect_entity.pe On pe.prospect_id = kp.prospect_id)
+    From (Select pe.id_number From ksm_prop kp Inner Join prospect_entity pe On pe.prospect_id = kp.prospect_id)
   Union
     Select id_number
     From ksm_plg
@@ -126,15 +126,33 @@ trustee As (
 
 -- Main query
 Select
-  id_list.id_number
+  ids.id_number
   , pe.prospect_id
   , pe.primary_ind
+  , trustee.trustee
+  , gab.gab
+  , kac.kac
+  , assign_conc.ksm_managers
+  , assign_conc.ksm_manager_ids
+  , ksm_prop.furthest_proposal
+  , ksm_prop.furthest_proposal_close_dt
+  , ksm_prop.total_proposals
+  , ksm_prop.total_asks
+  , ksm_plg.total_pledges
+  , ksm_plg.total_pledge_balance
+  , ksm_af_cyd.af_cfy
+  , ksm_af_cyd.af_pfy1
+  , ksm_af_cyd.af_pfy2
+  , ksm_af_cyd.af_pfy3
+  , ksm_af_cyd.af_pfy4
+  , ksm_af_cyd.af_pfy5
+  , ksm_af_cyd.af_status
 From ids
-Left Join prospect_entity pe On pe.id_number = id_list.id_number
-Left Join trustee On ... = ids.id_number
-Left Join gab On ... = ids.id_number
-Left Join kac On ... = ids.id_number
-Left Join assign On ... = ids.id_number
-Left Join ksm_prop On ... = pe.prospect_id
-Left Join ksm_plg On ... = ids.id_number
-Left Join ksm_af_cyd On ... = ids.id_number
+Left Join prospect_entity pe On pe.id_number = ids.id_number
+Left Join trustee On trustee.id_number = ids.id_number
+Left Join gab On gab.id_number = ids.id_number
+Left Join kac On kac.id_number = ids.id_number
+Left Join assign_conc On assign_conc.prospect_id = pe.prospect_id
+Left Join ksm_prop On ksm_prop.prospect_id = pe.prospect_id
+Left Join ksm_plg On ksm_plg.id_number = ids.id_number
+Left Join ksm_af_cyd On ksm_af_cyd.id_number = ids.id_number
