@@ -73,6 +73,34 @@ ggplot(aes(x = prediction, y = class)) +
 
 Looks fine.
 
+```{r roc.dat}
+# Predicted versus actual
+y <- data.frame(yhat = preds$fitted, y = mdat$GAVE_10K) %>%
+  arrange(desc(yhat)) %>%
+  mutate(
+      TPR = cumsum(y) / sum(y)
+    , FPR = cumsum(y == 0) / sum(y == 0)
+  )
+
+y %>%
+  ggplot(aes(x = FPR, y = TPR)) +
+  geom_line(color = 'blue') +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed', col = 'gray') +
+  scale_x_continuous(breaks = seq(0, 1, by = .1), expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(0, 1, by = .1), expand = c(0, 0)) +
+  coord_equal() +
+  labs(title = 'ROC plot')
+```
+
+The area under the curve can be quickly approximated as a Riemann sum.
+
+```{r}
+# AUC (Riemann sum)
+sum(1/nrow(y) * y$TPR)
+```
+
+This is an outstanding result.
+
 # Save results
 
 Save to csv.

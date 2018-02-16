@@ -1,0 +1,68 @@
+---
+title: "03b AF 10K Ever Gave ROC"
+output: html_notebook
+---
+
+# Goal
+
+Produce ROC plots for the previous models.
+
+This code may be run immediately after the previous [cross-validation steps](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/03%20AF%2010K%20Ever%20Gave%20Classification.Rmd) have completed.
+
+# ROC plots
+
+Receiver operating characteristic (ROC) plots are a standard method used to assess classifiers. The greater the area under the curve the better. I'll check against the holdout data.
+
+```{r roc.mat.gen}
+roc_matrix_gen <- function(model, data) {
+  data.frame(
+      X1 = predict(model, newdata = data, type = 'response')
+    , y = data$GAVE_10K
+  ) %>% arrange(desc(X1)) %>%
+  mutate(
+      TPR = cumsum(y) / sum(y)
+    , FPR = cumsum(y == 0) / sum(y == 0)
+  ) %>%
+  return()
+}
+```
+
+```{r roc.plots}
+rocdat <- cbind(model = 'baseline', roc_matrix_gen(mbaseline, holdoutdat)) %>%
+  rbind(cbind(model = 'trimmed', roc_matrix_gen(mtrim3, holdoutdat))) %>%
+  rbind(cbind(model = 'nonpen', roc_matrix_gen(mnpen, holdoutdat))) %>%
+  rbind(cbind(model = 'pen', roc_matrix_gen(mpen, holdoutdat)))
+
+rocdat %>%
+  ggplot(aes(x = FPR, y = TPR, color = model)) +
+  geom_line(size = 1) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed', col = 'gray') +
+  scale_x_continuous(breaks = seq(0, 1, by = .1), expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(0, 1, by = .1), expand = c(0, 0)) +
+  coord_equal() +
+  labs(title = 'ROC plot')
+```
+
+```{r roc.auc}
+# Riemann sum AUC
+data.frame(
+    baseline = with(
+        rocdat %>% filter(model == 'baseline')
+      , sum(1/nrow(holdoutdat) * TPR)
+    )
+  , trimmed = with(
+        rocdat %>% filter(model == 'trimmed')
+      , sum(1/nrow(holdoutdat) * TPR)
+    )
+  , nonpen = with(
+        rocdat %>% filter(model == 'nonpen')
+      , sum(1/nrow(holdoutdat) * TPR)
+    )
+  , pen = with(
+        rocdat %>% filter(model == 'pen')
+      , sum(1/nrow(holdoutdat) * TPR)
+    )
+)
+```
+
+No discernible difference between the models.
