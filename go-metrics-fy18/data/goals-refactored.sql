@@ -12,8 +12,8 @@ custom_params As (
   From DUAL
 )
 
-/**** Refactor subqueries in lines 78-124 ****/
--- 7 clones, at 205-251, 332-378, 459-505, 855-901, 991-1037, 1127-1173, 1263-1309
+/**** Refactor subqueries in lines 76-122 ****/
+-- 7 clones, at 203-249, 330-376, 457-503, 853-899, 989-1035, 1125-1171, 1261-1307
 , proposal_dates_data As (
   -- In determining which date to use, evaluate outright gifts and pledges first and then if necessary
   -- use the date from a pledge payment.
@@ -51,8 +51,8 @@ custom_params As (
   Group By proposal_id
 )
 
-/**** Refactor subqueries in lines 848-982 ****/
--- 3 clones, at 984-1118, 1120-1254, 1256-1390
+/**** Refactor subqueries in lines 846-980 ****/
+-- 3 clones, at 982-1168, 1118-1252, 1254-1388
 , proposals As (
   Select p.proposal_id
     , a.assignment_id_number
@@ -120,22 +120,23 @@ custom_params As (
 )
 
 
-/**** Main query 848-982 ****/
+/**** Main query 846-1388 ****/
+Select g.year
+  , g.id_number
+  , 'MGDR' As goal_type
+  , nu_sys_f_getquarter(pd.date_of_record) As quarter
+  , g.goal_3 As goal
+  , sum(fr.granted_amt) As cnt
+From goal g
+Inner Join funded_ranked fr
+  On fr.assignment_id_number = g.id_number
+Inner Join proposal_dates pd
+  On pd.proposal_id = fr.proposal_id
+Where g.year = nu_sys_f_getfiscalyear(pd.date_of_record)
+Group By g.year
+  , g.id_number
+  , nu_sys_f_getquarter(pd.date_of_record)
+  , g.goal_3
 
-SELECT g.year,
-       g.id_number,
-       'MGDR' goal_type,
-       1 as quarter,
-       g.goal_3 as goal,
-       sum(pr.granted_amt) cnt
-  FROM goal g,
-        proposal_dates fprop,
-       funded_ranked pr
- WHERE g.id_number = pr.assignment_id_number
-   AND (fprop.proposal_id = pr.proposal_id)
-   AND nu_sys_f_getquarter(fprop.date_of_record) = 1
-   AND g.year = nu_sys_f_getfiscalyear(fprop.date_of_record)
- GROUP BY g.year, g.id_number, g.goal_3
- 
- 
+
 Order By id_number, year
