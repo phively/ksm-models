@@ -14,7 +14,7 @@ custom_params As (
 
 /**** Universal proposals data ****/
 -- All fields needed to recreate proposals subqueries appearing throughout the original file
-, proposals As (
+, universal_proposals_data As (
   Select p.proposal_id
     , a.assignment_id_number
     , a.active_ind As assignment_active_ind
@@ -228,7 +228,7 @@ SELECT e1.proposal_id
 , proposals_funded_cr As (
   -- Must be funded status, and above the granted amount threshold
   Select *
-  From proposals
+  From universal_proposals_data
   Where granted_amt >= (Select param_granted_amt From custom_params)
     And proposal_status_code = '7' -- Only funded
 )
@@ -270,116 +270,41 @@ SELECT e1.proposal_id
     , assignment_id_number
 )
 
-/**** Main query ****/
-SELECT g.year,
-       g.id_number,
-       'MGC' goal_type,
-       1 as quarter,
-       g.goal_1 as goal,
-       count(distinct(pr1.proposal_id)) cnt
-  FROM goal g,
-       pr1,
-       proposal_dates pd
- WHERE g.id_number       = pr1.assignment_id_number
-   AND pd.proposal_id = pr1.proposal_id
-   AND nu_sys_f_getquarter(pd.date_of_record) = 1
-   AND g.year = nu_sys_f_getfiscalyear(pd.date_of_record)
- GROUP BY g.year, g.id_number, g.goal_1
-UNION
-SELECT g.year,
-       g.id_number,
-       'MGC' goal_type,
-       2 as quarter,
-       g.goal_1 as goal,
-       count(distinct(pr1.proposal_id)) cnt
-  FROM goal g,
-       pr1,
-       proposal_dates pd
- WHERE g.id_number       = pr1.assignment_id_number
-   AND pd.proposal_id = pr1.proposal_id
-   AND nu_sys_f_getquarter(pd.date_of_record) = 2
-   AND g.year = nu_sys_f_getfiscalyear(pd.date_of_record)
- GROUP BY g.year, g.id_number, g.goal_1
-UNION
-SELECT g.year,
-       g.id_number,
-       'MGC' goal_type,
-       3 as quarter,
-       g.goal_1 as goal,
-       count(distinct(pr1.proposal_id)) cnt
-  FROM goal g,
-       pr1,
-              proposal_dates pd
- WHERE g.id_number       = pr1.assignment_id_number
-   AND pd.proposal_id = pr1.proposal_id
-   AND nu_sys_f_getquarter(pd.date_of_record) = 3
-   AND g.year = nu_sys_f_getfiscalyear(pd.date_of_record)
- GROUP BY g.year, g.id_number, g.goal_1
-UNION
-SELECT g.year,
-       g.id_number,
-       'MGC' goal_type,
-       4 as quarter,
-       g.goal_1 as goal,
-       count(distinct(pr1.proposal_id)) cnt
-  FROM goal g,
-       pr1,
-       proposal_dates pd
- WHERE g.id_number       = pr1.assignment_id_number
-   AND pd.proposal_id = pr1.proposal_id
-   AND nu_sys_f_getquarter(pd.date_of_record) = 4
-   AND g.year = nu_sys_f_getfiscalyear(pd.date_of_record)
- GROUP BY g.year, g.id_number, g.goal_1
-UNION
-SELECT g.year,
-       g.id_number,
-       'MGS' as goal_type,
-       1 as quarter,
-       g.goal_2 as goal,
-       count(distinct(pr2.proposal_id)) cnt
-  FROM goal g, pr2
- WHERE g.id_number = pr2.assignment_id_number
-   AND g.year = nu_sys_f_getfiscalyear(pr2.initial_contribution_date) -- initial_contribution_date is 'ask_date'
-   AND nu_sys_f_getquarter(pr2.initial_contribution_date) = 1
- GROUP BY g.year, g.id_number, g.goal_2
-UNION
-SELECT g.year,
-       g.id_number,
-       'MGS' as goal_type,
-       2 as quarter,
-       g.goal_2 as goal,
-       count(distinct(pr2.proposal_id)) cnt
-  FROM goal g, pr2
- WHERE g.id_number = pr2.assignment_id_number
-   AND g.year = nu_sys_f_getfiscalyear(pr2.initial_contribution_date) -- initial_contribution_date is 'ask_date'
-   AND nu_sys_f_getquarter(pr2.initial_contribution_date) = 2
- GROUP BY g.year, g.id_number, g.goal_2
-UNION
-SELECT g.year,
-       g.id_number,
-       'MGS' as goal_type,
-       3 as quarter,
-       g.goal_2 as goal,
-       count(distinct(pr2.proposal_id)) cnt
-  FROM goal g, pr2
- WHERE g.id_number = pr2.assignment_id_number
-   AND g.year = nu_sys_f_getfiscalyear(pr2.initial_contribution_date) -- initial_contribution_date is 'ask_date'
-   AND nu_sys_f_getquarter(pr2.initial_contribution_date) = 3
- GROUP BY g.year, g.id_number, g.goal_2
-UNION
-SELECT g.year,
-       g.id_number,
-       'MGS' as goal_type,
-       4 as quarter,
-       g.goal_2 as goal,
-       count(distinct(pr2.proposal_id)) cnt
-  FROM goal g, pr2
- WHERE g.id_number = pr2.assignment_id_number
-   AND g.year = nu_sys_f_getfiscalyear(pr2.initial_contribution_date) -- initial_contribution_date is 'ask_date'
-   AND nu_sys_f_getquarter(pr2.initial_contribution_date) = 4
- GROUP BY g.year, g.id_number, g.goal_2
-UNION
-/**** Main query 846-1388 ****/
+/**** Main query, equivalent to lines 2-509 in nu_gft_v_officer_metrics ****/
+Select g.year
+ , g.id_number
+ , 'MGC' goal_type
+ , to_number(nu_sys_f_getquarter(pd.date_of_record)) As quarter
+ , g.goal_1 As goal
+ , Count(Distinct pr1.proposal_id) cnt
+From goal g
+Inner Join pr1
+  On pr1.assignment_id_number = g.id_number
+Inner Join proposal_dates pd
+  On pd.proposal_id = pr1.proposal_id
+Where g.year = nu_sys_f_getfiscalyear(pd.date_of_record)
+Group By g.year
+  , g.id_number
+  , nu_sys_f_getquarter(pd.date_of_record)
+  , g.goal_1
+Union
+/**** Main query, equivalent to lines 510-845 in nu_gft_v_officer_metrics ****/
+Select g.year
+  , g.id_number
+  , 'MGS' As goal_type
+  , to_number(nu_sys_f_getquarter(pr2.initial_contribution_date)) As quarter
+  , g.goal_2 As goal
+  , Count(Distinct pr2.proposal_id) cnt
+From goal g
+Inner Join pr2
+  On pr2.assignment_id_number = g.id_number
+Where g.year = nu_sys_f_getfiscalyear(pr2.initial_contribution_date) -- initial_contribution_date is 'ask_date'
+Group By g.year
+  , g.id_number
+  , nu_sys_f_getquarter(pr2.initial_contribution_date)
+  , g.goal_2
+Union
+/**** Main query, equivalent to lines 846-1388 in nu_gft_v_officer_metrics ****/
 Select g.year
   , g.id_number
   , 'MGDR' As goal_type
