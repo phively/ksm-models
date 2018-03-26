@@ -23,6 +23,7 @@ custom_params As (
     , p.ask_amt
     , p.granted_amt
     , p.proposal_status_code
+    , p.initial_contribution_date
     , p.stop_date As proposal_stop_date
     , a.stop_date As assignment_stop_date
     , count(*) Over(Partition By a.proposal_id) As proposalManagerCount
@@ -34,14 +35,6 @@ custom_params As (
     And p.ask_amt >= (Select param_ask_amt From custom_params)
     And p.proposal_status_code In ('C', '5', '7', '8') -- submitted/approved/declined/funded
 )
--- Credit for funded proposal goals
-, proposals_funded_cr As (
-  -- Must be funded status, and above the granted amount threshold
-  Select *
-  From universal_proposals_data
-  Where granted_amt >= (Select param_granted_amt From custom_params)
-    And proposal_status_code = '7' -- Only funded
-)
 -- Count for funded proposal goals
 , proposals_funded_count As (
   -- Must be funded status and above the funded credit threshold
@@ -50,7 +43,14 @@ custom_params As (
   Where granted_amt >= (Select param_funded_count From custom_params)
     And proposal_status_code = '7' -- Only funded
 )
-
+-- Gift credit for funded proposal goals
+, proposals_funded_cr As (
+  -- Must be funded status, and above the granted amount threshold
+  Select *
+  From universal_proposals_data
+  Where granted_amt >= (Select param_granted_amt From custom_params)
+    And proposal_status_code = '7' -- Only funded
+)
 
 /**** Refactor goal 1 subqueries in lines 9-75 ****/
 -- 3 clones, at 136-202, 263-329, 390-456
@@ -62,7 +62,7 @@ custom_params As (
       , assignment_id_number
       , 1 As info_rank
     From proposals_funded_count
-    Where proposalManagerCount = 1
+    Where proposalManagerCount = 1 ------ only one proposal manager/ credit that PA
   Union
     -- 2nd priority - For #2 if there is more than one active proposal managers on a proposal credit BOTH and exit the process.
     Select proposal_id
@@ -76,7 +76,7 @@ custom_params As (
       , assignment_id_number
       , 3 As info_rank
     From proposals_funded_count
-    Where proposal_active_ind = 'N'
+    Where proposal_active_ind = 'N' -- Inactives on the proposal.
       And proposal_stop_date - assignment_stop_date <= 1
   Order By info_rank
 )
@@ -127,80 +127,42 @@ custom_params As (
 
 /**** Refactor goal 2 subqueries in lines 516-588 ****/
 -- 3 clones, at 600-672, 684-756, 767-839
+, asked_count As (
+    -- 1st priority - Look across all proposal managers on a proposal (inactive OR active).
+    -- If there is ONE proposal manager only, credit that for that proposal ID.
+    Select proposal_id
+      , assignment_id_number
+      , initial_contribution_date
+      , 1 As info_rank
+    From universal_proposals_data
+    Where proposalManagerCount = 1 ----- only one proposal manager/ credit that PA 
+  Union
+    -- 2nd priority - For #2 if there is more than one active proposal managers on a proposal credit BOTH and exit the process.
+    Select proposal_id
+      , assignment_id_number
+      , initial_contribution_date
+      , 2 As info_rank
+    From universal_proposals_data
+    Where assignment_active_ind = 'Y'
+  Union
+    -- 3rd priority - For #3, Credit all inactive proposal managers where proposal stop date and assignment stop date within 24 hours
+    Select proposal_id
+      , assignment_id_number
+      , initial_contribution_date
+      , 3 As info_rank
+    From universal_proposals_data
+    Where proposal_active_ind = 'N' -- Inactives on the proposal.
+      And proposal_stop_date - assignment_stop_date <= 1
+  Order By info_rank
+)
 , pr2 As (
-SELECT e1.proposal_id
-                     , e1.assignment_id_number
-                     , e1.initial_contribution_date
-               FROM (SELECT e.proposal_id
-                       , e.assignment_id_number
-                       , e.initial_contribution_date
-                       , row_number() over(partition by e.proposal_id, e.assignment_id_number ORDER BY e.info_rank) proposal_rank
-                     FROM ( -- 1st priority - Look across all proposal managers on a proposal (inactive OR active).
-                         -- If there is ONE proposal manager only, credit that for that proposal ID.
-                         SELECT tbl.PROPOSAL_ID
-                              , tbl.ASSIGNMENT_ID_NUMBER
-                              , tbl.initial_contribution_date
-                              , tbl.info_rank
-                         FROM (SELECT resolveProposals.PROPOSAL_ID
-                                      , resolveProposals.ASSIGNMENT_ID_NUMBER
-                                      , resolveProposals.initial_contribution_date
-                                      , resolveProposals.proposalManagerCount
-                                      , resolveProposals.info_rank
-                              FROM (
-                                  SELECT p.proposal_id
-                                       , assignment_id_number
-                                       , initial_contribution_date
-                                       , count(*) over(partition by a.proposal_id) as proposalManagerCount
-                                       , 1 as info_rank
-                                   FROM proposal p, assignment a
-                                  WHERE a.proposal_id = p.proposal_id
-                                    AND a.assignment_type = 'PA' -- Proposal Manager
-                                    AND a.assignment_id_number != ' '
-                                    AND p.ask_amt >= 100000
-                                    AND p.proposal_status_code IN ('C', '5', '7', '8') --submitted/approved/declined/funded
-                                 ) resolveProposals
-                               WHERE proposalManagerCount = 1 ----- only one proposal manager/ credit that PA
-                               ) tbl
-                        UNION
-                        -- 2nd priority - For #2 if there is more than one active proposal managers on a proposal credit BOTH and exit the process.
-                        SELECT tbl.PROPOSAL_ID
-                             , tbl.ASSIGNMENT_ID_NUMBER
-                             , tbl.initial_contribution_date
-                             , tbl.info_rank
-                        FROM (SELECT p.proposal_id
-                                   , a.assignment_id_number
-                                   , p.initial_contribution_date
-                                   , 2 as info_rank
-                             FROM proposal p, assignment a
-                             WHERE a.proposal_id = p.proposal_id
-                                    AND a.assignment_type = 'PA'      -- Proposal Manager
-                                    AND a.active_ind = 'Y'
-                                    AND a.assignment_id_number != ' '
-                                    AND p.ask_amt >= 100000
-                                    AND p.proposal_status_code IN ('C', '5', '7', '8') --submitted/approved/declined/funded
-                             ) tbl
-                        UNION
-                        -- 3rd priority - For #3, Credit all inactive proposal managers where proposal stop date and assignment stop date within 24 hours
-                        SELECT tbl.PROPOSAL_ID
-                             , tbl.ASSIGNMENT_ID_NUMBER
-                             , tbl.initial_contribution_date
-                             , tbl.info_rank
-                        FROM (SELECT p.proposal_id
-                                   , a.assignment_id_number
-                                   , p.initial_contribution_date
-                                   , 3 as info_rank
-                             FROM proposal p, assignment a
-                             WHERE a.proposal_id = p.proposal_id
-                                    AND a.assignment_type = 'PA'      -- Proposal Manager
-                                    AND a.assignment_id_number != ' '
-                                    AND p.ask_amt >= 100000
-                                    AND p.active_ind = 'N'            -- Inactives on the proposal.
-                                    AND p.proposal_status_code IN ('C', '5', '7', '8') --submitted/approved/declined/funded
-                                    AND p.stop_date - a.stop_date <= 1
-                              ) tbl
-                         ORDER BY info_rank)
-                       e) e1
-         WHERE e1.proposal_rank = 1
+  Select proposal_id
+    , assignment_id_number
+    , min(initial_contribution_date) keep(dense_rank First Order By info_rank Asc)
+      As initial_contribution_date
+  From asked_count
+  Group By proposal_id
+    , assignment_id_number
 )
 
 /**** Refactor goal 3 subqueries in lines 846-980 ****/
@@ -229,7 +191,7 @@ SELECT e1.proposal_id
        , granted_amt
        , 3 As info_rank
     From proposals_funded_cr
-    Where proposal_active_ind = 'N'
+    Where proposal_active_ind = 'N' -- Inactives on the proposal.
       And proposal_stop_date - assignment_stop_date <= 1
   Order By info_rank
 )
@@ -294,7 +256,7 @@ Group By g.year
   , g.id_number
   , nu_sys_f_getquarter(pd.date_of_record)
   , g.goal_3
-/**** Main query ****/
+/**** Main query goal 4 ****/
 UNION
 SELECT distinct g.year,
        g.id_number,
@@ -324,6 +286,7 @@ WHERE (g.id_number = c.author_id_number OR g.ID_NUMBER = cr.ID_NUMBER)
    AND g.year = c.c_year
 GROUP BY g.year, to_number(c.fiscal_qtr), g.id_number, g.goal_4
 UNION
+/**** Main query goal 5 ****/
 SELECT distinct g.year,
        g.id_number,
        'NOQV' as goal_type,
@@ -353,6 +316,7 @@ WHERE (g.id_number = c.author_id_number OR g.ID_NUMBER = cr.ID_NUMBER)
    AND g.year = c.c_year
 GROUP BY g.year, to_number(c.fiscal_qtr), g.id_number, g.goal_5
 UNION
+/**** Main query goal 6 ****/
 SELECT g.year,
        g.id_number,
        'PA' as goal_type,
