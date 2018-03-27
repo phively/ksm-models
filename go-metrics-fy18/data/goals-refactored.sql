@@ -368,56 +368,18 @@ Group By g.year
   , g.goal_5
 Union
 /**** Main query goal 6, equivalent to lines 1449-1627 in nu_gft_v_officer_metrics ****/
-SELECT g.year,
-       g.id_number,
-       'PA' as goal_type,
-       1 as quarter,
-       g.goal_6 as goal,
-       count(distinct(pr.proposal_id)) cnt
-  FROM goal g,
-       (Select * From assist_count_ranked Where nu_sys_f_getquarter(initial_contribution_date) = 1) pr
- WHERE g.id_number = pr.assignment_id_number
-   AND g.year = nu_sys_f_getfiscalyear(pr.initial_contribution_date) -- initial_contribution_date is 'ask_date'
- GROUP BY g.year, g.id_number, g.goal_6
-UNION
-SELECT g.year,
-       g.id_number,
-       'PA' as goal_type,
-       2 as quarter,
-       g.goal_6 as goal,
-       count(distinct(pr.proposal_id)) cnt
-  FROM goal g,
-       (Select * From assist_count_ranked Where nu_sys_f_getquarter(initial_contribution_date) = 2) pr
- WHERE g.id_number = pr.assignment_id_number
-   AND g.year = nu_sys_f_getfiscalyear(pr.initial_contribution_date) -- initial_contribution_date is 'ask_date'
- GROUP BY g.year, g.id_number, g.goal_6
-UNION
-SELECT g.year,
-       g.id_number,
-       'PA' as goal_type,
-       3 as quarter,
-       g.goal_6 as goal,
-       count(distinct(pr.proposal_id)) cnt
-  FROM goal g,
-       (Select * From assist_count_ranked Where nu_sys_f_getquarter(initial_contribution_date) = 3) pr
- WHERE g.id_number = pr.assignment_id_number
-   AND g.year = nu_sys_f_getfiscalyear(pr.initial_contribution_date) -- initial_contribution_date is 'ask_date'
- GROUP BY g.year, g.id_number, g.goal_6
-UNION
-SELECT g.year,
-       g.id_number,
-       'PA' as goal_type,
-       4 as quarter,
-       g.goal_6 as goal,
-       count(distinct(pr.proposal_id)) cnt
-  FROM goal g,
-       (Select * From assist_count_ranked Where nu_sys_f_getquarter(initial_contribution_date) = 4) pr
- WHERE g.id_number = pr.assignment_id_number
-   AND g.year = nu_sys_f_getfiscalyear(pr.initial_contribution_date) -- initial_contribution_date is 'ask_date'
- GROUP BY g.year, g.id_number, g.goal_6
-/* Sort results */
-Order By id_number
-  , year
-  , quarter
-  , goal_type
+Select g.year
+  , g.id_number
+  , 'PA' As goal_type
+  , to_number(nu_sys_f_getquarter(acr.initial_contribution_date)) As quarter
+  , g.goal_6 As goal
+  , count(Distinct acr.proposal_id) As cnt
+From goal g
+Inner Join assist_count_ranked acr
+  On acr.assignment_id_number = g.id_number
+Where g.year = nu_sys_f_getfiscalyear(acr.initial_contribution_date) -- initial_contribution_date is 'ask_date'
+Group By g.year
+  , g.id_number
+  , nu_sys_f_getquarter(acr.initial_contribution_date)
+  , g.goal_6
 ;
