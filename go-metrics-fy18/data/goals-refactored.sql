@@ -52,8 +52,8 @@ custom_params As (
     And proposal_status_code = '7' -- Only funded
 )
 
-/**** Refactor goal 1 subqueries in lines 9-75 ****/
--- 3 clones, at 136-202, 263-329, 390-456
+/**** Refactor goal 1 subqueries in lines 11-77 ****/
+-- 3 clones, at 138-204, 265-331, 392-458
 -- Credit for asked & funded proposals
 , funded_count As (
     -- 1st priority - Look across all proposal managers on a proposal (inactive OR active).
@@ -86,8 +86,8 @@ custom_params As (
   From funded_count
 )
 
-/**** Refactor all subqueries in lines 76-122 ****/
--- 7 clones, at 203-249, 330-376, 457-503, 853-899, 989-1035, 1125-1171, 1261-1307
+/**** Refactor all subqueries in lines 78-124 ****/
+-- 7 clones, at 205-251, 332-378, 459-505, 855-901, 991-1037, 1127-1173, 1263-1309
 , proposal_dates_data As (
   -- In determining which date to use, evaluate outright gifts and pledges first and then if necessary
   -- use the date from a pledge payment.
@@ -125,8 +125,8 @@ custom_params As (
   Group By proposal_id
 )
 
-/**** Refactor goal 2 subqueries in lines 516-588 ****/
--- 3 clones, at 600-672, 684-756, 767-839
+/**** Refactor goal 2 subqueries in lines 518-590 ****/
+-- 3 clones, at 602-674, 686-758, 769-841
 , asked_count As (
     -- 1st priority - Look across all proposal managers on a proposal (inactive OR active).
     -- If there is ONE proposal manager only, credit that for that proposal ID.
@@ -165,8 +165,8 @@ custom_params As (
     , assignment_id_number
 )
 
-/**** Refactor goal 3 subqueries in lines 846-980 ****/
--- 3 clones, at 982-1168, 1118-1252, 1254-1388
+/**** Refactor goal 3 subqueries in lines 848-982 ****/
+-- 3 clones, at 984-1170, 1120-1254, 1256-1390
 , funded_credit As (
     -- 1st priority - Look across all proposal managers on a proposal (inactive OR active).
     -- If there is ONE proposal manager only, credit that for that proposal ID.
@@ -205,7 +205,7 @@ custom_params As (
     , assignment_id_number
 )
 
-/**** Main query goal 1, equivalent to lines 2-509 in nu_gft_v_officer_metrics ****/
+/**** Main query goal 1, equivalent to lines 4-511 in nu_gft_v_officer_metrics ****/
 Select g.year
  , g.id_number
  , 'MGC' goal_type
@@ -223,7 +223,7 @@ Group By g.year
   , nu_sys_f_getquarter(pd.date_of_record)
   , g.goal_1
 Union
-/**** Main query goal 2, equivalent to lines 510-845 in nu_gft_v_officer_metrics ****/
+/**** Main query goal 2, equivalent to lines 512-847 in nu_gft_v_officer_metrics ****/
 Select g.year
   , g.id_number
   , 'MGS' As goal_type
@@ -239,7 +239,7 @@ Group By g.year
   , nu_sys_f_getquarter(pr2.initial_contribution_date)
   , g.goal_2
 Union
-/**** Main query goal 3, equivalent to lines 846-1388 in nu_gft_v_officer_metrics ****/
+/**** Main query goal 3, equivalent to lines 848-1391 in nu_gft_v_officer_metrics ****/
 Select g.year
   , g.id_number
   , 'MGDR' As goal_type
@@ -256,6 +256,7 @@ Group By g.year
   , g.id_number
   , nu_sys_f_getquarter(pd.date_of_record)
   , g.goal_3
+Union
 /**** Main query goal 4 ****/
 UNION
 SELECT distinct g.year,
