@@ -52,6 +52,30 @@ custom_params As (
     And proposal_status_code = '7' -- Only funded
 )
 
+/**** Contact report data ****/
+-- Fields to recreate contact report calculations used in goals 4 and 5
+-- Corresponds to subqueries in lines 1392-1448
+, contact_reports As (
+  Select Distinct author_id_number
+    , report_id
+    , contact_purpose_code
+    , Case
+        When extract(month From contact_date) < 9 Then extract(year From contact_date)
+        Else extract(year From contact_date) + 1
+      End As c_year -- fiscal year
+    , decode(
+        to_char(contact_date, 'MM')
+        , '01', '2', '02',  '2'
+        , '03', '3', '04', '3', '05', '3'
+        , '06', '4', '07', '4', '08', '4'
+        , '09', '1', '10', '1', '11', '1'
+        , '12', '2'
+        , NULL
+      ) As fiscal_qtr
+     From contact_report
+     Where contact_type = 'V' -- Only count visits
+)
+
 /**** Refactor goal 1 subqueries in lines 11-77 ****/
 -- 3 clones, at 138-204, 265-331, 392-458
 -- Credit for asked & funded proposals
@@ -257,67 +281,48 @@ Group By g.year
   , nu_sys_f_getquarter(pd.date_of_record)
   , g.goal_3
 Union
-/**** Main query goal 4 ****/
-UNION
-SELECT distinct g.year,
-       g.id_number,
-       'NOV' as goal_type,
-       to_number(c.fiscal_qtr) as quarter,
-       g.goal_4 as goal,
-       count(distinct(c.report_id)) cnt
-from  ( select distinct c.author_id_number
-       , c.report_id
-       , CASE WHEN  to_number(to_char(c.contact_date,'MM')) < 9
-              THEN to_number(to_char(c.contact_date, 'YYYY'))
-         ELSE      to_number(to_char(c.contact_date, 'YYYY')) + 1
-         END  c_year -- fiscal year
-       , decode(to_char(c.contact_date, 'MM'), '01', '2', '02',  '2'
-                                           , '03', '3', '04', '3', '05', '3'
-                                           , '06', '4', '07', '4', '08', '4'
-                                           , '09', '1', '10', '1', '11', '1'
-                                           , '12', '2', NULL
-              )  Fiscal_qtr
-         FROM contact_report c
-         WHERE c.contact_type = 'V'
-        ) c
-   , goal g,  contact_rpt_credit cr
-WHERE (g.id_number = c.author_id_number OR g.ID_NUMBER = cr.ID_NUMBER)
-   AND cr.report_id = c.report_id
-   AND cr.contact_credit_type = '1'
-   AND g.year = c.c_year
-GROUP BY g.year, to_number(c.fiscal_qtr), g.id_number, g.goal_4
-UNION
-/**** Main query goal 5 ****/
-SELECT distinct g.year,
-       g.id_number,
-       'NOQV' as goal_type,
-       to_number(c.fiscal_qtr) as quarter,
-       g.goal_5 as goal,
-       count(distinct(c.report_id)) cnt
-from  ( select distinct c.author_id_number
-       , c.report_id
-       , CASE WHEN  to_number(to_char(c.contact_date,'MM')) < 9
-              THEN to_number(to_char(c.contact_date, 'YYYY'))
-         ELSE      to_number(to_char(c.contact_date, 'YYYY')) + 1
-         END  c_year -- fiscal year
-       , decode(to_char(c.contact_date, 'MM'), '01', '2', '02',  '2'
-                                           , '03', '3', '04', '3', '05', '3'
-                                           , '06', '4', '07', '4', '08', '4'
-                                           , '09', '1', '10', '1', '11', '1'
-                                           , '12', '2', NULL
-              )  Fiscal_qtr
-         FROM contact_report c
-         WHERE c.contact_type = 'V'
-         AND c.contact_purpose_code = '1'
-        ) c
-   , goal g,  contact_rpt_credit cr
-WHERE (g.id_number = c.author_id_number OR g.ID_NUMBER = cr.ID_NUMBER)
-   AND cr.report_id = c.report_id
-   AND cr.contact_credit_type = '1'
-   AND g.year = c.c_year
-GROUP BY g.year, to_number(c.fiscal_qtr), g.id_number, g.goal_5
-UNION
-/**** Main query goal 6 ****/
+/**** Main query goal 4, equivalent to lines 1392-1419 in nu_gft_v_officer_metrics ****/
+Select Distinct g.year
+  , g.id_number
+  , 'NOV' as goal_type
+  , to_number(c.fiscal_qtr) As quarter
+  , g.goal_4 As goal
+  , count(Distinct c.report_id) As cnt
+From contact_reports c
+Inner Join contact_rpt_credit cr
+  On cr.report_id = c.report_id
+Inner Join goal g
+  On g.id_number = c.author_id_number
+    Or g.id_number = cr.id_number
+Where cr.contact_credit_type = '1' -- Primary credit only
+  And g.year = c.c_year
+Group By g.year
+  , c.fiscal_qtr
+  , g.id_number
+  , g.goal_4
+Union
+/**** Main query goal 5, equivalent to lines 1420-1448 in nu_gft_v_officer_metrics ****/
+Select Distinct g.year
+  , g.id_number
+  , 'NOQV' As goal_type
+  , to_number(c.fiscal_qtr) As quarter
+  , g.goal_5 As goal
+  , count(Distinct c.report_id) As cnt
+From contact_reports c
+Inner Join contact_rpt_credit cr
+  On cr.report_id = c.report_id
+Inner Join goal g
+  On g.id_number = c.author_id_number
+    Or g.id_number = cr.id_number
+Where c.contact_purpose_code = '1' -- Only count qualification visits
+  And cr.contact_credit_type = '1' -- Primary credit only
+  And g.year = c.c_year
+Group By g.year
+  , c.fiscal_qtr
+  , g.id_number
+  , g.goal_5
+Union
+/**** Main query goal 6, equivalent to lines 1449-1627 in nu_gft_v_officer_metrics ****/
 SELECT g.year,
        g.id_number,
        'PA' as goal_type,
@@ -497,6 +502,8 @@ SELECT g.year,
  WHERE g.id_number = pr.assignment_id_number
    AND g.year = nu_sys_f_getfiscalyear(pr.initial_contribution_date) -- initial_contribution_date is 'ask_date'
  GROUP BY g.year, g.id_number, g.goal_6
-
-
-Order By id_number, year, quarter, goal_type
+/* Sort results */
+Order By id_number
+  , year
+  , quarter
+;
