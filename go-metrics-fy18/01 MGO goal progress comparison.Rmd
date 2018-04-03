@@ -25,3 +25,76 @@ if (!('wranglR' %in% utils::installed.packages()[, 'Package'])) {
 
 wranglR::Libraries(scan(file = 'PACKAGES.txt', what = 'character'))
 ```
+
+# Data import
+
+```{r}
+data <- readxl::read_excel(path = 'data/2018-04-03 ksm go data.xlsx') %>%
+  
+  # Drop nulls
+  filter(!is.na(ID_NUMBER)) %>%
+  
+  # Transformations
+  mutate(
+    # Clean up names; everything up to the first comma
+    Name = REPORT_NAME %>% str_match(pattern = '.*,') %>% str_sub(0, -2) %>% trimws()
+
+    # Create factors
+    , ID_NUMBER = factor(ID_NUMBER)
+    , Name = factor(Name)
+    , GOAL_TYPE = factor(GOAL_TYPE)
+    , GOAL_DESC = factor(GOAL_DESC)
+    
+    # Create dates
+    , Cal_date = ymd(paste(CAL_YEAR, CAL_MONTH, 1, sep = '-'))
+  )
+```
+
+# Comparisons
+
+## Visits
+
+```{r, fig.width = 16, fig.height = 16}
+data %>%
+  filter(GO_AT_KSM == 1 & GOAL_TYPE %in% c('NOV', 'NOQV') & CAL_YEAR >= 2017 & !is.na(FY_GOAL)) %>%
+  ggplot(aes(x = Cal_date, y = ADJUSTED_PROGRESS, color = GOAL_DESC)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(slope = 0, intercept = 10, color = 'darkgray') +
+  geom_abline(slope = 0, intercept = 5, color = 'darkgray', linetype = 'dashed') +
+  facet_grid(Name ~ .) +
+  scale_x_date(date_minor_breaks = '1 month') +
+  labs(y = 'Visits')
+```
+
+## Proposals
+
+```{r, fig.width = 16, fig.height = 16}
+data %>%
+  filter(GO_AT_KSM == 1 & GOAL_TYPE %in% c('MGC', 'MGS') & CAL_YEAR >= 2017 & !is.na(FY_GOAL)) %>%
+  ggplot(aes(x = Cal_date, y = ADJUSTED_PROGRESS, color = GOAL_DESC)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(slope = 0, intercept = 4, color = 'darkgray') +
+  geom_abline(slope = 0, intercept = 2, color = 'darkgray', linetype = 'dashed') +
+  facet_grid(Name ~ .) +
+  scale_x_date(date_minor_breaks = '1 month') +
+  labs(y = 'Proposals')
+```
+
+## Dollars
+
+```{r, fig.width = 16, fig.height = 16}
+data %>%
+  filter(GO_AT_KSM == 1 & GOAL_TYPE == 'MGDR' & CAL_YEAR >= 2017 & !is.na(FY_GOAL)) %>%
+  ggplot(aes(x = Cal_date, y = ADJUSTED_PROGRESS)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(slope = 0, intercept = 6, color = 'darkgray') +
+  geom_abline(slope = 0, intercept = 5, color = 'darkgray', linetype = 'dashed') +
+  facet_grid(Name ~ .) +
+  scale_x_date(date_minor_breaks = '1 month') +
+  scale_y_log10(minor_breaks = outer(1:9, 10^(4:8)) %>% as.vector(), labels = scales::dollar) +
+  labs(y = 'Dollars')
+```
+
