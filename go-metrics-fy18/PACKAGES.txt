@@ -1,0 +1,8 @@
+devtools
+wranglR
+tidyverse
+lubridate
+reshape2
+gridExtra
+knitr
+splines

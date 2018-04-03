@@ -1,0 +1,27 @@
+---
+title: "MGO goal progress comparison"
+output: html_notebook
+---
+
+# Goal
+
+Familiarize myself with the progress to goal [data extract](https://github.com/phively/ksm-models/blob/master/go-metrics-fy18/data/goals-data.sql) I've put together and experiment with e.g. smoothing and trend or time series analysis.
+
+# Libraries
+
+Install packages.
+
+```{r}
+# Check to see if devtools is unavailable
+if (!('devtools' %in% utils::installed.packages()[, 'Package'])) {
+  # If unavailable, install it
+  install.packages('devtools')
+}
+# Check to see if wranglR is unavailable
+if (!('wranglR' %in% utils::installed.packages()[, 'Package'])) {
+  # If unavailable, use devtools to install it via GitHub
+  devtools::install_github('phively/wranglR')
+}
+
+wranglR::Libraries(scan(file = 'PACKAGES.txt', what = 'character'))
+```
