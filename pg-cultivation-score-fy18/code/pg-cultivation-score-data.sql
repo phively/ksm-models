@@ -92,8 +92,10 @@ Select
   , "PG Prospect Flag" As pg_prospect_flag
   , mg_id.mg_id_model_score
   , mg_id.mg_id_model_year
+  , mg_id.mg_id_model_desc
   , mg_priority.mg_pr_model_score
   , mg_priority.mg_pr_model_year
+  , mg_priority.mg_pr_model_desc
 From pg_checklist
 Left Join mg_id
   On mg_id.id_number = pg_checklist."Primary Entity ID"
