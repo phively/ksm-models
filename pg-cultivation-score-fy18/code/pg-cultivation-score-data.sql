@@ -58,6 +58,17 @@ pg_checklist As (
   Group By id_number
 )
 
+-- Largest cash transaction
+, big_gift As (
+  Select
+    id_number
+    , max(credit_amount) As largest_gift_or_payment
+  From nu_gft_trp_gifttrans
+  Where tx_gypm_ind In ('G', 'Y') -- Gift or pledge payment only
+  Group By id_number
+)
+
+
 Select
   "Primary Entity ID" As id_number
   , "Prospect ID" As prospect_id
@@ -96,11 +107,15 @@ Select
   , mg_priority.mg_pr_model_score
   , mg_priority.mg_pr_model_year
   , mg_priority.mg_pr_model_desc
+  , coalesce(big_gift.largest_gift_or_payment, 0)
+    As largest_gift_or_payment
 From pg_checklist
 Left Join mg_id
   On mg_id.id_number = pg_checklist."Primary Entity ID"
 Left Join mg_priority
   On mg_priority.id_number = pg_checklist."Primary Entity ID"
+Left Join big_gift
+  On big_gift.id_number = pg_checklist."Primary Entity ID"
 Order By
   ("Deep Engagement" + other_indicators) Desc
   , "Qualification Level" Asc

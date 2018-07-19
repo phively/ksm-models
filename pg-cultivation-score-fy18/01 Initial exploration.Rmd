@@ -20,7 +20,7 @@ The PG cultivation score was calculated from [this view](https://github.com/phiv
 
 ```{r}
 pool <- readxl::read_xlsx(
-  path = 'data/2018-07-18 PG scores for all active prospects.xlsx'
+  path = 'data/2018-07-19 PG scores for all active prospects.xlsx'
   , sheet = 'With'
 ) %>% mutate(
   # Create factors
@@ -82,7 +82,7 @@ pool %>%
   scale_x_continuous(breaks = seq(lower_bound, upper_bound, by = 2))
 ```
 
-The PG cultivation score ranges from 0 to 12, with most of the data between 1 and 3. 0 implies a totally unengaged non-alumni prospect.
+The PG cultivation score ranges from 0 to `r upper_bound %>% I()`, with most of the data between `r quantile(pool$CULTIVATION_SCORE, .2) %>% I()` and `r quantile(pool$CULTIVATION_SCORE, .8) %>% I()`. 0 implies a totally unengaged non-alumni prospect.
 
 Here's a look at principal gift prospects:
 
@@ -104,7 +104,50 @@ get_percentiles(
 ) %>% select(score = x, overall_percentile = g1, non_PG_percentile = g2, PG_percentile = g3)
 ```
 
-PG prospects have much more density in the right tail - I wouldn't read too much into it, though, because the PG checklist items were based on historical engagement patterns of these donors.
+PG prospects have much more density in the right tail -- I wouldn't read too much into it, though, because the PG checklist items were based on historical engagement patterns of these donors.
+
+### Affinity scores
+
+The affinity score models general entity engagement, including student information, other relationships, and behavior.
+
+```{r}
+summary(pool$AFFINITY_SCORE)
+```
+
+There are very few NAs, which follows given that the score is recomputed periodically.
+
+```{r}
+pool %>% filter(!is.na(AFFINITY_SCORE)) %>%
+  ggplot(aes(x = AFFINITY_SCORE)) +
+  geom_histogram(binwidth = 1, alpha = .5) +
+  scale_x_continuous(breaks = 0:10, minor_breaks = NULL) +
+  geom_vline(xintercept = mean(pool$AFFINITY_SCORE, na.rm = TRUE), color = 'blue', linetype = 'dashed')
+```
+
+Most people have an affinity score at or below `r quantile(pool$AFFINITY_SCORE, .75, na.rm = TRUE) %>% I()`
+
+Comparing affinity score and cultivation score:
+
+```{r}
+pool %>% filter(!is.na(AFFINITY_SCORE)) %>%
+  ggplot(aes(x = CULTIVATION_SCORE, y = AFFINITY_SCORE, group = factor(CULTIVATION_SCORE))) +
+  geom_boxplot()
+```
+
+```{r}
+pool %>% filter(!is.na(AFFINITY_SCORE)) %>%
+  group_by(CULTIVATION_SCORE, AFFINITY_SCORE) %>% summarise(n = length(ID_NUMBER)) %>%
+  ggplot(aes(x = CULTIVATION_SCORE, y = AFFINITY_SCORE, fill = n)) +
+  geom_tile() +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = seq(0, 12, by = 2)) +
+  scale_y_continuous(breaks = seq(0, 10, by = 2)) +
+  coord_equal()
+```
+
+High affinity scores are much more frequent than high cultivation scores, so the two appear to be getting at different information.
+
 
 ### Major gift identification scores
 
@@ -152,7 +195,7 @@ pool %>% select(MG_ID_MODEL_SCORE, MG_ID_MODEL_DESC) %>% filter(MG_ID_MODEL_DESC
   unlist() %>% summary()
 ```
 
-Now this is interesting - there is quite a bit of overlap.
+Now this is interesting -- there is quite a bit of overlap.
 
 ```{r}
 pool %>% filter(!is.na(MG_ID_MODEL_SCORE)) %>%
@@ -162,7 +205,7 @@ pool %>% filter(!is.na(MG_ID_MODEL_SCORE)) %>%
   geom_vline(xintercept = mean(pool$MG_ID_MODEL_SCORE, na.rm = TRUE), color = 'blue', linetype = 'dashed')
 ```
 
-This looks a bit like a mixture model - perhaps the model description label is the most likely class based on model score and some other input.
+This looks a bit like a mixture model -- perhaps the model description label is the most likely class based on model score and some other input.
 
 We can also look at cultivation score by ID model label.
 
@@ -174,7 +217,7 @@ pool %>%filter(!is.na(MG_ID_MODEL_SCORE)) %>%
   facet_grid(MG_ID_MODEL_DESC ~ .)
 ```
 
-```{r}
+```{r, rows.print = 100}
 get_percentiles(
   lower_bound
   , upper_bound
@@ -184,7 +227,7 @@ get_percentiles(
 ) %>% select(score = x, bottom_tier = g1, middle_tier = g2, top_tier = g3)
 ```
 
-Very interesting - it looks like people who have been more heavily engaged have lower cultivation scores, perhaps because they're no longer discovery prospects?
+Very interesting -- it looks like people who have been more heavily engaged have lower cultivation scores, perhaps because they're no longer discovery prospects?
 
 ### Major gift prioritization scores
 
@@ -207,12 +250,14 @@ pool %>% filter(!is.na(MG_PR_MODEL_SCORE)) %>%
 Very strongly right-skewed. Here's the same plot with the scale adjusted.
 
 ```{r}
+scales::
+
 pool %>% filter(!is.na(MG_PR_MODEL_SCORE)) %>%
   ggplot(aes(x = MG_PR_MODEL_SCORE)) +
   geom_density() +
   geom_rug(color = 'gray') +
   geom_vline(xintercept = mean(pool$MG_PR_MODEL_SCORE, na.rm = TRUE), color = 'blue', linetype = 'dashed') +
-  scale_y_sqrt(breaks = 2^(0:20), minor_breaks = NULL)
+  scale_y_log2(breaks = 2^(0:20), minor_breaks = NULL)
 ```
 
 Examining the scores by descriptive prioritization model label:
@@ -230,7 +275,7 @@ As before, there's overlap between the groups, but the long tail is entirely fro
 Finally, look at the distributions of cultivation scores.
 
 ```{r}
-pool %>%filter(!is.na(MG_PR_MODEL_SCORE)) %>%
+pool %>% filter(!is.na(MG_PR_MODEL_SCORE)) %>%
   ggplot(aes(x = CULTIVATION_SCORE, fill = MG_PR_MODEL_DESC)) +
   geom_histogram(binwidth = 1, alpha = .5, aes(y = ..density..)) +
   scale_x_continuous(breaks = seq(lower_bound, upper_bound, by = 2)) +
@@ -250,3 +295,59 @@ get_percentiles(
 As expected, the top tier prospects have much higher cultivation scores than the other groups.
 
 # Relationship to giving
+
+### Donor scatterplots
+
+How are these measures related to campaign giving, or largest gift?
+
+Below, the red lines are linear fits and the black lines are GAM fits.
+
+```{r}
+pool %>% filter(!is.na(CULTIVATION_SCORE) & CAMPAIGN_NEWGIFT_CMIT_CREDIT > 0) %>%
+  ggplot(aes(x = CULTIVATION_SCORE, y = CAMPAIGN_NEWGIFT_CMIT_CREDIT, color = MG_PR_MODEL_DESC)) +
+  geom_point(alpha = .5) +
+  geom_smooth(color = 'black') +
+  geom_smooth(method = 'lm', color = 'red') +
+  scale_y_continuous(trans = 'log10', breaks = 10^(0:12), labels = scales::dollar) +
+  scale_x_continuous(breaks = 0:18, minor_breaks = NULL)
+```
+
+At higher cultivation scores, the linear trend is about an order of magnitude below the group means.
+
+```{r}
+pool %>% filter(!is.na(AFFINITY_SCORE) & CAMPAIGN_NEWGIFT_CMIT_CREDIT > 0) %>%
+  ggplot(aes(x = AFFINITY_SCORE, y = CAMPAIGN_NEWGIFT_CMIT_CREDIT, color = MG_PR_MODEL_DESC)) +
+  geom_point(alpha = .5) +
+  geom_smooth(color = 'black') +
+  geom_smooth(method = 'lm', color = 'red') +
+  scale_y_continuous(trans = 'log10', breaks = 10^(0:12), labels = scales::dollar) +
+  scale_x_continuous(breaks = 0:18, minor_breaks = NULL)
+```
+
+Compared to cultivation score, the GAM fit at high affinity scores is worse -- 2 orders of magnitude off, though there are only 4 data points, as seen above.
+
+```{r}
+pool %>% filter(!is.na(MG_ID_MODEL_SCORE) & CAMPAIGN_NEWGIFT_CMIT_CREDIT > 0) %>%
+  ggplot(aes(x = MG_ID_MODEL_SCORE, y = CAMPAIGN_NEWGIFT_CMIT_CREDIT, color = MG_ID_MODEL_DESC)) +
+  geom_point(alpha = .5) +
+  geom_smooth(color = 'black') +
+  geom_smooth(method = 'lm', color = 'red') +
+  scale_y_continuous(trans = 'log10', breaks = 10^(0:12), labels = scales::dollar)
+```
+
+There's no apparent relationship between MG identification model and Campaign giving.
+
+```{r}
+pool %>% filter(!is.na(MG_PR_MODEL_SCORE) & CAMPAIGN_NEWGIFT_CMIT_CREDIT > 0) %>%
+  ggplot(aes(x = MG_PR_MODEL_SCORE, y = CAMPAIGN_NEWGIFT_CMIT_CREDIT, color = MG_PR_MODEL_DESC)) +
+  geom_point(alpha = .5) +
+  geom_smooth(color = 'black') +
+  geom_smooth(method = 'lm', color = 'red') +
+  scale_y_continuous(trans = 'log10', breaks = 10^(0:12), labels = scales::dollar)
+```
+
+Looks like prioritization model scores above around .4 are quite nicely associated with campaign giving amounts, which follows, as I believe past giving is one of the inputs.
+
+### All prospect scatterplots
+
+
