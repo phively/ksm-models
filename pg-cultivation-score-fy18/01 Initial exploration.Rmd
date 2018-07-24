@@ -207,6 +207,19 @@ pool %>% filter(!is.na(MG_ID_MODEL_SCORE)) %>%
 
 This looks a bit like a mixture model -- perhaps the model description label is the most likely class based on model score and some other input.
 
+*Update.* I just remembered that the data file pulls in the score associated with the most recent year. Segmenting by year the pattern becomes clear:
+
+```{r}
+pool %>% filter(!is.na(MG_ID_MODEL_SCORE)) %>%
+  ggplot(aes(x = MG_ID_MODEL_SCORE, color = MG_ID_MODEL_DESC)) +
+  geom_density(alpha = .5) +
+  geom_rug() +
+  facet_grid(MG_ID_MODEL_YEAR ~ .) +
+  geom_vline(xintercept = mean(pool$MG_ID_MODEL_SCORE, na.rm = TRUE), color = 'blue', linetype = 'dashed')
+```
+
+Within each year there is no overlap. High/middle/low tier must have been recomputed each year as a function of the overall distribution of scores (e.g. top 5% of scores).
+
 We can also look at cultivation score by ID model label.
 
 ```{r}
@@ -250,14 +263,12 @@ pool %>% filter(!is.na(MG_PR_MODEL_SCORE)) %>%
 Very strongly right-skewed. Here's the same plot with the scale adjusted.
 
 ```{r}
-scales::
-
 pool %>% filter(!is.na(MG_PR_MODEL_SCORE)) %>%
   ggplot(aes(x = MG_PR_MODEL_SCORE)) +
   geom_density() +
   geom_rug(color = 'gray') +
   geom_vline(xintercept = mean(pool$MG_PR_MODEL_SCORE, na.rm = TRUE), color = 'blue', linetype = 'dashed') +
-  scale_y_log2(breaks = 2^(0:20), minor_breaks = NULL)
+  scale_y_sqrt(breaks = 2^(0:20), minor_breaks = NULL)
 ```
 
 Examining the scores by descriptive prioritization model label:
@@ -271,6 +282,18 @@ pool %>% filter(!is.na(MG_PR_MODEL_SCORE)) %>%
 ```
 
 As before, there's overlap between the groups, but the long tail is entirely from the top tier group.
+
+*Update.* The overlap again disappears when looking at distributions by year:
+
+```{r}
+pool %>% filter(!is.na(MG_PR_MODEL_SCORE)) %>%
+  ggplot(aes(x = MG_PR_MODEL_SCORE, color = MG_PR_MODEL_DESC)) +
+  geom_density(alpha = .5) +
+  geom_rug() +
+  facet_grid(MG_PR_MODEL_YEAR ~ .) +
+  scale_y_sqrt(breaks = 2^(0:20), minor_breaks = NULL)
+```
+
 
 Finally, look at the distributions of cultivation scores.
 

@@ -4,4 +4,4 @@ An analysis based on [Ben Porter's Donor Cultivation Checklist](https://www.case
 
 HTML rendering:
 
-  * [01 Initial exploration](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/01 Initial exploration.nb.html)
+  * [01 Initial exploration](https://htmlpreview.github.io/?https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/01%20Initial%20exploration.nb.html)
