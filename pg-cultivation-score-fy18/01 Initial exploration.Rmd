@@ -328,11 +328,8 @@ Below, the red lines are linear fits and the black lines are GAM fits.
 ```{r}
 # Generic function to generate scatterplots of interest
 scatterplotter <- function(data, x, y, color, trans) {
-  data['x'] <- data[, x]
-  data['y'] <- data[, y]
-  data['color'] <- data[, color]
   data %>%
-    ggplot(aes(x = x, y = y, color = color)) +
+    ggplot(aes_string(x = x, y = y, color = color)) +
     geom_point(alpha = .5) +
     geom_smooth(color = 'black') +
     geom_smooth(method = 'lm', color = 'red') +
