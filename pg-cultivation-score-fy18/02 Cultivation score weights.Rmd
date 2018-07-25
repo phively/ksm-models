@@ -1,0 +1,41 @@
+---
+title: "02 Cultivation score weights"
+output: html_notebook
+---
+
+# Goal
+
+Determine the extent to which each of the data elements related to the PG cultivation score (see [Ben Porter's Donor Cultivation Checklist](https://www.case.org/currents/x74757)) have impacted campaign giving.
+
+# Setup and datafile
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+```
+
+The data file is generated with [this code](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/generate-data.R), adapted from the import data step of [01 Initial exploration.Rmd
+](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/01%20Initial%20exploration.Rmd).
+
+```{r}
+source('code/generate-data.R')
+```
+
+The following 12 items were able to be extracted from the database:
+
+  * Alum or spouse of alum
+  * Age
+  * Chicago home address
+  * Visited by prospect manager in last 2 years
+  * 5+ total visits
+  * Deep engagement (multiple degrees, parent, season tickets, etc.)
+  * High-level annual giving ($25K+)
+  * High-level advisory board participation
+  * Previous major gift ($250K+)
+  * Meeting with president
+  * Open proposal
+  * Consistent donor (10+ years of giving, including 1+ of last 3)
+
+Each counts as one point toward the cultivation score, which ranges from 0 to `r max(pool$CULTIVATION_SCORE) %>% I()`.
+
+# Data exploration
+
