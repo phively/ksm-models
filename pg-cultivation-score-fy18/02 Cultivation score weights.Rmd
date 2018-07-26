@@ -5,20 +5,27 @@ output: html_notebook
 
 # Goal
 
-Determine the extent to which each of the data elements related to the PG cultivation score (see [Ben Porter's Donor Cultivation Checklist](https://www.case.org/currents/x74757)) have impacted campaign giving.
+Determine the extent to which each of the data elements related to the PG cultivation score (see [Ben Porter's Donor Cultivation Checklist](https://www.case.org/currents/x74757)) have impacted giving.
 
 # Setup and datafile
 
 ```{r setup, message = FALSE, warning = FALSE}
 library(tidyverse)
+library(e1071)
+
+# Functions from previous analysis steps
+source('code/functions.R')
 ```
 
 The data file is generated with [this code](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/generate-data.R), adapted from the import data step of [01 Initial exploration.Rmd
 ](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/01%20Initial%20exploration.Rmd).
 
 ```{r}
+filepath <- 'data/2018-07-26 PG scores for all active prospects.xlsx'
 source('code/generate-data.R')
 ```
+
+# Background
 
 The following 12 items were able to be extracted from the database:
 
@@ -27,7 +34,7 @@ The following 12 items were able to be extracted from the database:
   * Chicago home address
   * Visited by prospect manager in last 2 years
   * 5+ total visits
-  * Deep engagement (multiple degrees, parent, season tickets, etc.)
+  * Deep engagement (multiple family degrees, parent, season tickets, etc.)
   * High-level annual giving ($25K+)
   * High-level advisory board participation
   * Previous major gift ($250K+)
@@ -37,5 +44,145 @@ The following 12 items were able to be extracted from the database:
 
 Each counts as one point toward the cultivation score, which ranges from 0 to `r max(pool$CULTIVATION_SCORE) %>% I()`.
 
+The context for this analysis is to look at how giving is related to the cultivation score. Consider the following two plots (replicated from [01 Initial exploration.Rmd
+](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/01%20Initial%20exploration.Rmd)):
+
+```{r, echo = FALSE, message = FALSE}
+pool %>% filter(!is.na(CULTIVATION_SCORE) & CAMPAIGN_NEWGIFT_CMIT_CREDIT > 0) %>%
+  scatterplotter(x = 'CULTIVATION_SCORE', y = 'CAMPAIGN_NEWGIFT_CMIT_CREDIT'
+    , color = 'MG_PR_MODEL_DESC', trans = 'log10') +
+  scale_x_continuous(breaks = 0:18, minor_breaks = NULL) +
+  labs(title = 'Cultivation score versus log10 campaign giving', x = 'PG cultivation score'
+       , y = 'Campaign giving credit', color = 'MG prioritization model')
+```
+
+```{r, echo = FALSE, message = FALSE}
+pool %>% filter(!is.na(CULTIVATION_SCORE)) %>%
+  scatterplotter(x = 'CULTIVATION_SCORE', y = 'LARGEST_GIFT_OR_PAYMENT'
+    , color = 'MG_PR_MODEL_DESC', trans = 'log10plus1') +
+  scale_x_continuous(breaks = 0:18, minor_breaks = NULL) +
+  labs(title = 'Cultivation score versus log10 largest gift', x = 'PG cultivation score'
+       , y = 'Largest gift or pledge payment', color = 'MG prioritization model')
+```
+
+There is a nearly linear relationship between PG cultivation score and both campaign giving and an entity's largest gift or pledge payment. Fitting some sort of linear model will enhance our understanding of the various checklist items by estimating their relative impact.
+
 # Data exploration
 
+### Indicators
+
+Look at how each of the factors are distributed.
+
+```{r, rows.print = 100}
+pool %>% select(
+  ACTIVE_PROPOSALS, AGE, PM_VISIT_LAST_2_YRS, VISITS_5PLUS, AF_25K_GIFT, GAVE_IN_LAST_3_YRS, MG_250K_PLUS
+  , PRESIDENT_VISIT, TRUSTEE_OR_ADVISORY_BOARD, Alumnus, DEEP_ENGAGEMENT, CHICAGO_HOME
+) %>%
+  gather('Variable', 'x', 1:12) %>%
+  group_by(Variable) %>%
+  summarise(pct.yes = mean(x), yes = sum(x), no = nrow(pool) - sum(x), n = nrow(pool)) %>%
+  arrange(desc(pct.yes)) %>%
+  mutate(pct.yes = scales::percent(pct.yes))
+```
+
+As expected, alumni status is far and away the leader. I'm a bit surprised that trustee and advisory board is as high as it is. MG and president visit are the least common factors. However, they still have hundreds of observations each so I don't see a reason to drop either.
+
+### Underlying variables
+
+Exploration of the underlying variables for the indicators (that were straightforward to compute).
+
+```{r}
+# Function to produce a summary table, with higher order central moments
+summary_moments <- function(x, name) {
+  suppressPackageStartupMessages(
+    if (!require(e1071)) {
+      stop('Requires installation of package e1071')
+    }
+  )
+  data.frame(
+    name = name
+    , n = na.omit(x) %>% length()
+    , min = min(x, na.rm = TRUE)
+    , median = median(x, na.rm = TRUE)
+    , mean = mean(x, na.rm = TRUE)
+    , max = max(x, na.rm = TRUE)
+    , sd = sd(x, na.rm = TRUE)
+    , skewness = e1071::skewness(x, na.rm = TRUE)
+    , kurtosis = e1071::kurtosis(x, na.rm = TRUE)
+  )
+}
+
+# Generic function to create histograms
+histogrammer <- function(data, x, binwidth = 1, bins = NULL, color = NULL
+                         , trans = 'identity', xbreak = waiver()) {
+  vec <- paste0('data$', eval(x)) %>% parse(text = .) %>% eval()
+  data %>%
+    ggplot(aes_string(x = x, color = color)) +
+    geom_histogram(binwidth = binwidth, bins = bins, alpha = .5) +
+    geom_density(aes(y = ..count..), alpha = .5) +
+    geom_vline(xintercept = mean(vec, na.rm = TRUE), color = 'blue', linetype = 'dashed') +
+    geom_vline(xintercept = median(vec, na.rm = TRUE), color = 'purple', linetype = 'dotted') +
+    scale_x_continuous(trans = trans, breaks = xbreak)
+}
+```
+
+```{r}
+pool %>% filter(!is.na(NUMERIC_AGE)) %>%
+  histogrammer(x = 'NUMERIC_AGE', xbreak = seq(0, 200, by = 10)) +
+  labs(title = 'Age')
+```
+
+```{r}
+summary_moments(pool$NUMERIC_AGE, 'Age')
+```
+
+The age distribution is moderately right-skewed but looks fine.
+
+```{r}
+pool %>%
+  histogrammer(x = 'VISIT_COUNT') +
+  labs(title = 'Visit count') +
+  scale_y_continuous(trans = 'sqrt')
+```
+
+```{r}
+summary_moments(pool$VISIT_COUNT, 'Visits')
+```
+
+It'd be sensible to transform the x axis or otherwise get rid of those outliers.
+
+```{r}
+pool %>%
+  histogrammer(x = 'VISIT_COUNT', trans = 'sqrt', binwidth = NULL, bins = 200,
+               xbreak = c(seq(0, 10, by = 2), seq(10, 100, by = 10), seq(100, 200, by = 20))) +
+  labs(title = 'Sqrt visit, log10 count') +
+  scale_y_continuous(trans = 'log10plus1', breaks = 10^(0:20))
+```
+
+Nearly a linear decrease in visit count on a log/sqrt scale - though I'm not sure how to interpret this.
+
+```{r}
+pool %>%
+  histogrammer(x = 'YEARS_OF_GIVING') +
+  labs(title = 'Years of giving')
+```
+
+```{r}
+summary_moments(pool$YEARS_OF_GIVING, 'Total years of giving')
+```
+
+This looks fine. There are more loyal donors than I would've thought.
+
+```{r}
+summary_moments(pool$YEARS_OF_GIVING_LAST_3, 'Years of giving out of last 3')
+```
+
+```{r}
+summary_moments(pool$MG_250K_COUNT, '$250K+ major gifts')
+```
+
+```{r}
+summary_moments(pool$SEASON_TICKET_YEARS, 'Years holding season tickets')
+```
+
+### Underlying variable scatterplots

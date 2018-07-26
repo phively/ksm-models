@@ -1,5 +1,5 @@
 pool <- readxl::read_xlsx(
-  path = 'data/2018-07-19 PG scores for all active prospects.xlsx'
+  path = filepath
   , sheet = 'With'
 ) %>% mutate(
   # Create factors
