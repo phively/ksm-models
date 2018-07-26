@@ -109,6 +109,12 @@ Select
   , mg_priority.mg_pr_model_desc
   , coalesce(big_gift.largest_gift_or_payment, 0)
     As largest_gift_or_payment
+  , numeric_age
+  , coalesce(visit_count, 0) As visit_count
+  , coalesce(years_of_giving, 0) As years_of_giving
+  , coalesce(years_of_giving_last_3, 0) As years_of_giving_last_3
+  , coalesce(mg_250k_count, 0) As mg_250k_count
+  , coalesce(season_ticket_years, 0) As season_ticket_years
 From pg_checklist
 Left Join mg_id
   On mg_id.id_number = pg_checklist."Primary Entity ID"
