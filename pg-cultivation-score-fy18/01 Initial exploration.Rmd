@@ -1,6 +1,9 @@
 ---
 title: "01 Initial exploration"
-output: html_notebook
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float: TRUE
 ---
 
 # Goal
@@ -64,7 +67,7 @@ get_percentiles <- function(
     }
 ```
 
-### Cultivation score
+## Cultivation score
 
 Begin with the distribution of cultivation scores.
 
@@ -105,7 +108,7 @@ get_percentiles(
 
 PG prospects have much more density in the right tail -- I wouldn't read too much into it, though, because the PG checklist items were based on historical engagement patterns of these donors.
 
-### Affinity scores
+## Affinity scores
 
 The affinity score models general entity engagement, including student information, other relationships, and behavior.
 
@@ -147,7 +150,7 @@ pool %>% filter(!is.na(AFFINITY_SCORE)) %>%
 
 High affinity scores are much more frequent than high cultivation scores, so the two appear to be getting at different information.
 
-### Major gift identification scores
+## Major gift identification scores
 
 Let's look at similar metrics for the major gift identification score.
 
@@ -240,7 +243,7 @@ get_percentiles(
 
 Very interesting -- it looks like people who have been more heavily engaged have lower cultivation scores, perhaps because they're no longer discovery prospects?
 
-### Major gift prioritization scores
+## Major gift prioritization scores
 
 Repeat the previous analysis with the major gift prioritization scores.
 
@@ -318,7 +321,7 @@ As expected, the top tier prospects have much higher cultivation scores than the
 
 How are these measures related to campaign giving, or largest gift?
 
-### Donor campaign scatterplots
+## Donor campaign scatterplots
 
 First consider people who have given to the Campaign.
 
@@ -372,7 +375,7 @@ pool %>% filter(!is.na(MG_PR_MODEL_SCORE) & CAMPAIGN_NEWGIFT_CMIT_CREDIT > 0) %>
 
 Looks like prioritization model scores above around .4 are quite nicely associated with campaign giving amounts, which follows, as I believe past giving is one of the inputs.
 
-### All prospect campaign scatterplots
+## All prospect campaign scatterplots
 
 Repeat the above plots with all prospects, not just donors to the campaign.
 
@@ -423,7 +426,7 @@ pool %>% filter(!is.na(MG_PR_MODEL_SCORE)) %>%
 
 This has the same issues as the previous plot. Needless to say, extrapolating out to infinity is a bad idea - some sort of localized fit is appropriate.
 
-### Donor largest gift scatterplots
+## Donor largest gift scatterplots
 
 Repeat the above with largest gift on the y axis.
 
@@ -457,7 +460,7 @@ pool %>% filter(!is.na(MG_PR_MODEL_SCORE) & LARGEST_GIFT_OR_PAYMENT > 0) %>%
 
 Largest gift or payment does not correlate as well with affinity score as Campaign giving. One possible avenue of exploration would be to look only at largest gift within the campaign counting period, but this may not be that interesting -- even with the full data, the conclusions are still the same as above.
 
-### All prospect largest gift scatterplots
+## All prospect largest gift scatterplots
 
 Repeat the above but leaving in the non-donors.
 
