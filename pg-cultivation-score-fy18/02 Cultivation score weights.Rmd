@@ -1,6 +1,9 @@
 ---
 title: "02 Cultivation score weights"
-output: html_notebook
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float: TRUE
 ---
 
 # Goal
@@ -11,9 +14,10 @@ Determine the extent to which each of the data elements related to the PG cultiv
 
 ```{r setup, message = FALSE, warning = FALSE}
 library(tidyverse)
+library(gridExtra)
 library(e1071)
 
-# Functions from previous analysis steps
+# Functions adapted from previous analysis steps
 source('code/functions.R')
 ```
 
@@ -50,7 +54,7 @@ The context for this analysis is to look at how giving is related to the cultiva
 ```{r, echo = FALSE, message = FALSE}
 pool %>% filter(!is.na(CULTIVATION_SCORE) & CAMPAIGN_NEWGIFT_CMIT_CREDIT > 0) %>%
   scatterplotter(x = 'CULTIVATION_SCORE', y = 'CAMPAIGN_NEWGIFT_CMIT_CREDIT'
-    , color = 'MG_PR_MODEL_DESC', trans = 'log10') +
+    , color = 'MG_PR_MODEL_DESC', ytrans = 'log10', ylabels = scales::dollar) +
   scale_x_continuous(breaks = 0:18, minor_breaks = NULL) +
   labs(title = 'Cultivation score versus log10 campaign giving', x = 'PG cultivation score'
        , y = 'Campaign giving credit', color = 'MG prioritization model')
@@ -59,7 +63,7 @@ pool %>% filter(!is.na(CULTIVATION_SCORE) & CAMPAIGN_NEWGIFT_CMIT_CREDIT > 0) %>
 ```{r, echo = FALSE, message = FALSE}
 pool %>% filter(!is.na(CULTIVATION_SCORE)) %>%
   scatterplotter(x = 'CULTIVATION_SCORE', y = 'LARGEST_GIFT_OR_PAYMENT'
-    , color = 'MG_PR_MODEL_DESC', trans = 'log10plus1') +
+    , color = 'MG_PR_MODEL_DESC', ytrans = 'log10plus1', ylabels = scales::dollar) +
   scale_x_continuous(breaks = 0:18, minor_breaks = NULL) +
   labs(title = 'Cultivation score versus log10 largest gift', x = 'PG cultivation score'
        , y = 'Largest gift or pledge payment', color = 'MG prioritization model')
@@ -69,7 +73,7 @@ There is a nearly linear relationship between PG cultivation score and both camp
 
 # Data exploration
 
-### Indicators
+## Indicators
 
 Look at how each of the factors are distributed.
 
@@ -87,18 +91,22 @@ pool %>% select(
 
 As expected, alumni status is far and away the leader. I'm a bit surprised that trustee and advisory board is as high as it is. MG and president visit are the least common factors. However, they still have hundreds of observations each so I don't see a reason to drop either.
 
-### Underlying variables
+## Underlying variables
 
-Exploration of the underlying variables for the indicators (that were straightforward to compute).
+Exploration of the underlying variables for the indicators (that were straightforward to compute). The blue lines indicate the mean, and the purple ones the median.
 
 ```{r}
 # Function to produce a summary table, with higher order central moments
-summary_moments <- function(x, name) {
+summary_moments <- function(x, name = NULL) {
+  # Requires e1071 for the skewness and kurtosis functions
   suppressPackageStartupMessages(
     if (!require(e1071)) {
       stop('Requires installation of package e1071')
     }
   )
+  # If no name passed use the name of x
+  if (is.null(name)) {name <- quote(x) %>% deparse()}
+  # Data frame to be returned
   data.frame(
     name = name
     , n = na.omit(x) %>% length()
@@ -109,7 +117,8 @@ summary_moments <- function(x, name) {
     , sd = sd(x, na.rm = TRUE)
     , skewness = e1071::skewness(x, na.rm = TRUE)
     , kurtosis = e1071::kurtosis(x, na.rm = TRUE)
-  )
+    , NAs = is.na(x) %>% sum()
+  ) %>% return()
 }
 
 # Generic function to create histograms
@@ -136,13 +145,12 @@ pool %>% filter(!is.na(NUMERIC_AGE)) %>%
 summary_moments(pool$NUMERIC_AGE, 'Age')
 ```
 
-The age distribution is moderately right-skewed but looks fine.
+The age distribution is moderately right-skewed but looks fine. For a quick fix the NAs could be imputed as the group mean.
 
 ```{r}
 pool %>%
   histogrammer(x = 'VISIT_COUNT') +
-  labs(title = 'Visit count') +
-  scale_y_continuous(trans = 'sqrt')
+  labs(title = 'Visit count')
 ```
 
 ```{r}
@@ -174,15 +182,249 @@ summary_moments(pool$YEARS_OF_GIVING, 'Total years of giving')
 This looks fine. There are more loyal donors than I would've thought.
 
 ```{r}
+pool %>%
+  histogrammer(x = 'YEARS_OF_GIVING_LAST_3') +
+  labs(title = 'Years of giving last 3')
+```
+
+```{r}
 summary_moments(pool$YEARS_OF_GIVING_LAST_3, 'Years of giving out of last 3')
+```
+
+Mostly nondonors, unsurprisingly.
+
+```{r}
+pool %>%
+  histogrammer(x = 'MG_250K_COUNT') +
+  labs(title = 'Count of $250K+ major gifts') +
+  scale_y_continuous(trans = 'log10plus1', breaks = 10^(0:5), labels = 10^(0:5))
 ```
 
 ```{r}
 summary_moments(pool$MG_250K_COUNT, '$250K+ major gifts')
 ```
 
+```{r, rows.print = 100}
+pool %>% group_by(MG_250K_COUNT) %>% mutate(n = 1) %>%
+  summarise(
+    total = sum(n)
+    , proportion = {sum(n) / nrow(pool)} %>% scales::percent()
+  )
+```
+
+Extremely few people make a single $250K+ gift, much less multiple ones.
+
+```{r}
+pool %>%
+  histogrammer(x = 'SEASON_TICKET_YEARS', xbreak = seq(0, 20, by = 2)) +
+  labs(title = 'Years holding season tickets') +
+  scale_y_continuous(trans = 'log10plus1', breaks = 10^(0:20))
+```
+
 ```{r}
 summary_moments(pool$SEASON_TICKET_YEARS, 'Years holding season tickets')
 ```
 
-### Underlying variable scatterplots
+That jump at 10 years is odd. Perhaps season tickets have only been consistently tracked for about 10 years?
+
+## Underlying variable scatterplots
+
+```{r}
+pool %>% filter(!is.na(NUMERIC_AGE)) %>%
+  scatterplotter(x = 'NUMERIC_AGE', y = 'CAMPAIGN_NEWGIFT_CMIT_CREDIT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(NUMERIC_AGE)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Age versus campaign giving')
+```
+
+```{r}
+pool %>% filter(!is.na(NUMERIC_AGE)) %>%
+  scatterplotter(x = 'NUMERIC_AGE', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(NUMERIC_AGE)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Age versus largest gift')
+```
+
+As usual, age is positively associated with giving. The outlier `r pool$NUMERIC_AGE %>% max(na.rm = TRUE) %>% I()`-year-old should probably be removed.
+
+```{r}
+max_age <- 110
+pool %>% filter(NUMERIC_AGE <= max_age) %>%
+  scatterplotter(x = 'NUMERIC_AGE', y = 'LARGEST_GIFT_OR_PAYMENT'
+                 , color = 'MG_PR_MODEL_DESC', ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(NUMERIC_AGE)), color = 'blue', linetype = 'dashed') +
+  labs(title = bquote('Age versus largest gift' ~ (age <= .(max_age)) ))
+```
+
+For visits, based on the above exploration visit count needs a transformation.
+
+```{r}
+pool %>%
+  scatterplotter(x = 'VISIT_COUNT', y = 'CAMPAIGN_NEWGIFT_CMIT_CREDIT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(VISIT_COUNT)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Log-sqrt visit count versus campaign giving') +
+  scale_x_sqrt()
+```
+
+```{r}
+pool %>%
+  scatterplotter(x = 'VISIT_COUNT', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(VISIT_COUNT)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Log-sqrt visit count versus largest gift') +
+  scale_x_sqrt()
+```
+
+```{r}
+pool %>%
+  scatterplotter(x = 'VISIT_COUNT', y = 'CAMPAIGN_NEWGIFT_CMIT_CREDIT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(VISIT_COUNT)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Log-log visit count versus campaign giving') +
+  scale_x_continuous(trans = 'log10plus1', breaks = c(0, 1, 10, 50, 100, 150, 200))
+```
+
+```{r}
+pool %>%
+  scatterplotter(x = 'VISIT_COUNT', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(VISIT_COUNT)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Log-log visit count versus largest gift') +
+  scale_x_continuous(trans = 'log10plus1', breaks = c(0, 1, 10, 50, 100, 150, 200))
+```
+
+The log-log plots look quite good. Visits $\geq$ 100 are outliers, but at first glance don't appear influential on the log-log scale (easy to test with e.g. Cook's D).
+
+```{r}
+pool %>%
+  scatterplotter(x = 'YEARS_OF_GIVING', y = 'CAMPAIGN_NEWGIFT_CMIT_CREDIT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(YEARS_OF_GIVING)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Years of giving versus campaign giving') +
+  scale_x_sqrt()
+```
+
+```{r}
+pool %>%
+  scatterplotter(x = 'YEARS_OF_GIVING', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(YEARS_OF_GIVING)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Years of giving versus largest gift') +
+  scale_x_sqrt()
+```
+
+The square root transformation does well for campaign giving, but not as well for largest gift or payment.
+
+```{r}
+# Box-Cox test for transformations
+boxcox_lambdas <- seq(-1, 1, by = .01)
+boxcox_lm <- lm(I(LARGEST_GIFT_OR_PAYMENT + 1) ~ YEARS_OF_GIVING, data = pool) %>%
+  MASS::boxcox(lambda = boxcox_lambdas, plotit = FALSE)
+maxLL <- boxcox_lm$x[which(boxcox_lm$y == max(boxcox_lm$y))]
+
+# Plot results
+boxcox_lm %>%
+  unlist() %>%
+  matrix(nrow = length(boxcox_lambdas)) %>%
+  data.frame() %>%
+  select(x = X1, y = X2) %>%
+  ggplot(aes(x = x, y = y)) +
+  geom_line() +
+  geom_vline(aes(xintercept = x[which(y == max(y))]), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Box-Cox analysis', x = expression(lambda), y = 'log Likelihood')
+```
+
+$\lambda =$ `r maxLL %>% I()` is pretty close to a log transformation.
+
+```{r}
+# Best Box-Cox transformation, adding 1 so the response variable is strictly positive
+boxcoxbest_trans <- function(x) {
+  scales::trans_new(
+    'boxcoxbest'
+    , transform = function(x) {(x + 1)^maxLL}
+    , inverse = function(x) {(x + 1)^(1/maxLL)}
+  )
+}
+```
+
+```{r}
+grid.arrange(
+# Plot Box-Cox results
+  pool %>%
+    scatterplotter(x = 'YEARS_OF_GIVING', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
+                   , ytrans = 'log10plus1', ylabels = scales::dollar) +
+    geom_vline(aes(xintercept = mean(YEARS_OF_GIVING)), color = 'blue', linetype = 'dashed') +
+    labs(title = 'Years of giving versus campaign giving, Box-Cox transformation', y = 'Largest gift') +
+    scale_x_continuous(trans = 'boxcoxbest', breaks = c(0, 10))
+# Plot log10 results
+  , pool %>%
+    scatterplotter(x = 'YEARS_OF_GIVING', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
+                   , ytrans = 'log10plus1', ylabels = scales::dollar) +
+    geom_vline(aes(xintercept = mean(YEARS_OF_GIVING)), color = 'blue', linetype = 'dashed') +
+    labs(title = 'Years of giving versus campaign giving, log transformation', y = 'Largest gift') +
+    scale_x_continuous(trans = 'log10plus1')
+)
+```
+
+After all that neither look linear, though they do look nearly linear around the mean.
+
+```{r}
+pool %>% mutate(last_3_yrs = factor(YEARS_OF_GIVING_LAST_3)) %>%
+  ggplot(aes(x = last_3_yrs, y = CAMPAIGN_NEWGIFT_CMIT_CREDIT, color = MG_PR_MODEL_DESC)) +
+  geom_boxplot() +
+  facet_grid(. ~ MG_PR_MODEL_DESC) +
+  scale_y_continuous(trans = 'log10plus1', labels = scales::dollar, breaks = 10^(0:20)) +
+  labs(title = 'Years of giving of last 3 versus campaign giving')
+```
+
+```{r}
+pool %>% mutate(last_3_yrs = factor(YEARS_OF_GIVING_LAST_3)) %>%
+  ggplot(aes(x = last_3_yrs, y = LARGEST_GIFT_OR_PAYMENT, color = MG_PR_MODEL_DESC)) +
+  geom_boxplot() +
+  facet_grid(. ~ MG_PR_MODEL_DESC) +
+  scale_y_continuous(trans = 'log10plus1', labels = scales::dollar, breaks = 10^(0:20)) +
+  labs(title = 'Years of giving of last 3 versus largest gift')
+```
+
+I see a main effect for campaign giving.
+
+```{r}
+pool %>%
+  scatterplotter(x = 'MG_250K_COUNT', y = 'CAMPAIGN_NEWGIFT_CMIT_CREDIT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(MG_250K_COUNT)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Count of $250K+ gifts versus campaign giving') +
+  scale_x_sqrt()
+```
+
+```{r}
+pool %>%
+  scatterplotter(x = 'MG_250K_COUNT', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(MG_250K_COUNT)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Count of $250K+ gifts versus campaign giving') +
+  scale_x_sqrt()
+```
+
+As seen above, pretty much all of the observations are outliers. Might make sense to leave this one discretized.
+
+```{r}
+pool %>%
+  scatterplotter(x = 'SEASON_TICKET_YEARS', y = 'CAMPAIGN_NEWGIFT_CMIT_CREDIT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(SEASON_TICKET_YEARS)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Season ticket years versus campaign giving') +
+  scale_x_sqrt()
+```
+
+```{r}
+pool %>%
+  scatterplotter(x = 'SEASON_TICKET_YEARS', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
+                 , ytrans = 'log10plus1', ylabels = scales::dollar) +
+  geom_vline(aes(xintercept = mean(SEASON_TICKET_YEARS)), color = 'blue', linetype = 'dashed') +
+  labs(title = 'Season ticket years versus campaign giving') +
+  scale_x_sqrt()
+```
+
+This looks fine.

@@ -1,11 +1,11 @@
 # Generic function to generate scatterplots of interest
-scatterplotter <- function(data, x, y, color, trans) {
+scatterplotter <- function(data, x, y, color = NULL, ytrans = 'identity', ylabels = waiver()) {
   data %>%
     ggplot(aes_string(x = x, y = y, color = color)) +
     geom_point(alpha = .5) +
     geom_smooth(color = 'black') +
     geom_smooth(method = 'lm', color = 'red') +
-    scale_y_continuous(trans = trans, breaks = c(0, 10^(0:12)), labels = scales::dollar)
+    scale_y_continuous(trans = ytrans, breaks = c(0, 10^(0:12)), labels = ylabels)
 }
 
 # Log10 transformation after adding 1
