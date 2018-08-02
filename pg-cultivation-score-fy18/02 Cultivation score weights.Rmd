@@ -16,6 +16,7 @@ Determine the extent to which each of the data elements related to the PG cultiv
 library(tidyverse)
 library(gridExtra)
 library(e1071)
+library(wranglR)
 
 # Functions adapted from previous analysis steps
 source('code/functions.R')
@@ -415,7 +416,7 @@ pool %>%
                  , ytrans = 'log10plus1', ylabels = scales::dollar) +
   geom_vline(aes(xintercept = mean(SEASON_TICKET_YEARS)), color = 'blue', linetype = 'dashed') +
   labs(title = 'Season ticket years versus campaign giving') +
-  scale_x_sqrt()
+  scale_x_continuous(breaks = seq(0, 100, by = 2))
 ```
 
 ```{r}
@@ -424,7 +425,89 @@ pool %>%
                  , ytrans = 'log10plus1', ylabels = scales::dollar) +
   geom_vline(aes(xintercept = mean(SEASON_TICKET_YEARS)), color = 'blue', linetype = 'dashed') +
   labs(title = 'Season ticket years versus campaign giving') +
-  scale_x_sqrt()
+  scale_x_continuous(breaks = seq(0, 100, by = 2))
 ```
 
 This looks fine.
+
+## Data exploration takeaways
+
+  * Missing age values can be imputed as mean age
+  * The 113-year-old is an outlier
+  * Visit count could use log transform
+  * Years of giving could use sqrt transform
+  * $250K+ gifts is a binary indicator
+
+# Modeling ground rules
+
+I'll outline some basic methodology in advance of modeling to try to account for [researcher degrees of freedom](http://journals.sagepub.com/doi/full/10.1177/0956797611417632).
+
+As seen above, both campaign giving and largest lifetime gift have a strong linear relationship with the cultivation score, formulated as a 0 to `r max(pool$CULTIVATION_SCORE) %>% I()` point scale. Currently, all criteria count as a single point (equally weighted) but I suspect they impact actual giving behavior differently. I propose four models:
+
+  1) Linear regression of campaign giving on cultivation score variables
+  2) Linear regression of campaign on all available explanatory variables, essentially looking at the cultivation score variables controlling for the preexisting modeled scores
+  3) Linear regression of largest cash transaction on cultivation score variables
+  4) Linear regression of largest cash transaction on all available explanatory variables, again to control for the preexisting modeled scores
+
+If a given explanatory variable has the same coefficient sign and similar nonzero magnitudes in all models, I'll take this as evidence of an association with giving behavior.
+
+After withholding a random 20% of the data as a test set, I'll use ten-fold cross-validation to determine which variables should be included in each model. Model performance will be determined based on out-of-sample mean squared error, defined as usual:
+
+$$ {\text{MSE}} = \frac{1}{n} \sum_{i=1}^{n} \left( Y_i - \hat{Y}_i \right)^2 $$
+
+The 20% test set will be used to confirm the cross-validation results, and then final models will be constructed on the entire dataset for comparison.
+
+## Data cleanup
+
+First, perform some quick data clean-up.
+
+```{r}
+mdat <- pool %>% mutate(
+  # Impute missing ages as mean age
+  NUMERIC_AGE = case_when(
+    !is.na(NUMERIC_AGE) ~ NUMERIC_AGE
+    , TRUE ~ mean(NUMERIC_AGE, na.rm = TRUE)
+  )
+) %>% select(
+  # Drop unhelpful fields
+  -ID_NUMBER, -PROSPECT_ID, -PROSPECT_NAME, -NU_DEG, -NU_DEG_SPOUSE, -POTENTIAL_INTEREST_AREAS
+  , -PREF_NAME_SORT, -MG_ID_MODEL_YEAR, -MG_ID_MODEL_DESC, -MG_PR_MODEL_YEAR, -MG_PR_MODEL_DESC
+)
+```
+
+I'll use my `wranglR::KFoldXVal` function to create the cross-validation groups.
+
+```{r}
+k <- 11
+# Create k groups: first is 20% of the data (prop = .2) and the others are equally sized
+xval_inds <- pool %>% wranglR::KFoldXVal(k = k, prop = .2, seed = 12644)
+holdout_inds <- xval_inds[1]
+xval_inds <- xval_inds[2:k]
+# Results
+c(holdout_inds, xval_inds) %>% summary
+```
+
+Group 1 is the holdout set, and the other `r {k - 1} %>% I()` will be used for cross-validation.
+
+Finally, I'll create a quick function to compute MSE.
+
+```{r}
+calc_mse <- function(y, yhat) {
+  mean(
+    (y - yhat)^2, na.rm = TRUE
+  )
+}
+```
+
+
+# Campaign linear model
+
+
+# Campaign linear model with all predictors
+
+
+# Largest transaction linear model
+
+
+# Largest transaction linear model with all predictors
+
