@@ -3,7 +3,8 @@ title: "02 Cultivation score weights"
 output:
   html_notebook:
     toc: TRUE
-    toc_float: TRUE
+    toc_float:
+      collapsed: FALSE
 ---
 
 # Goal
@@ -17,6 +18,7 @@ library(tidyverse)
 library(gridExtra)
 library(e1071)
 library(wranglR)
+library(foreach)
 
 # Functions adapted from previous analysis steps
 source('code/functions.R')
@@ -481,13 +483,13 @@ I'll use my `wranglR::KFoldXVal` function to create the cross-validation groups.
 k <- 11
 # Create k groups: first is 20% of the data (prop = .2) and the others are equally sized
 xval_inds <- pool %>% wranglR::KFoldXVal(k = k, prop = .2, seed = 12644)
-holdout_inds <- xval_inds[1]
+oos_inds <- xval_inds[[1]]
 xval_inds <- xval_inds[2:k]
 # Results
-c(holdout_inds, xval_inds) %>% summary
+c(list(oos_inds), xval_inds) %>% summary
 ```
 
-Group 1 is the holdout set, and the other `r {k - 1} %>% I()` will be used for cross-validation.
+Group 1 is the out-of-sample validation set, and the other `r {k - 1} %>% I()` will be used for cross-validation.
 
 Finally, I'll create a quick function to compute MSE.
 
@@ -500,14 +502,127 @@ calc_mse <- function(y, yhat) {
 ```
 
 
-# Campaign linear model
+# Campaign linear models
 
+## Cultivation score predictors {#cultivation-score-predictors}
 
-# Campaign linear model with all predictors
+Regress campaign giving against each of the cultivation score predictors.
 
+```{r}
+# List to store campaign linear models
+clms <- list()
+for(i in 1:length(xval_inds)) {
+  # Create linear model excluding the holdout and out-of-sample indices
+  clms[[i]] <- mdat %>%
+    filter(row_number(CULTIVATION_SCORE) %nin% c(oos_inds, xval_inds[[i]])) %>%
+    lm(
+      log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+        ACTIVE_PROPOSALS +
+        AGE +
+        PM_VISIT_LAST_2_YRS +
+        VISITS_5PLUS +
+        AF_25K_GIFT +
+        GAVE_IN_LAST_3_YRS +
+        MG_250K_PLUS +
+        PRESIDENT_VISIT +
+        TRUSTEE_OR_ADVISORY_BOARD +
+        Alumnus +
+        DEEP_ENGAGEMENT +
+        CHICAGO_HOME
+      , data = .
+    )
+}
+```
 
-# Largest transaction linear model
+The full (and hard to read) results for each model are in the [appendix](#campaign-full-results).
 
+We can extract a few parameters of interest.
 
-# Largest transaction linear model with all predictors
+```{r}
+data.frame(r.squared = lapply(clms, function(x) summary(x)$r.squared) %>% unlist()) %>%
+  ggplot(aes(x = r.squared)) + 
+  geom_density() +
+  geom_text(y = seq(10, 100, by = 10), label = 1:10, color = 'blue') +
+  geom_vline(aes(xintercept = mean(r.squared)), color = 'blue', linetype = 'dashed', alpha = .5) +
+  xlim(c(.45, .48)) +
+  labs(title = bquote('Density plot of' ~ r^2 ~ 'results, mean' ~
+    .(lapply(clms, function(x) {summary(x)$r.squared}) %>% unlist() %>% mean() %>% round(3))
+  )
+)
+```
 
+The average $r^2 =$ `r lapply(clms, function(x) {summary(x)$r.squared}) %>% unlist() %>% mean() %>% round(3) %>% I()` is quite a good result.
+
+```{r, fig.width = 8}
+clms_coefs <- foreach(i = 1:length(clms), .combine = 'rbind') %do% {
+  tmp <- summary(clms[[i]])$coefficients
+  data.frame(tmp) %>%
+  mutate(
+    variable = rownames(tmp)
+    , model = i
+  ) %>% select(
+    model
+    , variable
+    , beta.hat = Estimate
+    , SE = Std..Error
+    , t.val = t.value
+    , Pr.t = Pr...t..
+  ) %>% return()
+}
+# Plot coefficient results
+clms_coefs %>%
+  ggplot(aes(x = variable, y = beta.hat, color = factor(model))) +
+  geom_point() +
+  geom_hline(yintercept = 0, alpha = .5) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+p.sig <- 1E-3
+# Coefficient + sign counts
+clms_coefs %>%
+  group_by(variable) %>%
+  summarise(
+    `+` = sum(sign(beta.hat) == 1 & Pr.t < p.sig)
+    , `0` = sum(Pr.t >= p.sig)
+    , `-` = sum(sign(beta.hat) < 0 & Pr.t < p.sig)
+  )
+```
+
+The coefficients are extremely tightly clustered within each cross-validation set. Interestingly, age and alumni status both have negative coefficients. All are significant at $p =$ `r p.sig %>% I()`.
+
+Here are the actual predictions:
+
+```{r}
+clms_preds <- list()
+for (i in 1:length(clms)) {
+  clms_preds[[i]] <- data.frame(
+    model = i
+    , preds = clms[[i]] %>% predict(newdata = mdat[xval_inds[[i]], ])
+    , truth = mdat %>% filter(row_number(CULTIVATION_SCORE) %in% xval_inds[[i]]) %>% select(CAMPAIGN_NEWGIFT_CMIT_CREDIT) %>% unlist() %>% log10plus1()
+  )
+}
+# Compute MSE
+clms_preds %>% lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>% unlist() %>% data.frame(MSE = .) %>%
+  ggplot(aes(x = MSE)) +
+  geom_density() +
+  geom_rug()
+```
+
+## All predictors
+
+# Transaction linear models
+
+## Cultivation score predictors
+
+## All predictors
+
+# Appendix
+
+## Campaign full results {#campaign-full-results}
+
+[Back](#cultivation-score-predictors)
+
+```{r}
+lapply(clms, function(x) summary(x))
+```
