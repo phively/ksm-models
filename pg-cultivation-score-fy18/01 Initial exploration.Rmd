@@ -3,7 +3,8 @@ title: "01 Initial exploration"
 output:
   html_notebook:
     toc: TRUE
-    toc_float: TRUE
+    toc_float:
+      collapsed: FALSE
 ---
 
 # Goal

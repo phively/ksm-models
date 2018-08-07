@@ -544,10 +544,12 @@ data.frame(r.squared = lapply(clms, function(x) summary(x)$r.squared) %>% unlist
   geom_density() +
   geom_text(y = seq(10, 100, by = 10), label = 1:10, color = 'blue') +
   geom_vline(aes(xintercept = mean(r.squared)), color = 'blue', linetype = 'dashed', alpha = .5) +
+  geom_rug(color = 'blue') +
   xlim(c(.45, .48)) +
   labs(title = bquote('Density plot of' ~ r^2 ~ 'results, mean' ~
-    .(lapply(clms, function(x) {summary(x)$r.squared}) %>% unlist() %>% mean() %>% round(3))
-  )
+      .(lapply(clms, function(x) {summary(x)$r.squared}) %>% unlist() %>% mean() %>% round(3))
+    )
+    , x = bquote(r^2)
 )
 ```
 
@@ -574,10 +576,15 @@ clms_coefs %>%
   ggplot(aes(x = variable, y = beta.hat, color = factor(model))) +
   geom_point() +
   geom_hline(yintercept = 0, alpha = .5) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(
+    title = 'Coefficient estimates per cross-validation model'
+    , y = bquote(hat(beta))
+    , color = 'cross-validation sample'
+  )
 ```
 
-```{r}
+```{r, rows.print = 100}
 p.sig <- 1E-3
 # Coefficient + sign counts
 clms_coefs %>%
