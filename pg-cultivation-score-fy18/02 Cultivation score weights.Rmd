@@ -32,7 +32,7 @@ filepath <- 'data/2018-07-26 PG scores for all active prospects.xlsx'
 source('code/generate-data.R')
 ```
 
-# Background
+# Background {#background}
 
 The following 12 items were able to be extracted from the database:
 
@@ -82,8 +82,9 @@ Look at how each of the factors are distributed.
 
 ```{r, rows.print = 100}
 pool %>% select(
-  ACTIVE_PROPOSALS, AGE, PM_VISIT_LAST_2_YRS, VISITS_5PLUS, AF_25K_GIFT, GAVE_IN_LAST_3_YRS, MG_250K_PLUS
-  , PRESIDENT_VISIT, TRUSTEE_OR_ADVISORY_BOARD, Alumnus, DEEP_ENGAGEMENT, CHICAGO_HOME
+  ACTIVE_PROPOSALS, AGE, PM_VISIT_LAST_2_YRS, VISITS_5PLUS, AF_25K_GIFT, GAVE_IN_LAST_3_YRS
+  , MG_250K_PLUS, PRESIDENT_VISIT, TRUSTEE_OR_ADVISORY_BOARD, Alumnus, DEEP_ENGAGEMENT
+  , CHICAGO_HOME
 ) %>%
   gather('Variable', 'x', 1:12) %>%
   group_by(Variable) %>%
@@ -179,7 +180,7 @@ pool %>%
 ```
 
 ```{r}
-summary_moments(pool$YEARS_OF_GIVING, 'Total years of giving')
+summary_moments(pool$YEARS_OF_GIVING, 'Years of giving')
 ```
 
 This looks fine. There are more loyal donors than I would've thought.
@@ -542,7 +543,7 @@ We can extract a few parameters of interest.
 data.frame(r.squared = lapply(clms, function(x) summary(x)$r.squared) %>% unlist()) %>%
   ggplot(aes(x = r.squared)) + 
   geom_density() +
-  geom_text(y = seq(10, 100, by = 10), label = 1:10, color = 'blue') +
+  geom_text(y = seq(10, 100, length.out = k - 1), label = 1:(k - 1), color = 'blue') +
   geom_vline(aes(xintercept = mean(r.squared)), color = 'blue', linetype = 'dashed', alpha = .5) +
   geom_rug(color = 'blue') +
   xlim(c(.45, .48)) +
@@ -609,20 +610,157 @@ for (i in 1:length(clms)) {
     , truth = mdat %>% filter(row_number(CULTIVATION_SCORE) %in% xval_inds[[i]]) %>% select(CAMPAIGN_NEWGIFT_CMIT_CREDIT) %>% unlist() %>% log10plus1()
   )
 }
+
+# Compute MSE
+clms_errs <- data.frame(
+  insample = clms %>%
+    lapply(function(x) calc_mse(y = model.frame(x)[, 1], yhat = predict(x))) %>%
+    unlist()
+  , outsample = clms_preds %>% lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>% unlist()
+) %>% gather('type', 'MSE', 1:2)
+
 # Compute MSE
 clms_preds %>% lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>% unlist() %>% data.frame(MSE = .) %>%
   ggplot(aes(x = MSE)) +
   geom_density() +
-  geom_rug()
+  geom_text(y = seq(.1, 1, length.out = k - 1), label = 1:(k - 1), color = 'blue') +
+  geom_vline(aes(xintercept = mean(MSE)), color = 'blue', linetype = 'dashed', alpha = .5) +
+  geom_rug(color = 'blue') +
+  labs(
+    title = bquote('MSE across samples, mean =' ~
+        .(clms_preds %>% lapply(function(x)
+          calc_mse(y = x$truth, yhat = x$preds)) %>% unlist() %>% mean() %>% round(2)
+        )
+      )
+  )
 ```
 
+```{r}
+# In-sample MSEs
+clms_errs %>% filter(type == 'insample') %>%
+  ggplot(aes(x = MSE)) +
+  geom_density() +
+  geom_text(y = seq(5, 75, length.out = k - 1), label = 1:(k - 1), color = 'blue') +
+  geom_vline(aes(xintercept = mean(MSE)), color = 'blue', linetype = 'dashed', alpha = .5) +
+  geom_rug(color = 'blue') +
+  labs(
+    title = bquote('MSE across samples, mean =' ~
+        .(clms_errs %>% filter(type == 'insample') %>% select(MSE) %>% unlist() %>% mean() %>% round(2)
+        )
+      )
+  )
+```
+```{r}
+# Out-of-sample MSEs
+clms_errs %>% filter(type == 'outsample') %>%
+  ggplot(aes(x = MSE)) +
+  geom_density() +
+  geom_text(y = seq(.1, 1.5, length.out = k - 1), label = 1:(k - 1), color = 'blue') +
+  geom_vline(aes(xintercept = mean(MSE)), color = 'blue', linetype = 'dashed', alpha = .5) +
+  geom_rug(color = 'blue') +
+  labs(
+    title = bquote('MSE across samples, mean =' ~
+        .(clms_errs %>% filter(type == 'outsample') %>% select(MSE) %>% unlist() %>% mean() %>% round(2)
+        )
+      )
+  )
+```
+
+In-sample performance is extremely optimistic.
+
+```{r}
+# Merge the list of predicted results into one large data frame
+clms_insample <- foreach(i = 1:length(clms), .combine = 'rbind') %do% {
+  data.frame(
+    model = i
+    , preds = clms[[i]] %>% predict()
+    , truth = model.frame(clms[[i]])[, 1]
+  )
+}
+clms_outsample <- foreach(i = 1:length(clms), .combine = 'rbind') %do% {
+  clms_preds[[i]]
+}
+```
+```{r}
+# Plot residuals vs fitted for in-sample data
+clms_insample %>% mutate(residuals = truth - preds) %>%
+  ggplot(aes(x = preds, y = residuals, color = factor(model))) +
+  geom_point(alpha = .01) +
+  geom_smooth(se = FALSE) +
+  labs(title = 'In-sample residuals versus fitted', color = 'cross-validation sample')
+```
+```{r}
+# Plot residuals vs fitted for out-of-sample data
+clms_outsample %>% mutate(residuals = truth - preds) %>%
+  ggplot(aes(x = preds, y = residuals, color = factor(model))) +
+  geom_point(alpha = .1) +
+  geom_smooth(se = FALSE) +
+  labs(title = 'Out-of-sample residuals versus fitted', color = 'cross-validation sample')
+```
+
+At first glance, the results appear to be quite concerning (especially that out-of-sample trend!). Upon second glance, while still sobering it really just reinforces what we'd observed in the first of the two plots in the [Background](#background) section: campaign giving is decidedly nonlinear as cultivation scores approach their high/low limits. As seen above, the underlying factors should be transformed, and possibly modeled nonlinearly (splines).
+
+```{r}
+# In-sample Q-Q plot with standardized residuals
+clms_insample %>% mutate(st.resid = (truth - preds)/sd(truth - preds)) %>%
+  ggplot(aes(sample = st.resid, color = factor(model))) +
+  geom_qq(alpha = .05) +
+  geom_qq_line() +
+  labs(title = 'In-sample Q-Q plot with standardized residuals'
+       , color = 'cross-validation sample')
+```
+
+```{r}
+# Out-of-sample Q-Q plot
+clms_outsample %>% mutate(st.resid = (truth - preds)/sd(truth - preds)) %>%
+  ggplot(aes(sample = st.resid, color = factor(model))) +
+  geom_qq(alpha = .05) +
+  geom_qq_line() +
+  labs(title = 'Out-of-sample Q-Q plot with standardized residuals'
+       , color = 'cross-validation sample')
+```
+
+The quantile-quantile plot further illustrates the issue. The drift above the reference line to the left and below it to the right suggest less density than expected in the tails, which follows given that the range is bound -- it's not possible to give less than a nondonor or (for practical purposes) more than a 9-figure donor.
+
+The story is completely different when looking only at those who actually gave:
+
+```{r}
+# In-sample Q-Q plot excluding nondonors
+clms_insample %>% mutate(st.resid = (truth - preds)/sd(truth - preds)) %>% filter(truth > 0) %>%
+  ggplot(aes(sample = st.resid, color = factor(model))) +
+  geom_qq(alpha = .05) +
+  geom_qq_line() +
+  labs(title = 'In-sample Q-Q plot, donors only'
+       , color = 'cross-validation sample')
+```
+
+```{r}
+# Out-of-sample Q-Q plot excluding nondonors
+clms_outsample %>% mutate(st.resid = (truth - preds)/sd(truth - preds)) %>% filter(truth > 0) %>%
+  ggplot(aes(sample = st.resid, color = factor(model))) +
+  geom_qq(alpha = .05) +
+  geom_qq_line() +
+  labs(title = 'Out-of-sample Q-Q plot, donors only'
+       , color = 'cross-validation sample')
+```
+
+This is quite a bit nicer, suggesting only slight skewness (in different directions for in-sample versus out-of-sample, interestingly).
+
+**Takeaway.** When modeling giving amounts in the future, consider fitting a conditional model. Something along the lines of:
+
+$$ E(\text{giving amount} ~ | ~ \text{donor status} = 1) $$
+
 ## All predictors
+
+## Thoughts
 
 # Transaction linear models
 
 ## Cultivation score predictors
 
 ## All predictors
+
+## Thoughts
 
 # Appendix
 
