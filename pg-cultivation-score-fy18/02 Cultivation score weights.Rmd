@@ -19,6 +19,7 @@ library(gridExtra)
 library(e1071)
 library(wranglR)
 library(foreach)
+library(splines)
 
 # Functions adapted from previous analysis steps
 source('code/functions.R')
@@ -474,7 +475,7 @@ mdat <- pool %>% mutate(
 ) %>% select(
   # Drop unhelpful fields
   -ID_NUMBER, -PROSPECT_ID, -PROSPECT_NAME, -NU_DEG, -NU_DEG_SPOUSE, -POTENTIAL_INTEREST_AREAS
-  , -PREF_NAME_SORT, -MG_ID_MODEL_YEAR, -MG_ID_MODEL_DESC, -MG_PR_MODEL_YEAR, -MG_PR_MODEL_DESC
+  , -PREF_NAME_SORT, -MG_ID_MODEL_YEAR, -MG_ID_MODEL_SCORE, -MG_PR_MODEL_YEAR, -MG_PR_MODEL_SCORE
 )
 ```
 
@@ -502,10 +503,173 @@ calc_mse <- function(y, yhat) {
 }
 ```
 
+## Visualization functions
+
+```{r}
+# Create coefficients data frame
+create_coefs <- function(model_list) {
+  foreach(i = 1:length(model_list), .combine = 'rbind') %do% {
+    tmp <- summary(clms[[i]])$coefficients
+    data.frame(tmp) %>%
+    mutate(
+      variable = rownames(tmp)
+      , model = i
+    ) %>% select(
+      model
+      , variable
+      , beta.hat = Estimate
+      , SE = Std..Error
+      , t.val = t.value
+      , Pr.t = Pr...t..
+    ) %>% return()
+  } %>% return()
+}
+
+# Plot R-squared
+plot_r2 <- function(model_list) {
+  model_list %>%
+  lapply(., function(x) summary(x)$r.squared) %>% unlist() %>% data.frame(r.squared = .) %>%
+    ggplot(aes(x = r.squared)) + 
+    geom_density() +
+    geom_vline(aes(xintercept = mean(r.squared)), color = 'blue', linetype = 'dashed', alpha = .5) +
+    geom_rug(color = 'blue') +
+    labs(title = bquote('Density plot of' ~ r^2 ~ 'results, mean' ~
+        .(lapply(model_list, function(x) {summary(x)$r.squared}) %>% unlist() %>% mean() %>% round(3))
+      )
+      , x = bquote(r^2)
+    )
+}
+
+# Plot cross-validated coefficients
+plot_coefs <- function(model_list) {
+  create_coefs(model_list) %>%
+  ggplot(aes(x = variable, y = beta.hat, color = factor(model))) +
+  geom_point() +
+  geom_hline(yintercept = 0, alpha = .5) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(
+    title = 'Coefficient estimates per cross-validation model'
+    , y = bquote(hat(beta))
+    , color = 'cross-validation sample'
+  )
+}
+
+# Table of coefficient +/- counts
+coef_pm_table <- function(model_list, pval) {
+  create_coefs(model_list) %>%
+  group_by(variable) %>%
+  summarise(
+    `+` = sum(sign(beta.hat) == 1 & Pr.t < pval)
+    , `0` = sum(Pr.t >= pval)
+    , `-` = sum(sign(beta.hat) < 0 & Pr.t < pval)
+  )
+}
+
+# Compute predictions
+calc_preds <- function(model_list, xval, yname) {
+  yhats <- list()
+  for (i in 1:length(model_list)) {
+    yhats[[i]] <- data.frame(
+      model = i
+      , row = xval[[i]]
+      , preds = model_list[[i]] %>% predict(newdata = mdat[xval[[i]], ])
+      , truth = mdat[xval[[i]], yname] %>% unlist() %>% log10plus1()
+    )
+  }
+  return(yhats)
+}
+
+# Plot MSEs by insample/outsample
+plot_mses <- function(model_list, xval, truth) {
+  mses <- data.frame(
+    insample = model_list %>%
+      lapply(function(x) calc_mse(y = model.frame(x)[, 1], yhat = predict(x))) %>%
+      unlist()
+    , outsample = calc_preds(model_list, xval, truth) %>% lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>% unlist()
+  ) %>% gather('type', 'MSE', 1:2)
+  mses %>%
+    ggplot(aes(x = MSE, color = type)) +
+    geom_density() +
+    geom_vline(
+      xintercept = mses %>% filter(type == 'insample') %>% select(MSE) %>% unlist %>% mean()
+      , color = 'red', linetype = 'dashed', alpha = .5
+    ) +
+    geom_vline(
+      xintercept = mses %>% filter(type == 'outsample') %>% select(MSE) %>% unlist %>% mean()
+      , color = 'darkcyan', linetype = 'dashed', alpha = .5
+    ) +
+    geom_rug() +
+    labs(
+      title = bquote('MSE across samples, means =' ~
+          .(mses %>% group_by(type) %>% summarise(mean = mean(MSE)) %>%
+              select(mean) %>% unlist() %>% round(3) %>% paste(collapse = ', ')
+          )
+        )
+    )
+}
+
+# Merges predicted results into one large data frame each for insample and outsample
+calc_resids <- function(model_list, xval, yname) {
+  insample <- foreach(i = 1:length(model_list), .combine = 'rbind') %do% {
+    data.frame(
+      model = i
+      , preds = model_list[[i]] %>% predict()
+      , truth = model.frame(model_list[[i]])[, 1]
+    ) %>% mutate(
+      residuals = truth - preds
+    )
+  }
+  preds <- calc_preds(model_list, xval, yname)
+  outsample <- foreach(i = 1:length(model_list), .combine = 'rbind') %do% {
+    preds[[i]]
+  } %>% mutate(
+    residuals = truth - preds
+  )
+  return(list(insample = insample, outsample = outsample))
+}
+
+# Plot standardized residuals; returns a list of ggplot objects $insample and $outsample
+plot_resids <- function(model_list, xval, yname) {
+  resids <- calc_resids(model_list, xval, yname)
+  # Plot residuals vs fitted for in-sample data
+  insample <- resids$insample %>% mutate(residuals = truth - preds) %>%
+    ggplot(aes(x = preds, y = residuals, color = factor(model))) +
+    geom_point(alpha = .01) +
+    geom_smooth(se = FALSE) +
+    labs(title = 'In-sample residuals versus fitted', color = 'cross-validation sample')
+  # Plot residuals vs fitted for out-of-sample data
+  outsample <- resids$outsample %>% mutate(residuals = truth - preds) %>%
+    ggplot(aes(x = preds, y = residuals, color = factor(model))) +
+    geom_point(alpha = .1) +
+    geom_smooth(se = FALSE) +
+    labs(title = 'Out-of-sample residuals versus fitted', color = 'cross-validation sample')
+  return(list(insample = insample, outsample = outsample))
+}
+
+# Plot normal Q-Q visualization for residuals
+plot_qq <- function(model_list, xval, yname, filter = 'TRUE') {
+  resids <- calc_resids(model_list, xval, yname)
+  # In-sample Q-Q plot with standardized residuals
+  insample <- resids$insample %>% mutate(st.resid = residuals/sd(residuals)) %>% filter_(filter) %>%
+    ggplot(aes(sample = st.resid, color = factor(model))) +
+    geom_qq(alpha = .05) +
+    geom_qq_line() +
+    labs(title = 'In-sample Q-Q plot with standardized residuals'
+         , color = 'cross-validation sample')
+  # Out-of-sample Q-Q plot
+  outsample <- resids$outsample %>% mutate(st.resid = residuals/sd(residuals)) %>% filter_(filter) %>%
+    ggplot(aes(sample = st.resid, color = factor(model))) +
+    geom_qq(alpha = .05) +
+    geom_qq_line() +
+    labs(title = 'Out-of-sample Q-Q plot with standardized residuals'
+         , color = 'cross-validation sample')
+  return(list(insample = insample, outsample = outsample))
+}
+```
 
 # Campaign linear models
 
-## Cultivation score predictors {#cultivation-score-predictors}
+## Cultivation score predictors {#campaign-cultivation-score-predictors}
 
 Regress campaign giving against each of the cultivation score predictors.
 
@@ -535,224 +699,123 @@ for(i in 1:length(xval_inds)) {
 }
 ```
 
-The full (and hard to read) results for each model are in the [appendix](#campaign-full-results).
+The full (and hard to read) results for each model are in the [appendix](#campaign-cultivation-results).
 
 We can extract a few parameters of interest.
 
 ```{r}
-data.frame(r.squared = lapply(clms, function(x) summary(x)$r.squared) %>% unlist()) %>%
-  ggplot(aes(x = r.squared)) + 
-  geom_density() +
+plot_r2(clms) +
   geom_text(y = seq(10, 100, length.out = k - 1), label = 1:(k - 1), color = 'blue') +
-  geom_vline(aes(xintercept = mean(r.squared)), color = 'blue', linetype = 'dashed', alpha = .5) +
-  geom_rug(color = 'blue') +
-  xlim(c(.45, .48)) +
-  labs(title = bquote('Density plot of' ~ r^2 ~ 'results, mean' ~
-      .(lapply(clms, function(x) {summary(x)$r.squared}) %>% unlist() %>% mean() %>% round(3))
-    )
-    , x = bquote(r^2)
-)
+  xlim(c(.45, .48))
 ```
 
 The average $r^2 =$ `r lapply(clms, function(x) {summary(x)$r.squared}) %>% unlist() %>% mean() %>% round(3) %>% I()` is quite a good result.
 
-```{r, fig.width = 8}
-clms_coefs <- foreach(i = 1:length(clms), .combine = 'rbind') %do% {
-  tmp <- summary(clms[[i]])$coefficients
-  data.frame(tmp) %>%
-  mutate(
-    variable = rownames(tmp)
-    , model = i
-  ) %>% select(
-    model
-    , variable
-    , beta.hat = Estimate
-    , SE = Std..Error
-    , t.val = t.value
-    , Pr.t = Pr...t..
-  ) %>% return()
-}
-# Plot coefficient results
-clms_coefs %>%
-  ggplot(aes(x = variable, y = beta.hat, color = factor(model))) +
-  geom_point() +
-  geom_hline(yintercept = 0, alpha = .5) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title.y = element_text(angle = 0, vjust = .5)) +
-  labs(
-    title = 'Coefficient estimates per cross-validation model'
-    , y = bquote(hat(beta))
-    , color = 'cross-validation sample'
-  )
+```{r, fig.height = 6}
+plot_coefs(clms)
 ```
 
 ```{r, rows.print = 100}
 p.sig <- 1E-3
-# Coefficient + sign counts
-clms_coefs %>%
-  group_by(variable) %>%
-  summarise(
-    `+` = sum(sign(beta.hat) == 1 & Pr.t < p.sig)
-    , `0` = sum(Pr.t >= p.sig)
-    , `-` = sum(sign(beta.hat) < 0 & Pr.t < p.sig)
-  )
+coef_pm_table(clms, p.sig)
 ```
 
 The coefficients are extremely tightly clustered within each cross-validation set. Interestingly, age and alumni status both have negative coefficients. All are significant at $p =$ `r p.sig %>% I()`.
 
-Here are the actual predictions:
+Here are the actual prediction MSEs:
 
 ```{r}
-clms_preds <- list()
-for (i in 1:length(clms)) {
-  clms_preds[[i]] <- data.frame(
-    model = i
-    , preds = clms[[i]] %>% predict(newdata = mdat[xval_inds[[i]], ])
-    , truth = mdat %>% filter(row_number(CULTIVATION_SCORE) %in% xval_inds[[i]]) %>% select(CAMPAIGN_NEWGIFT_CMIT_CREDIT) %>% unlist() %>% log10plus1()
-  )
-}
+plot_mses(clms, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')
+```
 
-# Compute MSE
-clms_errs <- data.frame(
-  insample = clms %>%
-    lapply(function(x) calc_mse(y = model.frame(x)[, 1], yhat = predict(x))) %>%
-    unlist()
-  , outsample = clms_preds %>% lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>% unlist()
-) %>% gather('type', 'MSE', 1:2)
+As usual, in-sample performance is moderately optimistic.
 
-# Compute MSE
-clms_preds %>% lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>% unlist() %>% data.frame(MSE = .) %>%
-  ggplot(aes(x = MSE)) +
-  geom_density() +
-  geom_text(y = seq(.1, 1, length.out = k - 1), label = 1:(k - 1), color = 'blue') +
-  geom_vline(aes(xintercept = mean(MSE)), color = 'blue', linetype = 'dashed', alpha = .5) +
-  geom_rug(color = 'blue') +
-  labs(
-    title = bquote('MSE across samples, mean =' ~
-        .(clms_preds %>% lapply(function(x)
-          calc_mse(y = x$truth, yhat = x$preds)) %>% unlist() %>% mean() %>% round(2)
-        )
-      )
-  )
+```{r}
+plot_resids(clms, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$insample +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2))
 ```
 
 ```{r}
-# In-sample MSEs
-clms_errs %>% filter(type == 'insample') %>%
-  ggplot(aes(x = MSE)) +
-  geom_density() +
-  geom_text(y = seq(5, 75, length.out = k - 1), label = 1:(k - 1), color = 'blue') +
-  geom_vline(aes(xintercept = mean(MSE)), color = 'blue', linetype = 'dashed', alpha = .5) +
-  geom_rug(color = 'blue') +
-  labs(
-    title = bquote('MSE across samples, mean =' ~
-        .(clms_errs %>% filter(type == 'insample') %>% select(MSE) %>% unlist() %>% mean() %>% round(2)
-        )
-      )
-  )
-```
-```{r}
-# Out-of-sample MSEs
-clms_errs %>% filter(type == 'outsample') %>%
-  ggplot(aes(x = MSE)) +
-  geom_density() +
-  geom_text(y = seq(.1, 1.5, length.out = k - 1), label = 1:(k - 1), color = 'blue') +
-  geom_vline(aes(xintercept = mean(MSE)), color = 'blue', linetype = 'dashed', alpha = .5) +
-  geom_rug(color = 'blue') +
-  labs(
-    title = bquote('MSE across samples, mean =' ~
-        .(clms_errs %>% filter(type == 'outsample') %>% select(MSE) %>% unlist() %>% mean() %>% round(2)
-        )
-      )
-  )
+plot_resids(clms, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$outsample +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2))
 ```
 
-In-sample performance is extremely optimistic.
+At first glance, the linear trend evident in these results is concerning. Upon second glance, while still sobering it really just reinforces what we'd observed in the first of the two plots in the [Background](#background) section: campaign giving is decidedly nonlinear as cultivation scores approach their high/low limits. As seen above, the underlying factors should be transformed, and possibly modeled nonlinearly (splines).
+
 
 ```{r}
-# Merge the list of predicted results into one large data frame
-clms_insample <- foreach(i = 1:length(clms), .combine = 'rbind') %do% {
-  data.frame(
-    model = i
-    , preds = clms[[i]] %>% predict()
-    , truth = model.frame(clms[[i]])[, 1]
-  )
-}
-clms_outsample <- foreach(i = 1:length(clms), .combine = 'rbind') %do% {
-  clms_preds[[i]]
-}
-```
-```{r}
-# Plot residuals vs fitted for in-sample data
-clms_insample %>% mutate(residuals = truth - preds) %>%
-  ggplot(aes(x = preds, y = residuals, color = factor(model))) +
-  geom_point(alpha = .01) +
-  geom_smooth(se = FALSE) +
-  labs(title = 'In-sample residuals versus fitted', color = 'cross-validation sample')
-```
-```{r}
-# Plot residuals vs fitted for out-of-sample data
-clms_outsample %>% mutate(residuals = truth - preds) %>%
-  ggplot(aes(x = preds, y = residuals, color = factor(model))) +
-  geom_point(alpha = .1) +
-  geom_smooth(se = FALSE) +
-  labs(title = 'Out-of-sample residuals versus fitted', color = 'cross-validation sample')
-```
-
-At first glance, the results appear to be quite concerning (especially that out-of-sample trend!). Upon second glance, while still sobering it really just reinforces what we'd observed in the first of the two plots in the [Background](#background) section: campaign giving is decidedly nonlinear as cultivation scores approach their high/low limits. As seen above, the underlying factors should be transformed, and possibly modeled nonlinearly (splines).
-
-```{r}
-# In-sample Q-Q plot with standardized residuals
-clms_insample %>% mutate(st.resid = (truth - preds)/sd(truth - preds)) %>%
-  ggplot(aes(sample = st.resid, color = factor(model))) +
-  geom_qq(alpha = .05) +
-  geom_qq_line() +
-  labs(title = 'In-sample Q-Q plot with standardized residuals'
-       , color = 'cross-validation sample')
+plot_qq(clms, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$insample +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2))
 ```
 
 ```{r}
-# Out-of-sample Q-Q plot
-clms_outsample %>% mutate(st.resid = (truth - preds)/sd(truth - preds)) %>%
-  ggplot(aes(sample = st.resid, color = factor(model))) +
-  geom_qq(alpha = .05) +
-  geom_qq_line() +
-  labs(title = 'Out-of-sample Q-Q plot with standardized residuals'
-       , color = 'cross-validation sample')
+plot_qq(clms, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$outsample +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2))
 ```
 
 The quantile-quantile plot further illustrates the issue. The drift above the reference line to the left and below it to the right suggest less density than expected in the tails, which follows given that the range is bound -- it's not possible to give less than a nondonor or (for practical purposes) more than a 9-figure donor.
 
 The story is completely different when looking only at those who actually gave:
 
-```{r}
-# In-sample Q-Q plot excluding nondonors
-clms_insample %>% mutate(st.resid = (truth - preds)/sd(truth - preds)) %>% filter(truth > 0) %>%
-  ggplot(aes(sample = st.resid, color = factor(model))) +
-  geom_qq(alpha = .05) +
-  geom_qq_line() +
-  labs(title = 'In-sample Q-Q plot, donors only'
-       , color = 'cross-validation sample')
-```
 
 ```{r}
-# Out-of-sample Q-Q plot excluding nondonors
-clms_outsample %>% mutate(st.resid = (truth - preds)/sd(truth - preds)) %>% filter(truth > 0) %>%
-  ggplot(aes(sample = st.resid, color = factor(model))) +
-  geom_qq(alpha = .05) +
-  geom_qq_line() +
-  labs(title = 'Out-of-sample Q-Q plot, donors only'
-       , color = 'cross-validation sample')
+plot_qq(clms, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT', filter = 'truth > 0')$insample +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2))
 ```
 
-This is quite a bit nicer, suggesting only slight skewness (in different directions for in-sample versus out-of-sample, interestingly).
+
+```{r}
+plot_qq(clms, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT', filter = 'truth > 0')$outsample +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2))
+```
+
+This is quite a bit nicer, suggesting only slight skewness in the tails.
 
 **Takeaway.** When modeling giving amounts in the future, consider fitting a conditional model. Something along the lines of:
 
 $$ E(\text{giving amount} ~ | ~ \text{donor status} = 1) $$
 
-## All predictors
+## All predictors {#campaign-all-predictors}
 
-## Thoughts
+The second model compares the variables underlying each PG score indicator, plus supplemental predictors. The first model incudes everything and I'll prune from there using MSE. Initial spline df are fairly arbitrary.
+
+```{r}
+# List to store campaign linear models
+clmaps <- list()
+for(i in 1:length(xval_inds)) {
+  # Create linear model excluding the holdout and out-of-sample indices
+  clmaps[[i]] <- mdat %>%
+    filter(row_number(CULTIVATION_SCORE) %nin% c(oos_inds, xval_inds[[i]])) %>%
+    lm(
+      log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+        ACTIVE_PROPOSALS +
+        ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
+        PM_VISIT_LAST_2_YRS +
+        log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+        AF_25K_GIFT +
+        sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+        ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+        MG_250K_PLUS + # Decided to leave as factor
+        PRESIDENT_VISIT +
+        TRUSTEE_OR_ADVISORY_BOARD +
+        Alumnus +
+        DOUBLE_ALUM + # Deep Engagement component
+        EVER_PARENT + # Deep Engagement component
+        ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+        CHICAGO_HOME +
+        QUAL_LEVEL +
+        AFFINITY_SCORE +
+        MG_PR_MODEL_DESC
+      , data = .
+    )
+}
+```
+
+Full results are in the [appendix](#campaign-cultivation-all-results-1).
+
+
+
+## Comparison & thoughts
 
 # Transaction linear models
 
@@ -760,14 +823,23 @@ $$ E(\text{giving amount} ~ | ~ \text{donor status} = 1) $$
 
 ## All predictors
 
-## Thoughts
+## Comparison & thoughts
 
 # Appendix
 
-## Campaign full results {#campaign-full-results}
+## Campaign cultivation results {#campaign-cultivation-results}
 
-[Back](#cultivation-score-predictors)
+[Back](#campaign-cultivation-score-predictors)
 
 ```{r}
 lapply(clms, function(x) summary(x))
 ```
+
+## Campaign cultivation all results 1 {#campaign-cultivation-all-results-1}
+
+[Back](#campaign-all-predictors)
+
+```{r}
+lapply(clmaps, function(x) summary(x))
+```
+
