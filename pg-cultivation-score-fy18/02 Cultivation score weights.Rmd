@@ -408,7 +408,7 @@ pool %>%
   scatterplotter(x = 'MG_250K_COUNT', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
                  , ytrans = 'log10plus1', ylabels = scales::dollar) +
   geom_vline(aes(xintercept = mean(MG_250K_COUNT)), color = 'blue', linetype = 'dashed') +
-  labs(title = 'Count of $250K+ gifts versus campaign giving') +
+  labs(title = 'Count of $250K+ gifts versus largest gift') +
   scale_x_sqrt()
 ```
 
@@ -428,7 +428,7 @@ pool %>%
   scatterplotter(x = 'SEASON_TICKET_YEARS', y = 'LARGEST_GIFT_OR_PAYMENT', color = 'MG_PR_MODEL_DESC'
                  , ytrans = 'log10plus1', ylabels = scales::dollar) +
   geom_vline(aes(xintercept = mean(SEASON_TICKET_YEARS)), color = 'blue', linetype = 'dashed') +
-  labs(title = 'Season ticket years versus campaign giving') +
+  labs(title = 'Season ticket years versus largest gift') +
   scale_x_continuous(breaks = seq(0, 100, by = 2))
 ```
 
@@ -472,6 +472,14 @@ mdat <- pool %>% mutate(
     !is.na(NUMERIC_AGE) ~ NUMERIC_AGE
     , TRUE ~ mean(NUMERIC_AGE, na.rm = TRUE)
   )
+  # Impute missing affinity scores as mean affinity score
+  , AFFINITY_SCORE = case_when(
+    !is.na(AFFINITY_SCORE) ~ AFFINITY_SCORE
+    , TRUE ~ mean(AFFINITY_SCORE, na.rm = TRUE)
+  )
+  # Create null factor levels for the MG_ID and MG_PR models
+  , MG_ID_MODEL_DESC = fct_explicit_na(MG_ID_MODEL_DESC, 'Unscored') %>% fct_relevel('Unscored')
+  , MG_PR_MODEL_DESC = fct_explicit_na(MG_PR_MODEL_DESC, 'Unscored') %>% fct_relevel('Unscored')
 ) %>% select(
   # Drop unhelpful fields
   -ID_NUMBER, -PROSPECT_ID, -PROSPECT_NAME, -NU_DEG, -NU_DEG_SPOUSE, -POTENTIAL_INTEREST_AREAS
@@ -509,7 +517,7 @@ calc_mse <- function(y, yhat) {
 # Create coefficients data frame
 create_coefs <- function(model_list) {
   foreach(i = 1:length(model_list), .combine = 'rbind') %do% {
-    tmp <- summary(clms[[i]])$coefficients
+    tmp <- summary(model_list[[i]])$coefficients
     data.frame(tmp) %>%
     mutate(
       variable = rownames(tmp)
@@ -526,9 +534,13 @@ create_coefs <- function(model_list) {
 }
 
 # Plot R-squared
-plot_r2 <- function(model_list) {
+plot_r2 <- function(model_list, type = 'r.squared') {
+  parser <- function(x) {
+    tmpsum <- summary(x)
+    paste0('tmpsum$', type) %>% parse(text = .) %>% eval() %>% return()
+  }
   model_list %>%
-  lapply(., function(x) summary(x)$r.squared) %>% unlist() %>% data.frame(r.squared = .) %>%
+  lapply(., function(x) parser(x)) %>% unlist() %>% data.frame(r.squared = .) %>%
     ggplot(aes(x = r.squared)) + 
     geom_density() +
     geom_vline(aes(xintercept = mean(r.squared)), color = 'blue', linetype = 'dashed', alpha = .5) +
@@ -578,6 +590,11 @@ calc_preds <- function(model_list, xval, yname) {
   }
   return(yhats)
 }
+calc_outsample_mse <- function(model_list, xval, yname) {
+  calc_preds(model_list, xval, yname) %>%
+    lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>%
+    unlist()
+}
 
 # Plot MSEs by insample/outsample
 plot_mses <- function(model_list, xval, truth) {
@@ -585,7 +602,7 @@ plot_mses <- function(model_list, xval, truth) {
     insample = model_list %>%
       lapply(function(x) calc_mse(y = model.frame(x)[, 1], yhat = predict(x))) %>%
       unlist()
-    , outsample = calc_preds(model_list, xval, truth) %>% lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>% unlist()
+    , outsample = calc_outsample_mse(model_list, xval, truth)
   ) %>% gather('type', 'MSE', 1:2)
   mses %>%
     ggplot(aes(x = MSE, color = type)) +
@@ -629,10 +646,10 @@ calc_resids <- function(model_list, xval, yname) {
 }
 
 # Plot standardized residuals; returns a list of ggplot objects $insample and $outsample
-plot_resids <- function(model_list, xval, yname) {
+plot_resids <- function(model_list, xval, yname, filter = 'TRUE') {
   resids <- calc_resids(model_list, xval, yname)
   # Plot residuals vs fitted for in-sample data
-  insample <- resids$insample %>% mutate(residuals = truth - preds) %>%
+  insample <- resids$insample %>% mutate(residuals = truth - preds) %>% filter_(filter) %>%
     ggplot(aes(x = preds, y = residuals, color = factor(model))) +
     geom_point(alpha = .01) +
     geom_smooth(se = FALSE) +
@@ -699,7 +716,7 @@ for(i in 1:length(xval_inds)) {
 }
 ```
 
-The full (and hard to read) results for each model are in the [appendix](#campaign-cultivation-results).
+The full (and hard to read) results for each model are in the [appendix](#appendix-campaign-cultivation).
 
 We can extract a few parameters of interest.
 
@@ -716,7 +733,7 @@ plot_coefs(clms)
 ```
 
 ```{r, rows.print = 100}
-p.sig <- 1E-3
+p.sig <- 1E-2
 coef_pm_table(clms, p.sig)
 ```
 
@@ -753,7 +770,7 @@ plot_qq(clms, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$outsample +
   scale_y_continuous(breaks = seq(-10, 10, by = 2))
 ```
 
-The quantile-quantile plot further illustrates the issue. The drift above the reference line to the left and below it to the right suggest less density than expected in the tails, which follows given that the range is bound -- it's not possible to give less than a nondonor or (for practical purposes) more than a 9-figure donor.
+The quantile-quantile plot further illustrates the issue. The drift above the reference line to the left and below it to the right suggests less density than expected in the tails, which follows given that the range is bound -- it's not possible to give less than a nondonor or (for practical purposes) more than a 9-figure donor.
 
 The story is completely different when looking only at those who actually gave:
 
@@ -775,7 +792,7 @@ This is quite a bit nicer, suggesting only slight skewness in the tails.
 
 $$ E(\text{giving amount} ~ | ~ \text{donor status} = 1) $$
 
-## All predictors {#campaign-all-predictors}
+## All predictors 1 {#campaign-all-predictors-1}
 
 The second model compares the variables underlying each PG score indicator, plus supplemental predictors. The first model incudes everything and I'll prune from there using MSE. Initial spline df are fairly arbitrary.
 
@@ -811,11 +828,144 @@ for(i in 1:length(xval_inds)) {
 }
 ```
 
-Full results are in the [appendix](#campaign-cultivation-all-results-1).
+Full results are in the [appendix](#appendix-campaign-all-predictors-1).
 
+```{r}
+plot_r2(clmaps) +
+  geom_text(y = seq(10, 150, length.out = k - 1), label = 1:(k-1), color = 'blue') +
+  xlim(c(.72, .735))
+```
 
+This is a much higher $r^2$ than seen above, but the model also includes many more predictors. Consider the MSE.
+
+```{r}
+plot_mses(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')
+```
+
+Well, that's pretty conclusive -- this is also much lower than that seen previously. This implies that on average the predicted giving amount is less than a factor of 10 off. Which predictors contribute to the performance?
+
+```{r, fig.height = 6}
+plot_coefs(clmaps)
+```
+
+```{r, rows.print = 100}
+coef_pm_table(clmaps, p.sig)
+```
+
+After accounting for the other variables, things that don't seem to matter include active proposals, Chicago home address, two of the deep engagement indicators, president visits, qualification level (inconsistent), and committee participation. Note that the "Future Prospect" factor level only appears 9 times -- one of the cross-validation samples must not have had anyone rated at that level. Additionally, some of these are likely already included in the affinity score.
+
+```{r}
+plot_resids(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$outsample +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2))
+```
+
+```{r}
+plot_qq(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$outsample 
+```
+
+This already looks a lot nicer than the [Cultivation score predictors](#campaign-cultivation-score-predictors) model! Now let's try again, dropping the less-interesting predictors.
+
+## All predictors 2 {#campaign-all-predictors-2}
+
+Full results are in the [appendix](#appendix-campaign-all-predictors-2).
+
+```{r}
+# List to store campaign linear models
+clmaps2 <- list()
+for(i in 1:length(xval_inds)) {
+  # Create linear model excluding the holdout and out-of-sample indices
+  clmaps2[[i]] <- mdat %>%
+    filter(row_number(CULTIVATION_SCORE) %nin% c(oos_inds, xval_inds[[i]])) %>%
+    lm(
+      log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+        ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
+        PM_VISIT_LAST_2_YRS +
+        log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+        AF_25K_GIFT +
+        sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+        ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+        MG_250K_PLUS + # Decided to leave as factor
+        Alumnus +
+        ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+        AFFINITY_SCORE +
+        MG_PR_MODEL_DESC
+      , data = .
+    )
+}
+```
+
+```{r}
+plot_mses(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')
+```
+
+That's a marginal increase in outsample MSE (`r calc_outsample_mse(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean() %>% round(4)` vs. `r calc_outsample_mse(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean() %>% round(4)`, difference of `r scales::percent({calc_outsample_mse(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean()}/{calc_outsample_mse(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean()} - 1)`) with many fewer predictors.
+
+```{r}
+plot_coefs(clmaps2)
+```
+
+```{r, rows.print = 100}
+coef_pm_table(clmaps2, p.sig)
+```
+
+The spline degrees of freedom for numeric age could be tweaked.
+
+## All predictors splines test {#campaign-all-predictors-splines}
+
+```{r}
+splines_max <- 10
+clmaps3 <- list()
+for (s in 1:splines_max) {
+  clmaps3[[s]] <- list()
+  for(i in 1:length(xval_inds)) {
+    # Create linear model excluding the holdout and out-of-sample indices
+    clmaps3[[s]][[i]] <- mdat %>%
+      filter(row_number(CULTIVATION_SCORE) %nin% c(oos_inds, xval_inds[[i]])) %>%
+      lm(
+        log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+          ns(NUMERIC_AGE, df = s) + # Underlying variable to AGE indicator
+          PM_VISIT_LAST_2_YRS +
+          log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+          AF_25K_GIFT +
+          sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+          ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+          MG_250K_PLUS + # Decided to leave as factor
+          Alumnus +
+          ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+          AFFINITY_SCORE +
+          MG_PR_MODEL_DESC
+        , data = .
+      )
+  }
+}
+```
+
+Try different spline degrees of freedom for NUMERIC_AGE. Full results are in the [appendix](#appendix-campaign-all-predictors-splines).
+
+Consider the distribution of MSEs for each model.
+
+```{r}
+# Calculate MSEs for each model
+spline_mse <- foreach(s = 1:splines_max, .combine = rbind) %do% {
+  mses <- calc_outsample_mse(clmaps3[[s]], xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')
+  data.frame(spline.df = s, xv_group = factor(1:(k-1)), mses)
+}
+```
+```{r}
+# Plot results
+spline_mse %>%
+  ggplot(aes(x = spline.df, y = mses)) +
+  geom_point(aes(color = xv_group)) +
+  geom_smooth() +
+  scale_x_continuous(breaks = 1:splines_max, minor_breaks = NULL) +
+  labs(x = 'spline df', y = 'MSE', color = 'cross-validation sample')
+```
+
+For practical purposes there's not much difference between the different choices. It looks like 4 or 5 is where the mean MSE levels out, so I'll stick with my initial choice.
 
 ## Comparison & thoughts
+
+
 
 # Transaction linear models
 
@@ -827,7 +977,7 @@ Full results are in the [appendix](#campaign-cultivation-all-results-1).
 
 # Appendix
 
-## Campaign cultivation results {#campaign-cultivation-results}
+## Campaign cultivation results {#appendix-campaign-cultivation}
 
 [Back](#campaign-cultivation-score-predictors)
 
@@ -835,11 +985,31 @@ Full results are in the [appendix](#campaign-cultivation-all-results-1).
 lapply(clms, function(x) summary(x))
 ```
 
-## Campaign cultivation all results 1 {#campaign-cultivation-all-results-1}
+## Campaign all predictors 1 {#appendix-campaign-all-predictors-1}
 
-[Back](#campaign-all-predictors)
+[Back](#campaign-all-predictors-1)
 
 ```{r}
 lapply(clmaps, function(x) summary(x))
+```
+
+## Campaign all predictors 2 {#appendix-campaign-all-predictors-2}
+
+[Back](#campaign-all-predictors-2)
+
+```{r}
+lapply(clmaps2, function(x) summary(x))
+```
+
+## Campaign all predictors splines {#appendix-campaign-all-predictors-splines}
+
+[Back](#campaign-all-predictors-splines)
+
+```{r}
+lapply(clmaps3
+  , function(x) {
+    lapply(x, function(y) summary(y))
+  }
+)
 ```
 
