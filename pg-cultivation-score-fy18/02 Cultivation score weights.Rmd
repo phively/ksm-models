@@ -2,6 +2,7 @@
 title: "02 Cultivation score weights"
 output:
   html_notebook:
+    code_folding: show
     toc: TRUE
     toc_float:
       collapsed: FALSE
@@ -480,6 +481,8 @@ mdat <- pool %>% mutate(
   # Create null factor levels for the MG_ID and MG_PR models
   , MG_ID_MODEL_DESC = fct_explicit_na(MG_ID_MODEL_DESC, 'Unscored') %>% fct_relevel('Unscored')
   , MG_PR_MODEL_DESC = fct_explicit_na(MG_PR_MODEL_DESC, 'Unscored') %>% fct_relevel('Unscored')
+  # Create row numbers
+  , rownum = 1:nrow(pool)
 ) %>% select(
   # Drop unhelpful fields
   -ID_NUMBER, -PROSPECT_ID, -PROSPECT_NAME, -NU_DEG, -NU_DEG_SPOUSE, -POTENTIAL_INTEREST_AREAS
@@ -493,6 +496,13 @@ I'll use my `wranglR::KFoldXVal` function to create the cross-validation groups.
 k <- 11
 # Create k groups: first is 20% of the data (prop = .2) and the others are equally sized
 xval_inds <- pool %>% wranglR::KFoldXVal(k = k, prop = .2, seed = 12644)
+# Remove outliers
+outliers <- which(mdat$NUMERIC_AGE > max_age)
+for (i in 1:k) {
+  rm_idx <- which(xval_inds[[i]] %in% outliers)
+  if (length(rm_idx) > 0) {xval_inds[[i]] <- xval_inds[[i]][-rm_idx]}
+}
+# Create groups
 oos_inds <- xval_inds[[1]]
 xval_inds <- xval_inds[2:k]
 # Results
@@ -696,7 +706,7 @@ clms <- list()
 for(i in 1:length(xval_inds)) {
   # Create linear model excluding the holdout and out-of-sample indices
   clms[[i]] <- mdat %>%
-    filter(row_number(CULTIVATION_SCORE) %nin% c(oos_inds, xval_inds[[i]])) %>%
+    filter(rownum %in% unlist(xval_inds)[unlist(xval_inds) %nin% xval_inds[[i]]]) %>%
     lm(
       log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
         ACTIVE_PROPOSALS +
@@ -802,7 +812,7 @@ clmaps <- list()
 for(i in 1:length(xval_inds)) {
   # Create linear model excluding the holdout and out-of-sample indices
   clmaps[[i]] <- mdat %>%
-    filter(row_number(CULTIVATION_SCORE) %nin% c(oos_inds, xval_inds[[i]])) %>%
+    filter(rownum %in% unlist(xval_inds)[unlist(xval_inds) %nin% xval_inds[[i]]]) %>%
     lm(
       log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
         ACTIVE_PROPOSALS +
@@ -875,7 +885,7 @@ clmaps2 <- list()
 for(i in 1:length(xval_inds)) {
   # Create linear model excluding the holdout and out-of-sample indices
   clmaps2[[i]] <- mdat %>%
-    filter(row_number(CULTIVATION_SCORE) %nin% c(oos_inds, xval_inds[[i]])) %>%
+    filter(rownum %in% unlist(xval_inds)[unlist(xval_inds) %nin% xval_inds[[i]]]) %>%
     lm(
       log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
         ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
@@ -920,7 +930,7 @@ for (s in 1:splines_max) {
   for(i in 1:length(xval_inds)) {
     # Create linear model excluding the holdout and out-of-sample indices
     clmaps3[[s]][[i]] <- mdat %>%
-      filter(row_number(CULTIVATION_SCORE) %nin% c(oos_inds, xval_inds[[i]])) %>%
+      filter(rownum %in% unlist(xval_inds)[unlist(xval_inds) %nin% xval_inds[[i]]]) %>%
       lm(
         log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
           ns(NUMERIC_AGE, df = s) + # Underlying variable to AGE indicator
@@ -963,9 +973,162 @@ spline_mse %>%
 
 For practical purposes there's not much difference between the different choices. It looks like 4 or 5 is where the mean MSE levels out, so I'll stick with my initial choice.
 
-## Comparison & thoughts
+## Comparison {#campaign-comparison}
 
+Create the two final models and check them on out-of-sample data.
 
+```{r}
+# Predict campaign giving, PG score indicators
+clm_final <- lm(
+  log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+    ACTIVE_PROPOSALS +
+    AGE +
+    PM_VISIT_LAST_2_YRS +
+    VISITS_5PLUS +
+    AF_25K_GIFT +
+    GAVE_IN_LAST_3_YRS +
+    MG_250K_PLUS +
+    PRESIDENT_VISIT +
+    TRUSTEE_OR_ADVISORY_BOARD +
+    Alumnus +
+    DEEP_ENGAGEMENT +
+    CHICAGO_HOME
+  , data = mdat %>% filter(rownum %in% unlist(xval_inds))
+)
+
+# Predict campaign giving, underlying factors
+clmap_final <- lm(
+  log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+    ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
+    PM_VISIT_LAST_2_YRS +
+    log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+    AF_25K_GIFT +
+    sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+    ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+    MG_250K_PLUS + # Decided to leave as factor
+    Alumnus +
+    ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+    AFFINITY_SCORE +
+    MG_PR_MODEL_DESC
+  , data = mdat %>% filter(rownum %in% unlist(xval_inds))
+)
+```
+
+Full results in the [appendix](#appendix-campaign-final_models)
+
+```{r}
+plot_resids(list(clmap_final, clm_final), list(oos_inds, oos_inds), 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$outsample +
+  scale_color_discrete(labels = c('All predictors', 'PG indicators')) +
+  labs(color = 'Model')
+```
+
+The "All predictors" residuals look better than the "PG indicators"" residuals.
+
+```{r}
+plot_qq(list(clmap_final, clm_final), list(oos_inds, oos_inds), 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$outsample +
+  scale_color_discrete(labels = c('All predictors', 'PG indicators')) +
+  labs(color = 'Model')
+```
+
+Note the reference lines -- "All predictors" is much closer to a normal distribution, albeit with some positive skewness.
+
+```{r}
+c_mses_final <- rbind(
+  calc_preds(list(clm_final), list(oos_inds), 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')[[1]] %>%
+    mutate(model = 'PG indicators')
+  , calc_preds(list(clmap_final), list(oos_inds), 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')[[1]] %>%
+    mutate(model = 'All predictors')
+) %>% mutate(
+  model = factor(model)
+  , sq.error = (truth - preds)^2
+)
+c_mses_final <- c_mses_final %>% left_join(
+  c_mses_final %>% group_by(model) %>% summarise(mse = mean(sq.error))
+  , by = c('model', 'model')
+)
+c_mses_final %>%
+  ggplot(aes(x = sq.error, color = model)) +
+  geom_density() +
+  geom_vline(aes(xintercept = mean(sq.error)), linetype = 'dotted', alpha = .5) +
+  geom_vline(aes(xintercept = mse, color = model), linetype = 'dashed') +
+  xlim(c(0, 5)) +
+  labs(
+    x = 'squared error'
+    , title = bquote('Squared error across models, means = ' ~
+        .(c_mses_final %>% group_by(model) %>% summarise(mse = mean(mse)) %>% select(mse) %>%
+            unlist() %>% round(3) %>% paste(collapse = ', ')))
+  )
+```
+
+We never want to see bimodal squared errors -- it looks like "All predictors" is a much better regression model. These are all very close to the results seen in the corresponding sections above, which is reassuring.
+
+Finally, let's look at the impact of age in the splines model. I'll try plotting against both the raw $\textbf{y}$ and the partial residuals, which are obtained by removing the effects of all the predictors besides the $\textbf{x}_j$ we're interested in, e.g.
+
+$$ \boldsymbol{\hat{\epsilon}} = \textbf{y} - \hat{\textbf{y}} = \textbf{y} - \sum_{i} {\textbf{x}_i \hat{\boldsymbol{\beta}}_i} $$
+$$ \boldsymbol{\hat{\epsilon}}_\text{partial} = \textbf{y} - \sum_{i \neq j} {\textbf{x}_i \hat{\boldsymbol{\beta}}_i} $$
+
+```{r}
+clmap_splines_dat <- data.frame(
+  age = mdat %>% filter(rownum %in% unlist(xval_inds)) %>% select(NUMERIC_AGE) %>% unlist()
+  , y = model.frame(clmap_final)[, 1]
+  , y.hat = update(clmap_final, formula = . ~ ns(NUMERIC_AGE, df = 5)) %>% fitted()
+  # Compute partial residuals
+  , y.partial.resid = {clmap_final %>% residuals(type = 'partial')}[, 'ns(NUMERIC_AGE, df = 5)']
+) %>% mutate(
+  # Regression on partial residuals
+  y.hat.partial = lm(y.partial.resid ~ ns(age, 5)) %>% fitted()
+)
+```
+
+```{r}
+clmap_splines_dat %>%
+  ggplot(aes(x = age, y = y)) +
+  geom_point(alpha = .1, size = 1) +
+  geom_hline(yintercept = 2, color = 'darkgray') +
+  geom_line(aes(y = y.hat), color = 'red') +
+  labs(title = 'Numeric age spline versus campaign giving', y = bquote(log[10] ~ 'campaign giving'))
+```
+
+```{r}
+clmap_splines_dat %>%
+  ggplot(aes(x = age, y = y.partial.resid)) +
+  geom_point(alpha = .1, size = 1) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
+  geom_line(aes(y = y.hat.partial), color = 'red') +
+  labs(title = 'Numeric age spline versus partial residuals for campaign giving'
+       , y = 'partial residuals')
+```
+
+Recall that in the PG indicators model, age had a negative coefficient. This paints a more nuanced picture. The first plot regresses campaign giving on the natural spline of age and shows a dip in expected giving for 60-year-olds, a gradual increase to age 80 or so, and then a slow decline. However, we know from previous experience that age is closely correlated with many other predictors of giving (years of giving, total giving, capacity evaluation, and so on). The partial residual plot corrects for this by removing the effect of all the other predictors and regressing the resulting residuals on age. Now, controlling for the other variables, expected campaign giving appears to reach its maximum in the late 40s or early 50s, and decreases thereafter.
+
+## Thoughts
+
+Compare the coefficients for both models.
+
+```{r, rows.print = 100, warning = FALSE, message = FALSE}
+full_join(
+  data.frame(var = coef(clm_final) %>% names, pg.inds.model = coef(clm_final))
+  , data.frame(var = coef(clmap_final) %>% names, all.predictors.model = coef(clmap_final))
+) %>% mutate(
+  # Factor levels in order we want them to appear in below table
+  var = factor(var, levels = c('(Intercept)', 'ACTIVE_PROPOSALS', 'AGE', 'ns(NUMERIC_AGE, df = 5)1'
+    , 'ns(NUMERIC_AGE, df = 5)2', 'ns(NUMERIC_AGE, df = 5)3', 'ns(NUMERIC_AGE, df = 5)4'
+    , 'ns(NUMERIC_AGE, df = 5)5', 'PRESIDENT_VISIT', 'PM_VISIT_LAST_2_YRS', 'VISITS_5PLUS'
+    , 'log10plus1(VISIT_COUNT)', 'AF_25K_GIFT', 'GAVE_IN_LAST_3_YRS', 'sqrt(YEARS_OF_GIVING)'
+    , 'ns(YEARS_OF_GIVING_LAST_3, df = 2)1', 'ns(YEARS_OF_GIVING_LAST_3, df = 2)2', 'MG_250K_PLUS'
+    , 'TRUSTEE_OR_ADVISORY_BOARD', 'Alumnus', 'DEEP_ENGAGEMENT', 'CHICAGO_HOME', 'ns(SEASON_TICKET_YEARS, df = 1)'
+    , 'AFFINITY_SCORE', 'MG_PR_MODEL_DESCBottom Tier', 'MG_PR_MODEL_DESCMiddle Tier', 'MG_PR_MODEL_DESCTop Tier'))
+) %>% arrange(var)
+```
+
+  * The intercept for the all predictors model is much closer to 0. The relatively large intercept for the indicators model likely contributes to its odd residuals behavior (recall the bimodal squared errors).
+  * Age has a nonlinear relationship with giving. The oldest donors are expected to give slightly less.
+  * The impact of visits is much smaller for the all predictors model, though more visit activity is always associated with greater giving.
+  * Giving appears to have a comparable impact between the two models, though interpretation is tricky given that the all predictors model splits its impact over more predictors.
+  * Alumni status leads to *less* predicted giving in both models! While surprising on the face of it, this actually fits with what I've observed in other datasets. Consider that nonalumni are often added to the database only once they've already made a gift, demonstrating both affinity and philanthropic interest.
+  * The affinity score and MG prioritization models work!
+  
+Overall, with Campaign giving as $y$, several of the PG model variables do seem to offer predictive power above and beyond whatever factors are rolled into the affinity score and MG prioritization models. In particular, age, PM visits, total visits, $25K+ AF gifts, total years of giving, MG gifts, alumni status, and season tickets were still statistically significant when including the other modeled scores. It may be worthwhile paying special attention to these characteristics.
 
 # Transaction linear models
 
@@ -973,7 +1136,9 @@ For practical purposes there's not much difference between the different choices
 
 ## All predictors
 
-## Comparison & thoughts
+## Comparison
+
+## Thoughts
 
 # Appendix
 
@@ -1013,3 +1178,13 @@ lapply(clmaps3
 )
 ```
 
+## Campaign final models {#appendix-campaign-final_models}
+
+[Back](#campaign-comparison)
+
+```{r}
+summary(clm_final)
+```
+```{r}
+summary(clmap_final)
+```
