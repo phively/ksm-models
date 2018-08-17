@@ -659,13 +659,13 @@ calc_resids <- function(model_list, xval, yname) {
 plot_resids <- function(model_list, xval, yname, filter = 'TRUE') {
   resids <- calc_resids(model_list, xval, yname)
   # Plot residuals vs fitted for in-sample data
-  insample <- resids$insample %>% mutate(residuals = truth - preds) %>% filter_(filter) %>%
+  insample <- resids$insample %>% filter_(filter) %>%
     ggplot(aes(x = preds, y = residuals, color = factor(model))) +
     geom_point(alpha = .01) +
     geom_smooth(se = FALSE) +
     labs(title = 'In-sample residuals versus fitted', color = 'cross-validation sample')
   # Plot residuals vs fitted for out-of-sample data
-  outsample <- resids$outsample %>% mutate(residuals = truth - preds) %>%
+  outsample <- resids$outsample %>% filter_(filter) %>%
     ggplot(aes(x = preds, y = residuals, color = factor(model))) +
     geom_point(alpha = .1) +
     geom_smooth(se = FALSE) +
@@ -1132,13 +1132,184 @@ Overall, with Campaign giving as $y$, several of the PG model variables do seem 
 
 # Transaction linear models
 
-## Cultivation score predictors
+Repeat the above, but let $y_i$ be transformed largest gift or payment.
 
-## All predictors
+## Cultivation score predictors {#trans-cultivation-score-predictors}
+
+Full summary in the [appendix](#appendix-trans-cultivation).
+
+```{r}
+# List to store transaction linear models
+tlms <- list()
+for(i in 1:length(xval_inds)) {
+  # Create linear model excluding the holdout and out-of-sample indices
+  tlms[[i]] <- mdat %>%
+    filter(rownum %in% unlist(xval_inds)[unlist(xval_inds) %nin% xval_inds[[i]]]) %>%
+    lm(
+      log10plus1(LARGEST_GIFT_OR_PAYMENT) ~
+        ACTIVE_PROPOSALS +
+        AGE +
+        PM_VISIT_LAST_2_YRS +
+        VISITS_5PLUS +
+        AF_25K_GIFT +
+        GAVE_IN_LAST_3_YRS +
+        MG_250K_PLUS +
+        PRESIDENT_VISIT +
+        TRUSTEE_OR_ADVISORY_BOARD +
+        Alumnus +
+        DEEP_ENGAGEMENT +
+        CHICAGO_HOME
+      , data = .
+    )
+}
+```
+
+```{r}
+plot_r2(tlms) +
+  geom_text(y = seq(10, 200, length.out = k - 1), label = 1:(k - 1), color = 'blue') +
+  xlim(c(.325, .335))
+```
+
+Here, the mean $r^2 =$ `r lapply(tlms, function(x) {summary(x)$r.squared}) %>% unlist() %>% mean() %>% round(3) %>% I()` is a bit lower than that seen in the campaign models.
+
+```{r, fig.height = 6}
+plot_coefs(tlms)
+```
+
+```{r, rows.print = 100}
+coef_pm_table(tlms, p.sig)
+```
+
+Interestingly, alumni status is not predictive! President visits are hit or miss, which follows given that the quality of visit data is time dependent while gift data is not. The rest all have positive coefficients.
+
+```{r}
+plot_mses(tlms, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')
+```
+
+This is actually much lower than what was seen in the campaign cultivation score model.
+
+```{r}
+plot_resids(tlms, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')$insample
+```
+
+```{r}
+plot_resids(tlms, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')$outsample
+```
+
+This exhibits a similar downward trend as scene in the campaign cultivation score model, so I don't expect the Q-Q plots to be acceptable.
+
+```{r}
+plot_qq(tlms, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')$insample
+```
+
+```{r}
+plot_qq(tlms, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')$outsample
+```
+
+That looks almost like a discontinuity at -1.
+
+```{r}
+mdat %>% mutate(x.trans = log10plus1(LARGEST_GIFT_OR_PAYMENT)) %>%
+  ggplot(aes(x = x.trans)) +
+  geom_histogram(alpha = .5, binwidth = .1) +
+  geom_density(aes(y = ..count..)) +
+  geom_vline(aes(xintercept = mean(x.trans)), color = 'blue', linetype = 'dashed') +
+  geom_vline(aes(xintercept = mean(x.trans) - sd(x.trans)), color = 'blue', linetype = 'dotted')
+```
+
+As before, the combination of binary indicators and all those 0 observations seem to do a number on the model.
+
+```{r}
+plot_qq(tlms, xval_inds, 'LARGEST_GIFT_OR_PAYMENT', filter = 'truth > 0')$insample
+```
+
+```{r}
+plot_qq(tlms, xval_inds, 'LARGEST_GIFT_OR_PAYMENT', filter = 'truth > 0')$outsample
+```
+
+But once again, the expected value conditioned on being a donor is nearly normal. This approach, $E(\text{giving} ~ | ~ \text{donor status} = 1)$, is definitely worth considering in the future.
+
+## All predictors 1 {#trans-all-predictors-1}
+
+Repeat the above with the underlying variables. Again, the first model will include all variables and I'll prune it back according to MSE and variable significance. Spline df are set as in the corresponding campaign model.
+
+Full summary in the [appendix](#appendix-trans-all-1).
+
+```{r}
+# List to store transaction linear models
+tlmaps <- list()
+for(i in 1:length(xval_inds)) {
+  # Create linear model excluding the holdout and out-of-sample indices
+  tlmaps[[i]] <- mdat %>%
+    filter(rownum %in% unlist(xval_inds)[unlist(xval_inds) %nin% xval_inds[[i]]]) %>%
+    lm(
+      log10plus1(LARGEST_GIFT_OR_PAYMENT) ~
+        ACTIVE_PROPOSALS +
+        ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
+        PM_VISIT_LAST_2_YRS +
+        log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+        AF_25K_GIFT +
+        sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+        ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+        MG_250K_PLUS + # Decided to leave as factor
+        PRESIDENT_VISIT +
+        TRUSTEE_OR_ADVISORY_BOARD +
+        Alumnus +
+        DOUBLE_ALUM + # Deep Engagement component
+        EVER_PARENT + # Deep Engagement component
+        ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+        CHICAGO_HOME +
+        QUAL_LEVEL +
+        AFFINITY_SCORE +
+        MG_PR_MODEL_DESC
+      , data = .
+    )
+}
+```
+
+```{r}
+plot_r2(tlmaps) +
+  geom_text(y = seq(10, 250, length.out = k - 1), label = 1:(k-1), color = 'blue') +
+  xlim(c(.593, .605))
+```
+
+```{r}
+plot_mses(tlmaps, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')
+```
+
+While $r^2$ is not as high as that achieved by the campaign all predictors model, this is the lowest MSE seen yet.
+
+```{r, fig.height = 6}
+plot_coefs(tlmaps)
+```
+
+```{r, rows.print = 100}
+coef_pm_table(tlmaps, p.sig)
+```
+
+Intersetingly, there are some notable differences compared to campaign giving. Here, having a Chicago home address does matter, as do parent affinity, and committee participation. Qualification level is still inconsistent, and age appears to matter much less here compared to the campaign model. Interestingly, compared to the previous model, alumni status is significant again once these underlying factors are included.
+
+```{r}
+plot_resids(tlmaps, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')$outsample
+```
+
+```{r}
+plot_qq(tlmaps, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')$outsample
+```
+
+That residuals plot is still quite poor, but the Q-Q plot is respectable.
+
+## All predictors 2
 
 ## Comparison
 
 ## Thoughts
+
+# Final Comparison
+
+Rebuild all models using entire dataset
+
+# Conclusions
 
 # Appendix
 
@@ -1188,3 +1359,21 @@ summary(clm_final)
 ```{r}
 summary(clmap_final)
 ```
+
+## Transaction cultivation results {#appendix-trans-cultivation}
+
+[Back](#trans-cultivation-score-predictors)
+
+```{r}
+lapply(tlms, function(x) summary(x))
+```
+
+## Transaction all predictors 1 {#appendix-trans-all-1}
+
+[Back](#trans-all-predictors-1)
+
+```{r}
+lapply(tlmaps, function(x) summary(x))
+```
+ 
+ 
