@@ -563,12 +563,24 @@ plot_r2 <- function(model_list, type = 'r.squared') {
 }
 
 # Plot cross-validated coefficients
-plot_coefs <- function(model_list) {
-  create_coefs(model_list) %>%
+plot_coefs <- function(model_list, conf_interval = 1 - p.sig) {
+  crit_val <- qnorm({1 - conf_interval} / 2) %>% abs()
+  coefs <- create_coefs(model_list)
+  coefs %>% full_join(
+    coefs %>% group_by(variable) %>%
+      summarise(group.mean = mean(beta.hat), group.sd = sd(beta.hat))
+    , by = c('variable', 'variable')
+  ) %>%
   ggplot(aes(x = variable, y = beta.hat, color = factor(model))) +
+  geom_segment(
+    aes(
+      xend = variable
+      , y = group.mean - 2 * crit_val * group.sd
+      , yend = group.mean + 2 * crit_val * group.sd
+    ), color = 'gray', alpha = .25, size = 2) +
   geom_point() +
   geom_hline(yintercept = 0, alpha = .5) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
   labs(
     title = 'Coefficient estimates per cross-validation model'
     , y = bquote(hat(beta))
@@ -739,11 +751,11 @@ plot_r2(clms) +
 The average $r^2 =$ `r lapply(clms, function(x) {summary(x)$r.squared}) %>% unlist() %>% mean() %>% round(3) %>% I()` is quite a good result.
 
 ```{r, fig.height = 6}
+p.sig <- 1E-2
 plot_coefs(clms)
 ```
 
 ```{r, rows.print = 100}
-p.sig <- 1E-2
 coef_pm_table(clms, p.sig)
 ```
 
@@ -910,7 +922,7 @@ plot_mses(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')
 
 That's a marginal increase in outsample MSE (`r calc_outsample_mse(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean() %>% round(4)` vs. `r calc_outsample_mse(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean() %>% round(4)`, difference of `r scales::percent({calc_outsample_mse(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean()}/{calc_outsample_mse(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean()} - 1)`) with many fewer predictors.
 
-```{r}
+```{r, fig.height = 6}
 plot_coefs(clmaps2)
 ```
 
@@ -979,42 +991,13 @@ Create the two final models and check them on out-of-sample data.
 
 ```{r}
 # Predict campaign giving, PG score indicators
-clm_final <- lm(
-  log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
-    ACTIVE_PROPOSALS +
-    AGE +
-    PM_VISIT_LAST_2_YRS +
-    VISITS_5PLUS +
-    AF_25K_GIFT +
-    GAVE_IN_LAST_3_YRS +
-    MG_250K_PLUS +
-    PRESIDENT_VISIT +
-    TRUSTEE_OR_ADVISORY_BOARD +
-    Alumnus +
-    DEEP_ENGAGEMENT +
-    CHICAGO_HOME
-  , data = mdat %>% filter(rownum %in% unlist(xval_inds))
-)
+clm_final <- clms[[1]] %>% update(data = mdat %>% filter(rownum %in% unlist(xval_inds)))
 
 # Predict campaign giving, underlying factors
-clmap_final <- lm(
-  log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
-    ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
-    PM_VISIT_LAST_2_YRS +
-    log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
-    AF_25K_GIFT +
-    sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
-    ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
-    MG_250K_PLUS + # Decided to leave as factor
-    Alumnus +
-    ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
-    AFFINITY_SCORE +
-    MG_PR_MODEL_DESC
-  , data = mdat %>% filter(rownum %in% unlist(xval_inds))
-)
+clmap_final <- clmaps2[[1]] %>% update(data = mdat %>% filter(rownum %in% unlist(xval_inds)))
 ```
 
-Full results in the [appendix](#appendix-campaign-final_models)
+Full results in the [appendix](#appendix-campaign-final-models)
 
 ```{r}
 plot_resids(list(clmap_final, clm_final), list(oos_inds, oos_inds), 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$outsample +
@@ -1180,7 +1163,7 @@ plot_coefs(tlms)
 coef_pm_table(tlms, p.sig)
 ```
 
-Interestingly, alumni status is not predictive! President visits are hit or miss, which follows given that the quality of visit data is time dependent while gift data is not. The rest all have positive coefficients.
+Interestingly, all the coefficients are positive besides alumni status, which is not predictive! President visits are hit or miss, which follows given that the quality of visit data is time dependent while gift data is not. The rest all have positive coefficients.
 
 ```{r}
 plot_mses(tlms, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')
@@ -1299,17 +1282,231 @@ plot_qq(tlmaps, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')$outsample
 
 That residuals plot is still quite poor, but the Q-Q plot is respectable.
 
-## All predictors 2
+## All predictors 2 {#trans-all-predictors-2}
 
-## Comparison
+Re-fit the above, dropping qualification level, active proposals, and double alum. It also appears that fewer splie df for age are called for.
+
+Full results in the [appendix](#appendix-trans-all-2).
+
+```{r}
+# List to store transaction linear models
+tlmaps2 <- list()
+for(i in 1:length(xval_inds)) {
+  # Create linear model excluding the holdout and out-of-sample indices
+  tlmaps2[[i]] <- mdat %>%
+    filter(rownum %in% unlist(xval_inds)[unlist(xval_inds) %nin% xval_inds[[i]]]) %>%
+    lm(
+      log10plus1(LARGEST_GIFT_OR_PAYMENT) ~
+        ns(NUMERIC_AGE, df = 3) + # Underlying variable to AGE indicator
+        PM_VISIT_LAST_2_YRS +
+        log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+        AF_25K_GIFT +
+        sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+        ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+        MG_250K_PLUS + # Decided to leave as factor
+        PRESIDENT_VISIT +
+        TRUSTEE_OR_ADVISORY_BOARD +
+        Alumnus +
+        EVER_PARENT + # Deep Engagement component
+        ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+        CHICAGO_HOME +
+        AFFINITY_SCORE +
+        MG_PR_MODEL_DESC
+      , data = .
+    )
+}
+```
+
+```{r}
+plot_r2(tlmaps2) +
+  geom_text(y = seq(10, 250, length.out = k - 1), label = 1:(k-1), color = 'blue') +
+  xlim(c(.59, .60))
+```
+
+```{r}
+plot_mses(tlmaps2, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')
+```
+
+Similar $r^2$ and error, so the smaller model is preferred.
+
+```{r, fig.height = 6}
+plot_coefs(tlmaps2)
+```
+
+
+```{r, rows.print = 100}
+coef_pm_table(tlmaps2, p.sig)
+```
+
+Alumni and parent affiliation *reduce* the expected largest gift amount, on average.
+
+```{r}
+plot_resids(tlmaps2, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')$outsample
+```
+
+```{r}
+plot_qq(tlmaps2, xval_inds, 'LARGEST_GIFT_OR_PAYMENT')$outsample
+```
+
+Still can't seem to fix those residuals.
+
+## Comparison {#trans-comparison}
+
+Check the models on out-of-sample data. Full results in the [appendix](#appendix-trans-final-models).
+
+```{r}
+# Predict largest transaction, PG score indicators
+tlm_final <- tlms[[1]] %>% update(data = mdat %>% filter(rownum %in% unlist(xval_inds)))
+# Predict largest transaction, underlying factors
+tlmap_final <- tlmaps2[[1]] %>% update(data = mdat %>% filter(rownum %in% unlist(xval_inds)))
+```
+
+```{r}
+plot_resids(list(tlmap_final, tlm_final), list(oos_inds, oos_inds), 'LARGEST_GIFT_OR_PAYMENT')$outsample +
+  scale_x_continuous(breaks = seq(0, 10, by = 2)) +
+  scale_color_discrete(labels = c('All predictors', 'PG indicators')) +
+  labs(color = 'Model')
+```
+
+Honestly, neither model looks great.
+
+```{r}
+plot_qq(list(tlmap_final, tlm_final), list(oos_inds, oos_inds), 'LARGEST_GIFT_OR_PAYMENT')$outsample +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2)) +
+  scale_color_discrete(labels = c('All predictors', 'PG indicators')) +
+  labs(color = 'Model')
+```
+
+At least the the all predictors residuals lie closer to a normal distribution.
+
+```{r}
+t_mses_final <- rbind(
+  calc_preds(list(tlm_final), list(oos_inds), 'LARGEST_GIFT_OR_PAYMENT')[[1]] %>%
+    mutate(model = 'PG indicators')
+  , calc_preds(list(tlmap_final), list(oos_inds), 'LARGEST_GIFT_OR_PAYMENT')[[1]] %>%
+    mutate(model = 'All predictors')
+) %>% mutate(
+  model = factor(model)
+  , sq.error = (truth - preds)^2
+)
+t_mses_final <- t_mses_final %>% left_join(
+  t_mses_final %>% group_by(model) %>% summarise(mse = mean(sq.error))
+  , by = c('model', 'model')
+)
+t_mses_final %>%
+  ggplot(aes(x = sq.error, color = model)) +
+  geom_density() +
+  geom_vline(aes(xintercept = mean(sq.error)), linetype = 'dotted', alpha = .5) +
+  geom_vline(aes(xintercept = mse, color = model), linetype = 'dashed') +
+  xlim(c(0, 5)) +
+  labs(
+    x = 'squared error'
+    , title = bquote('Squared error across models, means = ' ~
+        .(t_mses_final %>% group_by(model) %>% summarise(mse = mean(mse)) %>% select(mse) %>%
+            unlist() %>% round(3) %>% paste(collapse = ', ')))
+  )
+```
+
+Also very close to the previous results. Again, all predictors is a better regression model.
+
+Finally, consider the effect of age on largest gift.
+
+```{r}
+tlmap_splines_dat <- data.frame(
+  age = mdat %>% filter(rownum %in% unlist(xval_inds)) %>% select(NUMERIC_AGE) %>% unlist()
+  , y = model.frame(tlmap_final)[, 1]
+  , y.hat = update(tlmap_final, formula = . ~ ns(NUMERIC_AGE, df = 3)) %>% fitted()
+  # Compute partial residuals
+  , y.partial.resid = {tlmap_final %>% residuals(type = 'partial')}[, 'ns(NUMERIC_AGE, df = 3)']
+) %>% mutate(
+  # Regression on partial residuals
+  y.hat.partial = lm(y.partial.resid ~ ns(age, 3)) %>% fitted()
+)
+```
+
+```{r}
+tlmap_splines_dat %>%
+  ggplot(aes(x = age, y = y)) +
+  geom_point(alpha = .1, size = 1) +
+  geom_hline(yintercept = 2, color = 'darkgray') +
+  geom_line(aes(y = y.hat), color = 'red') +
+  labs(title = 'Numeric age spline versus largest transaction', y = bquote(log[10] ~ 'largest transaction'))
+```
+
+```{r}
+tlmap_splines_dat %>%
+  ggplot(aes(x = age, y = y.partial.resid)) +
+  geom_point(alpha = .1, size = 1) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
+  geom_line(aes(y = y.hat.partial), color = 'red') +
+  labs(title = 'Numeric age spline versus partial residuals for largest transaction'
+       , y = 'partial residuals')
+```
+
+I find this surprising. Unlike in the [campaign model comparison](#campaign-comparison), largest gift size appears to increase monotonically with age. However, controlling for the other variables, we again see peak giving occurs in the late 40s or early 50s, though the fitted line is nearly flat (confirming the lesser impact of age in this model compared to the previous one). Apparently there are very few large estate gifts compared to the number of older donors.
+
+**Takeaway.** Today's age is not particularly predictive of largest gift; in future models consider age at time of gift instead. This could also be used to predict next gift size.
 
 ## Thoughts
 
-# Final Comparison
+Here are the coefficients for each model.
 
-Rebuild all models using entire dataset
+```{r, rows.print = 100, warning = FALSE, message = FALSE}
+full_join(
+  data.frame(var = coef(tlm_final) %>% names, pg.inds.model = coef(tlm_final))
+  , data.frame(var = coef(tlmap_final) %>% names, all.predictors.model = coef(tlmap_final))
+) %>% mutate(
+  # Factor levels in order we want them to appear in below table
+  var = factor(var, levels = c('(Intercept)', 'ACTIVE_PROPOSALS'
+    , 'AGE', 'ns(NUMERIC_AGE, df = 3)1', 'ns(NUMERIC_AGE, df = 3)2', 'ns(NUMERIC_AGE, df = 3)3'
+    , 'PRESIDENT_VISIT', 'PM_VISIT_LAST_2_YRS', 'VISITS_5PLUS', 'log10plus1(VISIT_COUNT)'
+    , 'AF_25K_GIFT', 'GAVE_IN_LAST_3_YRS', 'sqrt(YEARS_OF_GIVING)'
+    , 'ns(YEARS_OF_GIVING_LAST_3, df = 2)1', 'ns(YEARS_OF_GIVING_LAST_3, df = 2)2', 'MG_250K_PLUS'
+    , 'TRUSTEE_OR_ADVISORY_BOARD'
+    , 'Alumnus', 'EVER_PARENT', 'DEEP_ENGAGEMENT', 'CHICAGO_HOME', 'ns(SEASON_TICKET_YEARS, df = 1)'
+    , 'AFFINITY_SCORE', 'MG_PR_MODEL_DESCBottom Tier', 'MG_PR_MODEL_DESCMiddle Tier', 'MG_PR_MODEL_DESCTop Tier'))
+) %>% arrange(var)
+```
+
+  * The intercept is smaller in the all predictors model.
+  * Controlling for the other predictors, the effect of age is fairly minor.
+  * Unsurprisingly, past major giving is the strongest predictor of...major gift behavior.
+  * Again, the affinity score and prioritization models work -- though here, bottom and middle tier don't appear to have given at different levels in the past (which is likely why they weren't top tier).
+
+All of the PG indicators apparently help estimate largest gift amount, above and beyond the information that other variables and modeled scores provide. Importantly, with the exception of alumni status, all the signs point in the same direction.
+
+# Final Comparison {#final-comparison}
+
+Rebuild all models using the entire dataset. Full results are in the [appendix](#appendix-final-comparison).
+
+```{r}
+final_models <- list(
+  campaign.pg.score = clm_final %>% update(data = mdat %>% filter(rownum %nin% outliers))
+  , largest.trans.pg.score = tlm_final %>% update(data = mdat %>% filter(rownum %nin% outliers))
+  , campaign.all.preds = clmap_final %>% update(data = mdat %>% filter(rownum %nin% outliers))
+  , largest.trans.all.preds = tlmap_final %>% update(data = mdat %>% filter(rownum %nin% outliers))
+)
+```
+
+```{r, rows.print = 100, warning = FALSE, message = FALSE}
+full_join(
+  data.frame(var = coef(final_models[[1]]) %>% names, campaign.pg = coef(final_models[[1]]))
+  , data.frame(var = coef(final_models[[2]]) %>% names, largest.pg = coef(final_models[[2]]))
+) %>% full_join(
+  data.frame(var = coef(final_models[[3]]) %>% names, campaign.all = coef(final_models[[3]]))
+) %>% full_join(
+  data.frame(var = coef(final_models[[4]]) %>% names, largest.all = coef(final_models[[4]]))
+) %>% mutate_if(is.numeric, function(x) round(x, 3))
+```
+
+
 
 # Conclusions
+
+Survivorship bias for age?
+Age at time of largest gift
+Regression model conditional on making a gift
+Modeling future gift conditional on past data only
 
 # Appendix
 
@@ -1349,7 +1546,7 @@ lapply(clmaps3
 )
 ```
 
-## Campaign final models {#appendix-campaign-final_models}
+## Campaign final models {#appendix-campaign-final-models}
 
 [Back](#campaign-comparison)
 
@@ -1376,4 +1573,37 @@ lapply(tlms, function(x) summary(x))
 lapply(tlmaps, function(x) summary(x))
 ```
  
- 
+ ## Transaction all predictors 2 {#appendix-trans-all-2}
+
+[Back](#trans-all-predictors-2)
+
+```{r}
+lapply(tlmaps2, function(x) summary(x))
+```
+
+## Transaction all predictors 2 {#appendix-trans-all-2}
+
+[Back](#trans-all-predictors-2)
+
+```{r}
+lapply(tlmaps2, function(x) summary(x))
+```
+
+## Transaction final models {#appendix-trans-final-models}
+
+[Back](#trans-comparison)
+
+```{r}
+summary(tlm_final)
+```
+```{r}
+summary(tlmap_final)
+```
+
+## Final comparison {##appendix-final-comparison}
+
+[Back](#final-comparison)
+
+```{r}
+lapply(final_models, function(x) summary(x))
+```
