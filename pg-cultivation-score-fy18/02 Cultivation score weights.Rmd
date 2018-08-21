@@ -704,6 +704,25 @@ plot_qq <- function(model_list, xval, yname, filter = 'TRUE') {
          , color = 'cross-validation sample')
   return(list(insample = insample, outsample = outsample))
 }
+
+# Compute partial residuals
+calc_partial_resids <- function(model, inds, xname, df) {
+  # Quick hack to get around update() environment, not really recommended
+  scoped_xname <<- xname
+  scoped_spline_df <<- df
+  # Partial residuals data frame
+  data.frame(
+    x = mdat %>% filter(rownum %in% unlist(inds)) %>% select_(xname) %>% unlist()
+    , y = model.frame(model)[, 1]
+    , y.hat = update(model, formula = . ~ ns(parse(text = scoped_xname) %>% eval(), df = scoped_spline_df)) %>% fitted()
+  ) %>% mutate(
+    # Compute partial residuals
+    y.partial.resid = {model %>% residuals(type = 'partial')}[, 
+      paste0('ns(', parse(text = xname), ', df = ', df, ')')]
+    # Regression on partial residuals
+    , y.hat.partial = lm(y.partial.resid ~ ns(x, df)) %>% fitted()
+  ) %>% return()
+}
 ```
 
 # Campaign linear models
@@ -840,7 +859,7 @@ for(i in 1:length(xval_inds)) {
         Alumnus +
         DOUBLE_ALUM + # Deep Engagement component
         EVER_PARENT + # Deep Engagement component
-        ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+        SEASON_TICKET_YEARS + # Deep Engagement component
         CHICAGO_HOME +
         QUAL_LEVEL +
         AFFINITY_SCORE +
@@ -908,7 +927,7 @@ for(i in 1:length(xval_inds)) {
         ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
         MG_250K_PLUS + # Decided to leave as factor
         Alumnus +
-        ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+        SEASON_TICKET_YEARS + # Deep Engagement component
         AFFINITY_SCORE +
         MG_PR_MODEL_DESC
       , data = .
@@ -953,7 +972,7 @@ for (s in 1:splines_max) {
           ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
           MG_250K_PLUS + # Decided to leave as factor
           Alumnus +
-          ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+          SEASON_TICKET_YEARS + # Deep Engagement component
           AFFINITY_SCORE +
           MG_PR_MODEL_DESC
         , data = .
@@ -1051,34 +1070,22 @@ $$ \boldsymbol{\hat{\epsilon}} = \textbf{y} - \hat{\textbf{y}} = \textbf{y} - \s
 $$ \boldsymbol{\hat{\epsilon}}_\text{partial} = \textbf{y} - \sum_{i \neq j} {\textbf{x}_i \hat{\boldsymbol{\beta}}_i} $$
 
 ```{r}
-clmap_splines_dat <- data.frame(
-  age = mdat %>% filter(rownum %in% unlist(xval_inds)) %>% select(NUMERIC_AGE) %>% unlist()
-  , y = model.frame(clmap_final)[, 1]
-  , y.hat = update(clmap_final, formula = . ~ ns(NUMERIC_AGE, df = 5)) %>% fitted()
-  # Compute partial residuals
-  , y.partial.resid = {clmap_final %>% residuals(type = 'partial')}[, 'ns(NUMERIC_AGE, df = 5)']
-) %>% mutate(
-  # Regression on partial residuals
-  y.hat.partial = lm(y.partial.resid ~ ns(age, 5)) %>% fitted()
-)
-```
-
-```{r}
-clmap_splines_dat %>%
-  ggplot(aes(x = age, y = y)) +
+calc_partial_resids(clmap_final, xval_inds, 'NUMERIC_AGE', 5) %>%
+  ggplot(aes(x = x, y = y)) +
   geom_point(alpha = .1, size = 1) +
   geom_hline(yintercept = 2, color = 'darkgray') +
   geom_line(aes(y = y.hat), color = 'red') +
-  labs(title = 'Numeric age spline versus campaign giving', y = bquote(log[10] ~ 'campaign giving'))
+  labs(title = 'Numeric age spline versus campaign giving', x = 'age', y = bquote(log[10] ~ 'campaign giving'))
 ```
 
 ```{r}
-clmap_splines_dat %>%
-  ggplot(aes(x = age, y = y.partial.resid)) +
+calc_partial_resids(clmap_final, xval_inds, 'NUMERIC_AGE', 5) %>%
+  ggplot(aes(x = x, y = y.partial.resid)) +
   geom_point(alpha = .1, size = 1) +
   geom_hline(yintercept = 0, color = 'darkgray') +
   geom_line(aes(y = y.hat.partial), color = 'red') +
   labs(title = 'Numeric age spline versus partial residuals for campaign giving'
+       , x = 'age'
        , y = 'partial residuals')
 ```
 
@@ -1099,7 +1106,7 @@ full_join(
     , 'ns(NUMERIC_AGE, df = 5)5', 'PRESIDENT_VISIT', 'PM_VISIT_LAST_2_YRS', 'VISITS_5PLUS'
     , 'log10plus1(VISIT_COUNT)', 'AF_25K_GIFT', 'GAVE_IN_LAST_3_YRS', 'sqrt(YEARS_OF_GIVING)'
     , 'ns(YEARS_OF_GIVING_LAST_3, df = 2)1', 'ns(YEARS_OF_GIVING_LAST_3, df = 2)2', 'MG_250K_PLUS'
-    , 'TRUSTEE_OR_ADVISORY_BOARD', 'Alumnus', 'DEEP_ENGAGEMENT', 'CHICAGO_HOME', 'ns(SEASON_TICKET_YEARS, df = 1)'
+    , 'TRUSTEE_OR_ADVISORY_BOARD', 'Alumnus', 'DEEP_ENGAGEMENT', 'CHICAGO_HOME', 'SEASON_TICKET_YEARS'
     , 'AFFINITY_SCORE', 'MG_PR_MODEL_DESCBottom Tier', 'MG_PR_MODEL_DESCMiddle Tier', 'MG_PR_MODEL_DESCTop Tier'))
 ) %>% arrange(var)
 ```
@@ -1240,7 +1247,7 @@ for(i in 1:length(xval_inds)) {
         Alumnus +
         DOUBLE_ALUM + # Deep Engagement component
         EVER_PARENT + # Deep Engagement component
-        ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+        SEASON_TICKET_YEARS + # Deep Engagement component
         CHICAGO_HOME +
         QUAL_LEVEL +
         AFFINITY_SCORE +
@@ -1308,7 +1315,7 @@ for(i in 1:length(xval_inds)) {
         TRUSTEE_OR_ADVISORY_BOARD +
         Alumnus +
         EVER_PARENT + # Deep Engagement component
-        ns(SEASON_TICKET_YEARS, df = 1) + # Deep Engagement component
+        SEASON_TICKET_YEARS + # Deep Engagement component
         CHICAGO_HOME +
         AFFINITY_SCORE +
         MG_PR_MODEL_DESC
@@ -1412,34 +1419,22 @@ Also very close to the previous results. Again, all predictors is a better regre
 Finally, consider the effect of age on largest gift.
 
 ```{r}
-tlmap_splines_dat <- data.frame(
-  age = mdat %>% filter(rownum %in% unlist(xval_inds)) %>% select(NUMERIC_AGE) %>% unlist()
-  , y = model.frame(tlmap_final)[, 1]
-  , y.hat = update(tlmap_final, formula = . ~ ns(NUMERIC_AGE, df = 3)) %>% fitted()
-  # Compute partial residuals
-  , y.partial.resid = {tlmap_final %>% residuals(type = 'partial')}[, 'ns(NUMERIC_AGE, df = 3)']
-) %>% mutate(
-  # Regression on partial residuals
-  y.hat.partial = lm(y.partial.resid ~ ns(age, 3)) %>% fitted()
-)
-```
-
-```{r}
-tlmap_splines_dat %>%
-  ggplot(aes(x = age, y = y)) +
+calc_partial_resids(tlmap_final, xval_inds, 'NUMERIC_AGE', 3) %>%
+  ggplot(aes(x = x, y = y)) +
   geom_point(alpha = .1, size = 1) +
   geom_hline(yintercept = 2, color = 'darkgray') +
   geom_line(aes(y = y.hat), color = 'red') +
-  labs(title = 'Numeric age spline versus largest transaction', y = bquote(log[10] ~ 'largest transaction'))
+  labs(title = 'Numeric age spline versus largest transaction', x = 'age', y = bquote(log[10] ~ 'largest transaction'))
 ```
 
 ```{r}
-tlmap_splines_dat %>%
-  ggplot(aes(x = age, y = y.partial.resid)) +
+calc_partial_resids(tlmap_final, xval_inds, 'NUMERIC_AGE', 3) %>%
+  ggplot(aes(x = x, y = y.partial.resid)) +
   geom_point(alpha = .1, size = 1) +
   geom_hline(yintercept = 0, color = 'darkgray') +
   geom_line(aes(y = y.hat.partial), color = 'red') +
   labs(title = 'Numeric age spline versus partial residuals for largest transaction'
+       , x = 'age'
        , y = 'partial residuals')
 ```
 
@@ -1463,7 +1458,7 @@ full_join(
     , 'AF_25K_GIFT', 'GAVE_IN_LAST_3_YRS', 'sqrt(YEARS_OF_GIVING)'
     , 'ns(YEARS_OF_GIVING_LAST_3, df = 2)1', 'ns(YEARS_OF_GIVING_LAST_3, df = 2)2', 'MG_250K_PLUS'
     , 'TRUSTEE_OR_ADVISORY_BOARD'
-    , 'Alumnus', 'EVER_PARENT', 'DEEP_ENGAGEMENT', 'CHICAGO_HOME', 'ns(SEASON_TICKET_YEARS, df = 1)'
+    , 'Alumnus', 'EVER_PARENT', 'DEEP_ENGAGEMENT', 'CHICAGO_HOME', 'SEASON_TICKET_YEARS'
     , 'AFFINITY_SCORE', 'MG_PR_MODEL_DESCBottom Tier', 'MG_PR_MODEL_DESCMiddle Tier', 'MG_PR_MODEL_DESCTop Tier'))
 ) %>% arrange(var)
 ```
@@ -1479,27 +1474,73 @@ All of the PG indicators apparently help estimate largest gift amount, above and
 
 Rebuild all models using the entire dataset. Full results are in the [appendix](#appendix-final-comparison).
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
+# Final models list
 final_models <- list(
   campaign.pg.score = clm_final %>% update(data = mdat %>% filter(rownum %nin% outliers))
   , largest.trans.pg.score = tlm_final %>% update(data = mdat %>% filter(rownum %nin% outliers))
   , campaign.all.preds = clmap_final %>% update(data = mdat %>% filter(rownum %nin% outliers))
   , largest.trans.all.preds = tlmap_final %>% update(data = mdat %>% filter(rownum %nin% outliers))
 )
+
+# Coefficients data frame
+final_coefs <- full_join(
+  data.frame(var = coef(final_models[[1]]) %>% names()
+             , campaign.pg = coef(final_models[[1]]))
+  , data.frame(var = coef(final_models[[2]]) %>% names()
+               , largest.pg = coef(final_models[[2]]))
+) %>% full_join(
+  data.frame(var = coef(final_models[[3]]) %>% names() %>% str_replace(', df = [0-9]*', '')
+             , campaign.all = coef(final_models[[3]]))
+) %>% full_join(
+  data.frame(var = coef(final_models[[4]]) %>% names() %>% str_replace(', df = [0-9]*', '')
+             , largest.all = coef(final_models[[4]]))
+) %>% mutate(
+  # Factor levels in order we want them to appear in below table
+  var = factor(var, levels = c('(Intercept)', 'ACTIVE_PROPOSALS'
+    , 'AGE', 'ns(NUMERIC_AGE)1', 'ns(NUMERIC_AGE)2', 'ns(NUMERIC_AGE)3', 'ns(NUMERIC_AGE)4', 'ns(NUMERIC_AGE)5'
+    , 'PRESIDENT_VISIT', 'PM_VISIT_LAST_2_YRS', 'VISITS_5PLUS', 'log10plus1(VISIT_COUNT)'
+    , 'AF_25K_GIFT', 'GAVE_IN_LAST_3_YRS', 'sqrt(YEARS_OF_GIVING)'
+    , 'ns(YEARS_OF_GIVING_LAST_3)1', 'ns(YEARS_OF_GIVING_LAST_3)2', 'MG_250K_PLUS'
+    , 'TRUSTEE_OR_ADVISORY_BOARD'
+    , 'Alumnus', 'EVER_PARENT', 'DEEP_ENGAGEMENT', 'CHICAGO_HOME', 'ns(SEASON_TICKET_YEARS)'
+    , 'AFFINITY_SCORE', 'MG_PR_MODEL_DESCBottom Tier', 'MG_PR_MODEL_DESCMiddle Tier', 'MG_PR_MODEL_DESCTop Tier'))
+) %>% arrange(var)
+```
+```{r, rows.print = 100}
+final_coefs %>% mutate_if(is.numeric, function(x) round(x, 3))
 ```
 
-```{r, rows.print = 100, warning = FALSE, message = FALSE}
-full_join(
-  data.frame(var = coef(final_models[[1]]) %>% names, campaign.pg = coef(final_models[[1]]))
-  , data.frame(var = coef(final_models[[2]]) %>% names, largest.pg = coef(final_models[[2]]))
-) %>% full_join(
-  data.frame(var = coef(final_models[[3]]) %>% names, campaign.all = coef(final_models[[3]]))
-) %>% full_join(
-  data.frame(var = coef(final_models[[4]]) %>% names, largest.all = coef(final_models[[4]]))
-) %>% mutate_if(is.numeric, function(x) round(x, 3))
+  * Unsurprisingly, all intercepts are positive. The campaign all predictors model is closest to 0, and the all predictor models have lower intercepts across the board.
+  * Intrestingly, alumni status is negative for all but the largest gift regressed on PG checklist model (which was barely significant).
+
+Let's normalize these using the MG_250K_PLUS indicator appearing in all four models.
+
+```{r, warning = FALSE, message = FALSE, fig.height = 6}
+final_coefs %>%
+  mutate_if(is.numeric, function(x) {x/x[which(final_coefs$var == 'MG_250K_PLUS')]} %>% round(4)) %>%
+  gather('model', 'coefficient', 2:5) %>%
+  mutate(model = factor(model, levels = c('campaign.pg', 'largest.pg', 'campaign.all', 'largest.all'))) %>%
+  ggplot(aes(x = var, y = coefficient, fill = model)) +
+  geom_col(position = position_dodge(), width = .7) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
+  scale_y_continuous(limits = c(-1, 3), breaks = seq(-1, 3, by = .5)) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5)
+    , axis.title.y = element_text(angle = 0, vjust = .5)
+  ) +
+  labs(title = 'Model coefficient comparison, scaled to MG = 1', y = bquote(hat(beta)))
 ```
 
+  * When predicting campaign giving, giving recency (gave in last 3) is more useful than previous MG behavior! Note that loyalty is also a much better predictor than the MG PR model.
+  * Visits are also very impactful on average.
+  * Most of the coefficients shared between models point in the same direction, with the notable exceptions of age and MG model tiers.
 
+The exact effect of age and recent years of giving are difficult to see since multiple coefficients are computed per spline. Consider the partial residual plots for each model.
+
+Effect of age per model
+
+Effect of recent giving per model
 
 # Conclusions
 
