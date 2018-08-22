@@ -2,7 +2,7 @@
 title: "02 Cultivation score weights"
 output:
   html_notebook:
-    code_folding: show
+    code_folding: hide
     toc: TRUE
     toc_float:
       collapsed: FALSE
@@ -44,9 +44,9 @@ The following 12 items were able to be extracted from the database:
   * Visited by prospect manager in last 2 years
   * 5+ total visits
   * Deep engagement (multiple family degrees, parent, season tickets, etc.)
-  * High-level annual giving ($25K+)
+  * High-level annual giving (\$25K+)
   * High-level advisory board participation
-  * Previous major gift ($250K+)
+  * Previous major gift (\$250K+)
   * Meeting with president
   * Open proposal
   * Consistent donor (10+ years of giving, including 1+ of last 3)
@@ -61,8 +61,8 @@ pool %>% filter(!is.na(CULTIVATION_SCORE) & CAMPAIGN_NEWGIFT_CMIT_CREDIT > 0) %>
   scatterplotter(x = 'CULTIVATION_SCORE', y = 'CAMPAIGN_NEWGIFT_CMIT_CREDIT'
     , color = 'MG_PR_MODEL_DESC', ytrans = 'log10', ylabels = scales::dollar) +
   scale_x_continuous(breaks = 0:18, minor_breaks = NULL) +
-  labs(title = 'Cultivation score versus log10 campaign giving', x = 'PG cultivation score'
-       , y = 'Campaign giving credit', color = 'MG prioritization model')
+  labs(title = bquote('Cultivation score versus' ~ log[10] ~ 'campaign giving')
+    , x = 'PG cultivation score', y = 'Campaign giving credit', color = 'MG prioritization model')
 ```
 
 ```{r, echo = FALSE, message = FALSE}
@@ -70,8 +70,8 @@ pool %>% filter(!is.na(CULTIVATION_SCORE)) %>%
   scatterplotter(x = 'CULTIVATION_SCORE', y = 'LARGEST_GIFT_OR_PAYMENT'
     , color = 'MG_PR_MODEL_DESC', ytrans = 'log10plus1', ylabels = scales::dollar) +
   scale_x_continuous(breaks = 0:18, minor_breaks = NULL) +
-  labs(title = 'Cultivation score versus log10 largest gift', x = 'PG cultivation score'
-       , y = 'Largest gift or pledge payment', color = 'MG prioritization model')
+  labs(title = bquote('Cultivation score versus' ~ log[10] ~ 'largest gift')
+       , x = 'PG cultivation score', y = 'Largest gift or pledge payment', color = 'MG prioritization model')
 ```
 
 There is a nearly linear relationship between PG cultivation score and both campaign giving and an entity's largest gift or pledge payment. Fitting some sort of linear model will enhance our understanding of the various checklist items by estimating their relative impact.
@@ -218,7 +218,7 @@ pool %>% group_by(MG_250K_COUNT) %>% mutate(n = 1) %>%
   )
 ```
 
-Extremely few people make a single $250K+ gift, much less multiple ones.
+Extremely few people make a single \$250K+ gift, much less multiple ones.
 
 ```{r}
 pool %>%
@@ -441,7 +441,7 @@ This looks fine.
   * The 113-year-old is an outlier
   * Visit count could use log transform
   * Years of giving could use sqrt transform
-  * $250K+ gifts is a binary indicator
+  * \$250K+ gifts is a binary indicator
 
 # Modeling ground rules
 
@@ -706,7 +706,7 @@ plot_qq <- function(model_list, xval, yname, filter = 'TRUE') {
 }
 
 # Compute partial residuals
-calc_partial_resids <- function(model, inds, xname, df) {
+calc_partial_resids <- function(model, inds, xname, df = NULL) {
   # Quick hack to get around update() environment, not really recommended
   scoped_xname <<- xname
   scoped_spline_df <<- df
@@ -714,13 +714,24 @@ calc_partial_resids <- function(model, inds, xname, df) {
   data.frame(
     x = mdat %>% filter(rownum %in% unlist(inds)) %>% select_(xname) %>% unlist()
     , y = model.frame(model)[, 1]
-    , y.hat = update(model, formula = . ~ ns(parse(text = scoped_xname) %>% eval(), df = scoped_spline_df)) %>% fitted()
+    , y.hat = if (!is.null(df)) {
+      update(model, formula = . ~ ns(parse(text = scoped_xname) %>% eval(), df = scoped_spline_df)) %>% fitted()
+    } else {
+      update(model, formula = . ~ parse(text = scoped_xname) %>% eval()) %>% fitted()
+    }
   ) %>% mutate(
     # Compute partial residuals
-    y.partial.resid = {model %>% residuals(type = 'partial')}[, 
-      paste0('ns(', parse(text = xname), ', df = ', df, ')')]
+    y.partial.resid = if (!is.null(df)) {
+      {model %>% residuals(type = 'partial')}[, paste0('ns(', parse(text = xname), ', df = ', df, ')')]
+    } else {
+      {model %>% residuals(type = 'partial')}[, xname]
+    }
     # Regression on partial residuals
-    , y.hat.partial = lm(y.partial.resid ~ ns(x, df)) %>% fitted()
+    , y.hat.partial = if (!is.null(df)) {
+      lm(y.partial.resid ~ ns(x, df)) %>% fitted()
+    } else {
+      lm(y.partial.resid ~ x) %>% fitted()
+    }
   ) %>% return()
 }
 ```
@@ -939,7 +950,7 @@ for(i in 1:length(xval_inds)) {
 plot_mses(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')
 ```
 
-That's a marginal increase in outsample MSE (`r calc_outsample_mse(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean() %>% round(4)` vs. `r calc_outsample_mse(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean() %>% round(4)`, difference of `r scales::percent({calc_outsample_mse(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean()}/{calc_outsample_mse(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean()} - 1)`) with many fewer predictors.
+That's a marginal increase in outsample MSE (`r calc_outsample_mse(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean() %>% round(4)` to `r calc_outsample_mse(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean() %>% round(4)`, difference of `r scales::percent({calc_outsample_mse(clmaps2, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean()}/{calc_outsample_mse(clmaps, xval_inds, 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>% mean()} - 1)`) with many fewer predictors.
 
 ```{r, fig.height = 6}
 plot_coefs(clmaps2)
@@ -1472,7 +1483,7 @@ All of the PG indicators apparently help estimate largest gift amount, above and
 
 # Final Comparison {#final-comparison}
 
-Rebuild all models using the entire dataset. Full results are in the [appendix](#appendix-final-comparison).
+Rebuild all models using the entire dataset. Full results are in the [appendix](#appendix-final-models).
 
 ```{r, warning = FALSE, message = FALSE}
 # Final models list
@@ -1538,16 +1549,151 @@ final_coefs %>%
 
 The exact effect of age and recent years of giving are difficult to see since multiple coefficients are computed per spline. Consider the partial residual plots for each model.
 
-Effect of age per model
+```{r}
+final_partials <- rbind(
+  data.frame(
+    model = 'campaign ~ pg score'
+    , calc_partial_resids(final_models$campaign.pg.score, inds = c(xval_inds, oos_inds), xname = 'AGE')
+  ) %>% mutate(x = mdat %>% filter(rownum %in% unlist(c(xval_inds, oos_inds))) %>% select(NUMERIC_AGE) %>% unlist())
+  , data.frame(
+      model = 'largest trans ~ pg score'
+      , calc_partial_resids(final_models$largest.trans.pg.score, inds = c(xval_inds, oos_inds), xname = 'AGE')
+  ) %>% mutate(x = mdat %>% filter(rownum %in% unlist(c(xval_inds, oos_inds))) %>% select(NUMERIC_AGE) %>% unlist())
+  , data.frame(
+    model = 'campaign ~ all preds'
+    , calc_partial_resids(final_models$campaign.all.preds, inds = c(xval_inds, oos_inds)
+                          , xname = 'NUMERIC_AGE', df = 5)
+  )
+  , data.frame(
+    model = 'largest trans ~ all preds'
+    , calc_partial_resids(final_models$largest.trans.all.preds, inds = c(xval_inds, oos_inds)
+                      , xname = 'NUMERIC_AGE', df = 3)
+  )
+)
+```
 
-Effect of recent giving per model
+```{r}
+final_partials %>%
+  ggplot(aes(x = x, y = y)) +
+  geom_point(alpha = .1, size = 1) +
+  geom_hline(yintercept = 2, color = 'darkgray') +
+  geom_line(aes(y = y.hat, color = model), size = 1, alpha = .8) +
+  labs(title = 'Numeric age spline versus giving', x = 'age', y = bquote(log[10] ~ 'giving'))
+```
+
+```{r}
+final_partials %>%
+  ggplot(aes(x = x, y = y.partial.resid)) +
+  geom_point(alpha = .1, size = 1) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
+  geom_line(aes(y = y.hat.partial, color = model), size = 1, alpha = .8) +
+  labs(title = 'Numeric age spline versus partial residuals for giving'
+       , x = 'age'
+       , y = 'partial residuals')
+```
+
+  * In all four models, age has only a small impact after controlling for the other predictors.
+  * The nonlinear splines fits suggest that peak giving occurs in the late 40s or early 50s, and the age 60+ indicator does not provide information beyond that included in other predictors.
+
+```{r}
+final_partials <- rbind(
+  data.frame(
+    model = 'campaign ~ pg score'
+    , calc_partial_resids(final_models$campaign.pg.score, inds = c(xval_inds, oos_inds)
+                          , xname = 'GAVE_IN_LAST_3_YRS')
+  )
+  , data.frame(
+      model = 'largest trans ~ pg score'
+      , calc_partial_resids(final_models$largest.trans.pg.score, inds = c(xval_inds, oos_inds)
+                            , xname = 'GAVE_IN_LAST_3_YRS')
+  )
+  , data.frame(
+    model = 'campaign ~ all preds'
+    , calc_partial_resids(final_models$campaign.all.preds, inds = c(xval_inds, oos_inds)
+                          , xname = 'YEARS_OF_GIVING_LAST_3', df = 2)
+  )
+  , data.frame(
+    model = 'largest trans ~ all preds'
+    , calc_partial_resids(final_models$largest.trans.all.preds, inds = c(xval_inds, oos_inds)
+                      , xname = 'YEARS_OF_GIVING_LAST_3', df = 2)
+  )
+)
+```
+
+```{r}
+final_partials %>%
+  ggplot(aes(x = x, y = y)) +
+  geom_point(alpha = .1, size = 1) +
+  geom_hline(yintercept = 2, color = 'darkgray') +
+  geom_line(aes(y = y.hat, color = model), size = 1, alpha = .8) +
+  labs(title = 'Years of giving last 3 versus giving', x = 'years', y = bquote(log[10] ~ 'giving'))
+```
+
+```{r}
+final_partials %>%
+  ggplot(aes(x = x, y = y.partial.resid)) +
+  geom_point(alpha = .1, size = 1) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
+  geom_line(aes(y = y.hat.partial, color = model, group = model), size = 1, alpha = .8) +
+  scale_y_continuous(breaks = -10:10) +
+  labs(title = 'Years of giving last 3 versus partial residuals for giving'
+       , x = 'years'
+       , y = 'partial residuals')
+```
+
+```{r}
+rbind(
+  data.frame(
+    model = 'campaign ~ all preds'
+    , x = mdat %>% filter(rownum %in% unlist(c(xval_inds, oos_inds))) %>% select(YEARS_OF_GIVING) %>% unlist()
+    , y = {final_models$campaign.all.preds %>% model.frame()}[, 1]
+    , y.partial.resid = {final_models$campaign.all.preds %>% residuals(type = 'partial')}[, 'sqrt(YEARS_OF_GIVING)']
+  ) %>% mutate(y.hat.partial = lm(y.partial.resid ~ sqrt(x)) %>% fitted())
+  , data.frame(
+    model = 'largest trans ~ all preds'
+    , x = mdat %>% filter(rownum %in% unlist(c(xval_inds, oos_inds))) %>% select(YEARS_OF_GIVING) %>% unlist()
+    , y = {final_models$largest.trans.all.preds %>% model.frame()}[, 1]
+    , y.partial.resid = {final_models$largest.trans.all.preds %>% residuals(type = 'partial')}[, 'sqrt(YEARS_OF_GIVING)']
+  ) %>% mutate(y.hat.partial = lm(y.partial.resid ~ sqrt(x)) %>% fitted())
+) %>%
+  ggplot(aes(x = x, y = y.partial.resid, color = model)) +
+  geom_point(alpha = .1, size = 1) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
+  geom_line(aes(y = y.hat.partial, group = model), size = 1, alpha = .8) +
+  scale_y_continuous(breaks = -10:10) +
+  labs(title = 'Years of giving versus partial residuals for giving'
+       , x = 'years of giving'
+       , y = 'partial residuals')
+```
+
+  * The PG score models use a binary indicator requiring at least one gift in the last three years, and at least 10 years of giving total, while the all predictors models separate these two components and treat them numerically.
+  * Controlling for the effects of the other predictors, recency of giving has a large impact on overall campaign giving in the all predictors model.
+  * Looking at years of giving, interestingly both lines cross 0 before 10, suggesting a smaller cutoff (7 or 8 years?) could be used in the PG checklist.
+  * When modeling expected campaign giving it's certainly better to treat these variables separately. Largest transaction appears to have a less clear relationship (as seen in the above plots).
 
 # Conclusions
 
-Survivorship bias for age?
-Age at time of largest gift
-Regression model conditional on making a gift
-Modeling future gift conditional on past data only
+The goal of this project was to look at the impact of each of the PG checklist items has had on giving, and to see whether I could build a reasonable regression model based on the checklist.
+
+The checklist succeeds at its primary goal of identifying factors impacting giving transaction amounts -- in the largest transaction regressed on checklist items model, while alumni status is not significant and president visits are marginal, all the factors are positively associated with giving. A past \$250K+ MG is by far the most important factor, with \$25K+ annual giving, loyalty (gave in last 3 years), and 5+ visits approximately tied for second place. Unfortunately, modeling on largest gift consistently overestimates giving amounts at the high end, and the other variables I examined weren't able to correct for this. The modeled results could still be interesting for prioritization purposes, though.
+
+The big winner was the campaign giving regressed on all predictors model, with nice-looking residual plots exhibiting only a bit of positive skewness. Interestingly, the best predictor by far is donor loyalty, measured by the number of years of giving in the last three, nearly doubling the impact of having made a previous \$250K+ gift!
+
+I also included previous modeled scores (affinity score) and tiering (MG prioritization) in the all predictors models to see whether the PG checklist items add information beyond that contained in these earlier models. Deep engagement, Chicago home address, committee participation, and president visits fall out, but the others are still impactful. Interestingly, alumni status and age don't matter as much as we usually think (alumni status hurts, and age has a nonmonotonic association with giving).
+
+Some ideas for improvements:
+
+  * Evaluation rating significantly impacts giving at some levels but not others, due partially to small sample size but also probably due to binning. Can a continuous rating prediction be developed?
+
+  * Is age a biased predictor? Perhaps age at the time of the largest gift should be used instead of today's age.
+  
+  * Consider a regression model conditional on making a gift, i.e.
+  
+$$ E(\text{giving amount} ~ | ~ \text{donor status} = 1) $$
+  
+  * Consider a time series approach, where future giving over some reasonable cultivation period (2 years?) is estimated conditional on previous data.
+  
+$$ E \left( (\text{giving amount})_t ~ | ~ (\text{donor attributes})_{t - 1} \right) $$
 
 # Appendix
 
@@ -1641,7 +1787,7 @@ summary(tlm_final)
 summary(tlmap_final)
 ```
 
-## Final comparison {##appendix-final-comparison}
+## Final models {#appendix-final-models}
 
 [Back](#final-comparison)
 
