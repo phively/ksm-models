@@ -1,0 +1,110 @@
+---
+title: "03 Data validation and export"
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+Look at descriptive statistics for the final campaign model fitted in the previous [cultivation score weights](https://cdn.rawgit.com/phively/ksm-models/c58e8065/pg-cultivation-score-fy18/02%20Cultivation%20score%20weights.nb.html) step, and calculate fitted values for all KSM entities.
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(gridExtra)
+library(splines)
+
+# Functions adapted from previous analysis steps
+source('code/functions.R')
+
+# Visualization functions adapted fron previous analysis steps
+source('code/functions_viz.R')
+```
+
+## Import data
+
+The data file is generated with [this code](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/generate-data.R), and the modeled data frame with [this code](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/generate-modeling-data.R).
+
+```{r}
+filepath <- 'data/2018-07-26 PG scores for all active prospects.xlsx'
+source('code/generate-data.R')
+source('code/generate-modeling-data.R')
+```
+
+## Build model
+
+Re-fit the [all predictors 2](https://cdn.rawgit.com/phively/ksm-models/c58e8065/pg-cultivation-score-fy18/02%20Cultivation%20score%20weights.nb.html#all_predictors_2) model.
+
+```{r}
+clm_alldat <- lm(
+  log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+    ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
+    PM_VISIT_LAST_2_YRS +
+    log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+    AF_25K_GIFT +
+    sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+    ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+    MG_250K_PLUS + # Decided to leave as factor
+    Alumnus +
+    SEASON_TICKET_YEARS + # Deep Engagement component
+    AFFINITY_SCORE +
+    MG_PR_MODEL_DESC
+  , data = mdat
+)
+```
+
+```{r}
+summary(clm_alldat)
+```
+
+Residuals plot recreated in ggplot2.
+
+```{r}
+plot_resids(list(clm_alldat), list(1:nrow(mdat), 1:nrow(mdat)), 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$insample +
+  geom_point(alpha = .05) +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2)) +
+  guides(color = FALSE)
+```
+
+```{r}
+plot_qq(list(clm_alldat), xval = list(1:nrow(mdat), 1:nrow(mdat)), yname= 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$insample +
+  scale_y_continuous(breaks = seq(-10, 10, by = 2)) +
+  guides(color = FALSE)
+```
+
+# Descriptives
+
+
+
+# Append scores
+
+```{r}
+pool %>%
+  mutate(rownum = 1:nrow(pool), actual = log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT)) %>%
+  filter(rownum %nin% outliers) %>%
+  cbind(
+    data.frame(
+      fitted = lm(
+          log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+            ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
+            PM_VISIT_LAST_2_YRS +
+            log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+            AF_25K_GIFT +
+            sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+            ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+            MG_250K_PLUS + # Decided to leave as factor
+            Alumnus +
+            SEASON_TICKET_YEARS + # Deep Engagement component
+            AFFINITY_SCORE +
+            MG_PR_MODEL_DESC
+          , data = mdat %>% filter(rownum %nin% outliers)
+      ) %>% fitted()
+    )
+  ) %>%
+  write_csv(path = 'data/fitted.csv')
+```
+
