@@ -17,6 +17,7 @@ Look at descriptive statistics for the final campaign model fitted in the previo
 library(tidyverse)
 library(gridExtra)
 library(splines)
+library(foreach)
 
 # Functions adapted from previous analysis steps
 source('code/functions.R')
@@ -70,6 +71,8 @@ plot_resids(list(clm_alldat), list(1:nrow(mdat), 1:nrow(mdat)), 'CAMPAIGN_NEWGIF
   guides(color = FALSE)
 ```
 
+Q-Q plot recreated in ggplot2.
+
 ```{r}
 plot_qq(list(clm_alldat), xval = list(1:nrow(mdat), 1:nrow(mdat)), yname= 'CAMPAIGN_NEWGIFT_CMIT_CREDIT')$insample +
   scale_y_continuous(breaks = seq(-10, 10, by = 2)) +
@@ -78,33 +81,104 @@ plot_qq(list(clm_alldat), xval = list(1:nrow(mdat), 1:nrow(mdat)), yname= 'CAMPA
 
 # Descriptives
 
+How well-calibrated is the model at different levels? Look at the true giving amounts versus predicted ones.
 
+```{r}
+# Predictions data frame
+model_preds <- calc_preds(list(clm_alldat), list(1:nrow(mdat)), 'CAMPAIGN_NEWGIFT_CMIT_CREDIT') %>%
+  data.frame() %>%
+  mutate(
+    resid = truth - preds
+    , cgift = log10plus1(truth, inverse = TRUE)
+    , cgift.preds = log10plus1(preds, inverse = TRUE)
+    , cgift.bin = trunc(truth)
+    , cgift.preds.bin = trunc(preds)
+  )
+```
+```{r}
+# Plot predictions against truth
+model_preds %>%
+  ggplot(aes(x = cgift, y = cgift.preds)) +
+  geom_point(alpha = .05) +
+  geom_smooth(color = 'red') +
+  geom_smooth(method = 'lm') +
+  scale_x_continuous(trans = 'log10plus1', breaks = 10^(0:10), minor_breaks = NULL, labels = scales::dollar) +
+  scale_y_continuous(trans = 'log10plus1', breaks = 10^(0:10), minor_breaks = NULL, labels = scales::dollar) +
+  coord_fixed() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Campaign giving', y = 'Predicted campaign giving')
+```
+
+```{r}
+mingift <- -1
+maxgift <- 9
+model_preds %>%
+  group_by(cgift.bin, cgift.preds.bin) %>%
+  summarise(n = length(resid)) %>%
+  ggplot(aes(x = cgift.bin, y = cgift.preds.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Campaign giving', y = 'Predicted campaign giving')
+```
+
+Percent of donors predicted within one power of ten of their correct giving level:
+
+```{r}
+preds.table <- model_preds %>%
+  arrange(cgift.bin) %>%
+  mutate(
+    call = case_when(
+      resid >= 1 ~ 'Underestimated' # Understimated by more than power of 10
+      , resid <= -1 ~ 'Overestimated'  # Overestimated by more than power of 10
+      , TRUE ~ 'Within power of 10' # Correct estiamte
+    ) %>% as_factor(levels = c('Within power of 10', 'Underestimated', 'Overestimated'))
+    , `Campaign Giving Range` = 10^cgift.bin %>% scales::dollar() %>% as_factor()
+  ) %>%
+  group_by(`Campaign Giving Range`, call) %>%
+  summarise(n = length(resid)) %>%
+  spread(call, n, fill = 0) %>%
+  mutate(
+    Total = Overestimated + `Within power of 10` + Underestimated
+    , `Over%` = {Overestimated / Total} %>% scales::percent()
+    , `Within%` = {`Within power of 10` / Total}  %>% scales::percent()
+    , `Under%` = {Underestimated / Total}  %>% scales::percent()
+  )
+```
+
+```{r, rows.print = 100}
+print(preds.table)
+```
 
 # Append scores
 
 ```{r}
 pool %>%
-  mutate(rownum = 1:nrow(pool), actual = log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT)) %>%
-  filter(rownum %nin% outliers) %>%
-  cbind(
-    data.frame(
-      fitted = lm(
-          log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
-            ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
-            PM_VISIT_LAST_2_YRS +
-            log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
-            AF_25K_GIFT +
-            sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
-            ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
-            MG_250K_PLUS + # Decided to leave as factor
-            Alumnus +
-            SEASON_TICKET_YEARS + # Deep Engagement component
-            AFFINITY_SCORE +
-            MG_PR_MODEL_DESC
-          , data = mdat %>% filter(rownum %nin% outliers)
+  mutate(
+    rownum = 1:nrow(pool), actual = log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT)
+    , fitted = lm(
+        log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+          ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
+          PM_VISIT_LAST_2_YRS +
+          log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+          AF_25K_GIFT +
+          sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+          ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+          MG_250K_PLUS + # Decided to leave as factor
+          Alumnus +
+          SEASON_TICKET_YEARS + # Deep Engagement component
+          AFFINITY_SCORE +
+          MG_PR_MODEL_DESC
+        , data = mdat
       ) %>% fitted()
-    )
+    , resid = actual - fitted
   ) %>%
   write_csv(path = 'data/fitted.csv')
 ```
-
