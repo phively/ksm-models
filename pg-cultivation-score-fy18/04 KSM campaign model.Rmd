@@ -1,0 +1,138 @@
+---
+title: "04 KSM campaign model"
+output:
+  html_notebook:
+    code_folding: hide
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+Supplement the previous models with Kellogg-specific datapoints previously used for the [AF $10K model](https://github.com/phively/ksm-models/tree/master/af-10k-fy17), assess how well the PG checklist applies to Kellogg donors, and build a basic campaign prioritization model using all variables.
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(gridExtra)
+library(splines)
+library(foreach)
+library(lubridate)
+library(wranglR)
+
+# Functions adapted from previous analysis steps
+source('code/functions.R')
+
+# Visualization functions adapted fron previous analysis steps
+source('code/functions_viz.R')
+```
+
+## Import data
+
+The PG checklist data file is generated with [this code](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/generate-data.R), while the KSM data is derived from the 1/9/2018 version of [this view](https://github.com/phively/ksm-models/blob/master/af-10k-fy17/data/ksm-af-10k-data.sql), transformed by [a script](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/generate-af10k-data.R).
+
+```{r, warning = FALSE}
+date <- '2018-09-07'
+
+# Load PG data
+filepath <- paste0('data/', date, ' PG scores for all active prospects.xlsx')
+source('code/generate-data.R')
+source('code/generate-modeling-data.R')
+# Preserve ID numbers
+mdat <- pool %>% select(ID_NUMBER) %>% cbind(mdat)
+
+# Load AF 10K data
+filepath <- paste0('data/', date, ' AF 10K model data.csv')
+source('code/generate-af10k-data.R')
+dat10k <- parse_af_data(filepath)
+```
+
+# KSM and NU PG checklist model comparison
+
+Does fitting the PG checklist on all prospects, versus Kellogg prospects only, show some difference? How does the model change when fitting just KSM prospects, as opposed to the entire prospect pool?
+
+```{r}
+# Full dataset
+clm_full <- lm(
+  log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+    ACTIVE_PROPOSALS +
+    AGE +
+    PM_VISIT_LAST_2_YRS +
+    VISITS_5PLUS +
+    AF_25K_GIFT +
+    GAVE_IN_LAST_3_YRS +
+    MG_250K_PLUS +
+    PRESIDENT_VISIT +
+    TRUSTEE_OR_ADVISORY_BOARD +
+    Alumnus +
+    DEEP_ENGAGEMENT +
+    CHICAGO_HOME
+  , data = mdat
+)
+
+# KSM prospects only
+clm_ksm <- lm(
+  log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+    ACTIVE_PROPOSALS +
+    AGE +
+    PM_VISIT_LAST_2_YRS +
+    VISITS_5PLUS +
+    AF_25K_GIFT +
+    GAVE_IN_LAST_3_YRS +
+    MG_250K_PLUS +
+    PRESIDENT_VISIT +
+    TRUSTEE_OR_ADVISORY_BOARD +
+    Alumnus +
+    DEEP_ENGAGEMENT +
+    CHICAGO_HOME
+  , data = mdat %>% inner_join(dat10k %>% select(ID_NUMBER), by = c('ID_NUMBER', 'ID_NUMBER'))
+)
+```
+
+The full model is fit on all `r clm_full %>% model.frame() %>% nrow() %>% I()` observations, while the KSM model uses only `r clm_ksm %>% model.frame() %>% nrow() %>% I()` of them.
+
+```{r}
+model_comparison <- full_join(
+  data.frame(var = coef(clm_full) %>% names, full.model = coef(clm_full), se.full = summary(clm_full)$coefficients[, 2])
+  , data.frame(var = coef(clm_ksm) %>% names, ksm.model = coef(clm_ksm), se.ksm = summary(clm_ksm)$coefficients[, 2])
+  , by = c('var', 'var')
+)
+```
+
+```{r, rows.print = 100}
+model_comparison %>%
+  mutate_if(is.numeric, function(x) round(x, 3))
+```
+
+```{r, fig.height = 6}
+critq <- qnorm(p = .025, lower.tail = FALSE)
+model_comparison %>%
+  gather('which', 'x', -(var)) %>%
+  mutate(
+    model = case_when(
+      str_detect(which, '.*full.*') ~ 'full'
+      , str_detect(which, '.*ksm.*') ~ 'ksm'
+    ) %>% factor()
+    , which = case_when(
+      str_detect(which, '.*model.*') ~ 'beta'
+      , TRUE ~ 'se'
+    )
+  ) %>%
+  spread(which, x) %>%
+  mutate(
+    se.high = beta + se * critq
+    , se.low = beta - se * critq
+  ) %>%
+  ggplot(aes(x = var, y = beta, color = model, group = model)) +
+  geom_point(position = position_dodge(.5)) +
+  geom_linerange(aes(ymin = se.low, ymax = se.high), position = position_dodge(.5)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'variable', y = bquote(hat(beta)))
+```
+
+Not much here; there isn't an apparent difference for the variables of interest. How about the final campaign model?
+
+To be more rigorous, consider a "KSM prospect" indicator, with interaction effects on each of the above.
+
