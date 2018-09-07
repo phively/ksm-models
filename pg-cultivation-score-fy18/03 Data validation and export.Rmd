@@ -99,6 +99,7 @@ model_preds <- calc_preds(list(clm_alldat), list(1:nrow(mdat)), 'CAMPAIGN_NEWGIF
 # Plot predictions against truth
 model_preds %>%
   ggplot(aes(x = cgift, y = cgift.preds)) +
+  geom_abline(color = 'purple', alpha = .5) +
   geom_point(alpha = .05) +
   geom_smooth(color = 'red') +
   geom_smooth(method = 'lm') +
@@ -157,6 +158,8 @@ preds.table <- model_preds %>%
 print(preds.table)
 ```
 
+I'd interpret the group of people who actually gave \$10K or \$100K and were estimated at \$1M+ as prospets, and the people who actually gave \$1M+ but were estimated below \$100K could be looked into to search for additional possible factors.
+
 # Append scores
 
 ```{r}
@@ -179,6 +182,7 @@ pool %>%
         , data = mdat
       ) %>% fitted()
     , resid = actual - fitted
+    , underestimated_pg = case_when(resid >= 1 & trunc(actual) >= 6 ~ 'Y')
   ) %>%
   write_csv(path = 'data/fitted.csv')
 ```
