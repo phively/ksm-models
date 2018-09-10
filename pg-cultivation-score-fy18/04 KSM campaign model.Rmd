@@ -49,13 +49,15 @@ source('code/generate-af10k-data.R')
 dat10k <- parse_af_data(filepath)
 ```
 
-# KSM and NU PG checklist model comparison
+# KSM and NU model comparison
+
+## Campaign vs. PG checklist
 
 Does fitting the PG checklist on all prospects, versus Kellogg prospects only, show some difference? How does the model change when fitting just KSM prospects, as opposed to the entire prospect pool?
 
 ```{r}
 # Full dataset
-clm_full <- lm(
+chklm_full <- lm(
   log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
     ACTIVE_PROPOSALS +
     AGE +
@@ -73,7 +75,7 @@ clm_full <- lm(
 )
 
 # KSM prospects only
-clm_ksm <- lm(
+chklm_ksm <- lm(
   log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
     ACTIVE_PROPOSALS +
     AGE +
@@ -91,12 +93,20 @@ clm_ksm <- lm(
 )
 ```
 
-The full model is fit on all `r clm_full %>% model.frame() %>% nrow() %>% I()` observations, while the KSM model uses only `r clm_ksm %>% model.frame() %>% nrow() %>% I()` of them.
+The full model is fit on all `r chklm_full %>% model.frame() %>% nrow() %>% I()` observations, while the KSM model uses only `r chklm_ksm %>% model.frame() %>% nrow() %>% I()` of them.
 
 ```{r}
 model_comparison <- full_join(
-  data.frame(var = coef(clm_full) %>% names, full.model = coef(clm_full), se.full = summary(clm_full)$coefficients[, 2])
-  , data.frame(var = coef(clm_ksm) %>% names, ksm.model = coef(clm_ksm), se.ksm = summary(clm_ksm)$coefficients[, 2])
+  data.frame(
+    var = coef(chklm_full) %>% names
+    , full.model = coef(chklm_full)
+    , se.full = summary(chklm_full)$coefficients[, 2]
+  )
+  , data.frame(
+    var = coef(chklm_ksm) %>% names
+    , ksm.model = coef(chklm_ksm)
+    , se.ksm = summary(chklm_ksm)$coefficients[, 2]
+  )
   , by = c('var', 'var')
 )
 ```
@@ -107,7 +117,8 @@ model_comparison %>%
 ```
 
 ```{r, fig.height = 6}
-critq <- qnorm(p = .025, lower.tail = FALSE)
+pcrit <- .05
+critq <- qnorm(p = pcrit/2, lower.tail = FALSE)
 model_comparison %>%
   gather('which', 'x', -(var)) %>%
   mutate(
@@ -126,13 +137,161 @@ model_comparison %>%
     , se.low = beta - se * critq
   ) %>%
   ggplot(aes(x = var, y = beta, color = model, group = model)) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
   geom_point(position = position_dodge(.5)) +
   geom_linerange(aes(ymin = se.low, ymax = se.high), position = position_dodge(.5)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
   labs(x = 'variable', y = bquote(hat(beta)))
 ```
 
-Not much here; there isn't an apparent difference for the variables of interest. How about the final campaign model?
+The bars provide `r scales::percent(1 - pcrit) %>% I()` CIs for each coefficient based on the standard error. Not much here; there isn't an apparent difference for the variables of interest. How about the final campaign model?
 
-To be more rigorous, consider a "KSM prospect" indicator, with interaction effects on each of the above.
+## Interaction model
 
+To be more rigorous, consider a "KSM prospect" indicator, with interaction effects on each of the explanatory variables.
+
+```{r}
+clm_ksm_interact <- lm(
+  log10plus1(CAMPAIGN_NEWGIFT_CMIT_CREDIT) ~
+    # KSM interaction
+    KSM *
+    (
+    ns(NUMERIC_AGE, df = 5) + # Underlying variable to AGE indicator
+    PM_VISIT_LAST_2_YRS +
+    log10plus1(VISIT_COUNT) + # Underlying VISITS_5PLUS indicator
+    AF_25K_GIFT +
+    sqrt(YEARS_OF_GIVING) + # Underlying GAVE_IN_LAST_3_YRS
+    ns(YEARS_OF_GIVING_LAST_3, df = 2) + # Underlying GAVE_IN_LAST_3_YRS
+    MG_250K_PLUS + # Decided to leave as factor
+    Alumnus +
+    SEASON_TICKET_YEARS + # Deep Engagement component
+    AFFINITY_SCORE +
+    MG_PR_MODEL_DESC +
+    1
+    )
+  , data = mdat %>%
+      # People on the 10K list count as KSM prospects
+      left_join(dat10k %>% select(ID_NUMBER) %>% mutate(KSM = 'Y')
+                , by = c('ID_NUMBER', 'ID_NUMBER')) %>%
+      # Replace NAs from the left join with N indicator
+      replace_na(replace = list(KSM = 'N'))
+)
+```
+
+```{r}
+summary(clm_ksm_interact)
+```
+
+Note the NAs due to collinearity; this should be fixed.
+
+```{r}
+clm_ksm_interact <- update(
+  clm_ksm_interact
+  , formula = . ~ .
+      - (ns(YEARS_OF_GIVING_LAST_3, df = 2) * KSM)
+      + (YEARS_OF_GIVING_LAST_3 * KSM)
+)
+```
+
+```{r}
+summary(clm_ksm_interact)
+```
+
+```{r}
+interact_model <- cbind(
+  data.frame(var = summary(clm_ksm_interact)$coefficients %>% rownames())
+  , beta = summary(clm_ksm_interact)$coefficients[, 1]
+  , se = summary(clm_ksm_interact)$coefficients[, 2]
+)
+row.names(interact_model) <- NULL
+```
+
+```{r, fig.height = 6}
+interact_model %>%
+  filter(str_detect(var, 'KSMY')) %>%
+  mutate(
+    var = str_remove(var, ':KSMY') %>% as_factor()
+    , se.high = beta + se * critq
+    , se.low = beta - se * critq
+    # SE bars cross 0 iff not significant at pcrit
+    , sig = ifelse(se.high > 0 & se.low < 0, 'Not significant', 'Significant')
+  ) %>%
+  ggplot(aes(x = var, y = beta, color = sig)) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
+  geom_point() +
+  geom_linerange(aes(ymin = se.low, ymax = se.high)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(
+    title = 'KSM vs. NU campaign model interaction coefficeints'
+    , x = 'variable'
+    , y = bquote(hat(beta))
+    , color = bquote('Significance at p =' ~ .(pcrit) ~ 'level')
+  )
+```
+
+Looks like there *is* a KSM main effect (KSMY is the KSM effect), plus there are differences in the age (less impact), total visit count (more impact), years of giving (including last 3, at the end), affinity score (slightly less impact), and PG prioritization model factors (less impact).
+
+```{r}
+interact_compare <- interact_model %>%
+  filter(str_detect(var, 'NUMERIC_AGE|VISIT_COUNT|YEARS_OF_GIVING|AFFINITY|MG_PR')) %>%
+  mutate(
+    model = ifelse(str_detect(var, 'KSMY'), 'KSM', 'NU')
+    , var = str_remove(var, ':KSMY')
+  )
+interact_compare <- cbind(
+  interact_compare %>% filter(model == 'NU')
+  , interact_compare %>% filter(model == 'KSM') %>% select(ksm.effect = beta, ksm.se = se)
+) %>% mutate(
+  ksm.effect = beta + ksm.effect
+) %>% select(-model)
+```
+
+```{r, rows.print = 100}
+interact_compare %>%
+  mutate_if(is.numeric, function(x) round(x, 3))
+```
+
+I've defined "KSM effect" as the sum of the coefficient and interaction effect estimate, i.e.
+
+$$ K_i = \hat{\beta_i} + \hat{\beta}_{i ~ \times KSM} $$
+
+Plotting these variables:
+
+```{r}
+interact_compare %>%
+  gather('which', 'x', -(var)) %>%
+  mutate(
+    model = case_when(
+      !str_detect(which, 'ksm.*') ~ 'NU estimate'
+      , TRUE ~ 'KSM effect'
+    ) %>% as_factor()
+    , which = case_when(
+      str_detect(which, 'se') ~ 'se'
+      , TRUE ~ 'beta'
+    )
+  ) %>%
+  spread(which, x) %>%
+  mutate(
+    se.high = beta + se * critq
+    , se.low = beta - se * critq
+  ) %>%
+  ggplot(aes(x = var, y = beta, color = model, group = model)) +
+  geom_hline(yintercept = 0, color = 'darkgray') +
+  geom_point(position = position_dodge(.5)) +
+  geom_linerange(aes(ymin = se.low, ymax = se.high), position = position_dodge(.5)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'variable', y = bquote(hat(beta)), color = bquote(hat(beta) ~ 'or effect')) +
+  scale_y_continuous(breaks = seq(-5, 5, by = .5))
+```
+
+This is interesting -- there does appear to be evidence that middle tier and top tier aren't as robust for KSM (coefficients closer to 0), but affinity score still looks pretty good. The practical effect of age coefficient differences for KSM/NU is relatively large, even changing signs for most of the splines. Total visit count and total years of giving is also more impactful for KSM than NU prospects.
+
+## Summary of findings
+
+  * KSM and NU constituents behave similarly when looking only at the PG checklist items.
+  * Given the interaction model results, it probably makes sense to estimate age effects separately for the different units/programs.
+  * There really are differences between KSM and NU campaign giving not already accounted for in the MG prioritization score. Note that this is **not** the same as saying that expected *future giving* (i.e. the purpose of the model) is different between the populations in some way not accounted for by the MG prioritzation score.
+  * Affinity score is a marginally less important predictor for KSM than NU prospects. On the other hand, total visit count and total years of giving outperform for KSM compared to NU.
+  * The previous point may suggest that giving engagement is *more* important for KSM prospects (and potentially even other graduate program prospects) than other NU prospects.
+
+# KSM model variable selection
