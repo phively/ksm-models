@@ -3,16 +3,28 @@ Create Or Replace View point_in_time_model As
 With
 
 /*************************
+Parameters
+*************************/
+params As (
+  Select
+    2016 As training_fy
+    , 2017 As target_fy1
+    , 2018 As target_fy2
+  From DUAL
+)
+
+/*************************
  Giving queries
 *************************/
 
 /* Current calendar */
-cal As (
+, cal As (
   Select *
   From v_current_calendar
 )
 
 /* Householded transactions, summing together split allocations within the same receipt number */
+-- No need to make point-in-time
 , giving_hh As (
   Select
     household_id
@@ -45,6 +57,9 @@ cal As (
     , min(Case When hh_recognition_credit > 0 Then fiscal_year End)
       As first_year
   From giving_hh
+  Cross Join params
+  -- Point-in-time
+  Where fiscal_year <= training_fy
   Group By household_id
 )
 
@@ -52,11 +67,14 @@ cal As (
 , ksm_giving As (
   Select
     giving_hh.household_id
-    , count(Distinct Case When hh_recognition_credit > 0 Then allocation_code End)
+    -- Point-in-time
+    , count(Distinct Case When hh_recognition_credit > 0 And fiscal_year <= training_fy
+        Then allocation_code End)
       As gifts_allocs_supported
-    , count(Distinct Case When hh_recognition_credit > 0 Then fiscal_year End)
+    , count(Distinct Case When hh_recognition_credit > 0 And fiscal_year <= training_fy
+        Then fiscal_year End)
       As gifts_fys_supported
-    , min(Case When hh_recognition_credit > 0 Then fiscal_year End)
+    , min(ksm_giving_yr.first_year)
       As giving_first_year
     -- First year giving
     , sum(Case When fiscal_year = ksm_giving_yr.first_year And tx_gypm_ind <> 'P'
@@ -65,58 +83,84 @@ cal As (
     , sum(Case When fiscal_year = ksm_giving_yr.first_year And tx_gypm_ind = 'P'
         Then hh_recognition_credit End)
       As giving_first_year_pledge_amt
-    , max(Case When tx_gypm_ind Not In ('P', 'M') Then hhrc End)
+    , max(Case When tx_gypm_ind Not In ('P', 'M') And fiscal_year <= training_fy
+        Then hhrc End)
       As giving_max_cash_amt
     -- Take largest transaction, combining receipts into one amount. In event of a tie, take earliest date of record.
     , min(fiscal_year) keep(dense_rank First
-        Order By (Case When tx_gypm_ind Not In ('P', 'M') Then hhrc Else 0 End) Desc, date_of_record Asc)
+        Order By (Case When tx_gypm_ind Not In ('P', 'M') And fiscal_year <= training_fy
+          Then hhrc Else 0 End) Desc, date_of_record Desc)
       As giving_max_cash_fy
     , min(date_of_record) keep(dense_rank First
-        Order By (Case When tx_gypm_ind Not In ('P', 'M') Then hhrc Else 0 End) Desc, date_of_record Asc)
+        Order By (Case When tx_gypm_ind Not In ('P', 'M') And fiscal_year <= training_fy
+          Then hhrc Else 0 End) Desc, date_of_record Desc)
       As giving_max_cash_dt
-    , max(Case When tx_gypm_ind = 'P' Then hhrc End)
+    , max(Case When tx_gypm_ind = 'P' And fiscal_year <= training_fy
+        Then hhrc End)
       As giving_max_pledge_amt
     , min(fiscal_year) keep(dense_rank First
-        Order By (Case When tx_gypm_ind = 'P' Then hhrc Else 0 End) Desc, date_of_record Asc)
+        Order By (Case When tx_gypm_ind = 'P' And fiscal_year <= training_fy
+          Then hhrc Else 0 End) Desc, date_of_record Desc)
       As giving_max_pledge_fy
     , min(date_of_record) keep(dense_rank First
-        Order By (Case When tx_gypm_ind = 'P' Then hhrc Else 0 End) Desc, date_of_record Asc)
+        Order By (Case When tx_gypm_ind = 'P' And fiscal_year <= training_fy
+          Then hhrc Else 0 End) Desc, date_of_record Desc)
       As giving_max_pledge_dt
     -- Totals
-    , sum(Case When tx_gypm_ind = 'P' Then 0 Else hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year <= training_fy
+        Then hh_recognition_credit Else 0 End)
       As giving_cash_total
-    , sum(Case When tx_gypm_ind = 'P' Then hh_recognition_credit Else 0 End)
+    , sum(Case When tx_gypm_ind = 'P' And fiscal_year <= training_fy
+        Then hh_recognition_credit Else 0 End)
       As giving_pledge_total
-    , sum(Case When tx_gypm_ind <> 'Y' Then hh_recognition_credit Else 0 End)
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year <= training_fy
+        Then hh_recognition_credit Else 0 End)
       As giving_ngc_total
-    , count(Distinct Case When payment_type = 'Cash / Check' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then tx_number End)
+    , count(Distinct Case When payment_type = 'Cash / Check' And tx_gypm_ind <> 'M'
+        And hh_recognition_credit > 0 And fiscal_year <= training_fy
+          Then tx_number End)
       As gifts_cash
-    , count(Distinct Case When payment_type = 'Credit Card' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then tx_number End)
+    , count(Distinct Case When payment_type = 'Credit Card' And tx_gypm_ind <> 'M'
+        And hh_recognition_credit > 0 And fiscal_year <= training_fy
+          Then tx_number End)
       As gifts_credit_card
-    , count(Distinct Case When payment_type = 'Securities' And tx_gypm_ind <> 'M' And hh_recognition_credit > 0 Then tx_number End)
+    , count(Distinct Case When payment_type = 'Securities' And tx_gypm_ind <> 'M'
+        And hh_recognition_credit > 0 And fiscal_year <= training_fy
+          Then tx_number End)
       As gifts_stock
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 1 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 1
+        Then hh_recognition_credit End)
       As cash_pfy1
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 2 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 2
+        Then hh_recognition_credit End)
       As cash_pfy2
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 3 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 3
+        Then hh_recognition_credit End)
       As cash_pfy3
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 4 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 4
+        Then hh_recognition_credit End)
       As cash_pfy4
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = cal.curr_fy - 5 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 5
+        Then hh_recognition_credit End)
       As cash_pfy5
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 1 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 1
+        Then hh_recognition_credit End)
       As ngc_pfy1
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 2 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 2
+        Then hh_recognition_credit End)
       As ngc_pfy2
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 3 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 3
+        Then hh_recognition_credit End)
       As ngc_pfy3
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 4 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 4
+        Then hh_recognition_credit End)
       As ngc_pfy4
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = cal.curr_fy - 5 Then hh_recognition_credit End)
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 5
+        Then hh_recognition_credit End)
       As ngc_pfy5
   From giving_hh
   Cross Join cal
+  Cross Join params
   Inner Join giving_hh_amt
     On giving_hh_amt.hhid = giving_hh.household_id
     And giving_hh_amt.txn = giving_hh.tx_number
