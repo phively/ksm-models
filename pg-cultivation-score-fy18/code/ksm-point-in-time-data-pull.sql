@@ -1,18 +1,18 @@
--- Build AF 10k dataset
+-- Build point-in-time dataset
 /*
-Drop Materialized View mv_af_10k_model
+Drop Materialized View mv_point_in_time_model
 */
 /*
-Create Materialized View mv_af_10k_model As
+Create Materialized View mv_point_in_time_model As
 Select *
-From af_10k_model
+From point_in_time_model
 */
 
 -- Retrieve results
 Select *
-From mv_af_10k_model
+From mv_point_in_time_model
 Where rn <= 45000
 
 Select *
-From mv_af_10k_model
+From mv_point_in_time_model
 Where rn > 45000
