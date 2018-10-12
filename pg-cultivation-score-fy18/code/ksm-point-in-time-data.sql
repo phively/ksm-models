@@ -180,76 +180,303 @@ Entity information
 )
 
 /* Entity addresses */
+, address_dt As (
+  Select
+    id_number
+    , start_dt
+    , stop_dt
+    , date_added
+    , date_modified
+    , addr_type_code
+    , addr_status_code
+    , Case
+        When start_dt Is Not Null
+          And substr(start_dt, 1, 4) <> '0000'
+          And substr(start_dt, 5, 2) <> '00'
+            Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(start_dt, 1, 6) || '01', 'yyyymmdd'))
+        Else rpt_pbh634.ksm_pkg.get_fiscal_year(date_added)
+        End
+      As start_fy_calc
+    , Case
+        When stop_dt Is Not Null
+          And addr_status_code <> 'A'
+          And substr(stop_dt, 1, 4) <> '0000'
+          And substr(stop_dt, 5, 2) <> '00'
+            Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(stop_dt, 1, 6) || '01', 'yyyymmdd'))
+        When addr_status_code <> 'A'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(date_modified)
+        Else NULL
+        End
+      As stop_fy_calc
+  From address
+  Where addr_type_code In ('H', 'B', 'AH', 'AB', 'S') -- Home, Bus, Alt Home, Alt Bus, Seasonal
+)
+, pit_address As (
+  Select
+    id_number
+    , addr_type_code
+    , addr_status_code
+    , start_dt
+    , stop_dt
+    , date_added
+    , date_modified
+    , start_fy_calc
+    , stop_fy_calc
+    , Case
+        -- Address must be active during the training period
+        When start_fy_calc <= training_fy
+          Then Case
+            -- Still active
+            When stop_fy_calc Is Null
+              Then 'Y'
+            When addr_status_code = 'A'
+              Then 'Y'
+            -- Point-in-time active
+            When stop_fy_calc > training_fy
+              Then 'Y'
+            End
+        End
+      As was_active
+  From address_dt
+  Cross Join params
+)
 , addresses As (
   Select
     household_id
     , Listagg(addr_type_code, ', ') Within Group (Order By addr_type_code Asc)
       As addr_types
-  From address
+  From pit_address
   Inner Join hh
-    On hh.id_number = address.id_number
-  Where addr_status_code = 'A' -- Active addresses only
-    And addr_type_code In ('H', 'B', 'AH', 'AB', 'S') -- Home, Bus, Alt Home, Alt Bus, Seasonal
+    On hh.id_number = pit_address.id_number
+  Where was_active = 'Y' -- Point-in-time
   Group By household_id
 )
 
 /* Entity phone */
+, phones_dt As (
+  Select
+    id_number
+    , telephone_type_code
+    , telephone_status_code
+    , start_dt
+    , stop_dt
+    , status_change_date
+    , date_added
+    , date_modified
+    , Case
+        When start_dt Is Not Null
+          And substr(start_dt, 1, 4) <> '0000'
+          And substr(start_dt, 5, 2) <> '00'
+            Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(start_dt, 1, 6) || '01', 'yyyymmdd'))
+        Else rpt_pbh634.ksm_pkg.get_fiscal_year(date_added)
+        End
+      As start_fy_calc
+    , Case
+        When stop_dt Is Not Null
+          And telephone_status_code <> 'A'
+          And substr(stop_dt, 1, 4) <> '0000'
+          And substr(stop_dt, 5, 2) <> '00'
+            Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(stop_dt, 1, 6) || '01', 'yyyymmdd'))
+        When telephone_status_code <> 'A'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(date_modified)
+        Else NULL
+        End
+      As stop_fy_calc
+  From telephone
+  Where telephone_type_code In ('H', 'B', 'M') -- Home, Business, Mobile
+)
+, pit_phones As (
+  Select
+    id_number
+    , telephone_type_code
+    , telephone_status_code
+    , start_dt
+    , stop_dt
+    , status_change_date
+    , date_added
+    , date_modified
+    , start_fy_calc
+    , stop_fy_calc
+    , Case
+        -- Phone must be active during the training period
+        When start_fy_calc <= training_fy
+          Then Case
+            -- Still active
+            When stop_fy_calc Is Null
+              Then 'Y'
+            When telephone_status_code = 'A'
+              Then 'Y'
+            -- Point-in-time active
+            When stop_fy_calc > training_fy
+              Then 'Y'
+            End
+        End
+      As was_active
+  From phones_dt
+  Cross Join params
+)
 , phones As (
   Select
     household_id
     , Listagg(telephone_type_code, ', ') Within Group (Order By telephone_type_code Asc)
       As phone_types
-  From telephone
+  From pit_phones
   Inner Join hh
-    On hh.id_number = telephone.id_number
-  Where telephone_status_code = 'A' -- Active phone only
-    And telephone_type_code In ('H', 'B', 'M') -- Home, Business, Mobile
+    On hh.id_number = pit_phones.id_number
+  Where was_active = 'Y' -- Active point-in-time phone only
   Group By household_id
 )
 
 /* Entity email */
+, email_dts As (
+  Select
+    id_number
+    , email_type_code
+    , email_status_code
+    , status_change_date
+    , start_dt
+    , stop_dt
+    , date_added
+    , date_modified
+    , Case
+        When start_dt Is Not Null
+          And substr(start_dt, 1, 4) <> '0000'
+          And substr(start_dt, 5, 2) <> '00'
+            Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(start_dt, 1, 6) || '01', 'yyyymmdd'))
+        Else rpt_pbh634.ksm_pkg.get_fiscal_year(date_added)
+        End
+      As start_fy_calc
+    , Case
+        When stop_dt Is Not Null
+          And email_status_code <> 'A'
+          And substr(stop_dt, 1, 4) <> '0000'
+          And substr(stop_dt, 5, 2) <> '00'
+            Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(stop_dt, 1, 6) || '01', 'yyyymmdd'))
+        When email_status_code <> 'A'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(date_modified)
+        Else NULL
+        End
+      As stop_fy_calc
+  From email
+  Where email_type_code In ('X', 'Y') -- Home, Business
+)
+, pit_email As (
+    Select
+    id_number
+    , email_type_code
+    , email_status_code
+    , start_dt
+    , stop_dt
+    , date_added
+    , date_modified
+    , start_fy_calc
+    , stop_fy_calc
+    , Case
+        -- Address must be active during the training period
+        When start_fy_calc <= training_fy
+          Then Case
+            -- Still active
+            When stop_fy_calc Is Null
+              Then 'Y'
+            When email_status_code = 'A'
+              Then 'Y'
+            -- Point-in-time active
+            When stop_fy_calc > training_fy
+              Then 'Y'
+            End
+        End
+      As was_active
+  From email_dts
+  Cross Join params
+)
 , emails As (
   Select
     household_id
     , Listagg(email_type_code, ', ') Within Group (Order By email_type_code Asc)
       As email_types
-  From email
+  From pit_email
   Inner Join hh
-    On hh.id_number = email.id_number
-  Where email_status_code = 'A' -- Active emails only
-    And email_type_code In ('X', 'Y') -- Home, Business
+    On hh.id_number = pit_email.id_number
+  Where was_active = 'Y' -- Point-in-time active
   Group By household_id
-)
-
-/* Entity employment */
-, employer As (
-  Select
-    id_number
-    , business_title
-    , job_title
-    , matching_status_ind
-    , high_level_job_title
-    , trim(fld_of_work || ' ' || fld_of_spec1 || ' ' || fld_of_spec2 || ' ' || fld_of_spec3)
-      As career_specs
-  From v_ksm_high_level_job_title
 )
 
 /* Employment aggregated to the household level */
+, employer_dts As (
+    Select
+    id_number
+    , start_dt
+    , stop_dt
+    , date_added
+    , date_modified
+    , Case
+        When start_dt Is Not Null
+          And substr(start_dt, 1, 4) <> '0000'
+          And substr(start_dt, 5, 2) <> '00'
+            Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(start_dt, 1, 6) || '01', 'yyyymmdd'))
+        Else rpt_pbh634.ksm_pkg.get_fiscal_year(date_added)
+        End
+      As start_fy_calc
+    , Case
+        When stop_dt Is Not Null
+          And job_status_code Not In ('C', 'D')
+          And substr(stop_dt, 1, 4) <> '0000'
+          And substr(stop_dt, 5, 2) <> '00'
+            Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(stop_dt, 1, 6) || '01', 'yyyymmdd'))
+        When job_status_code Not In ('C', 'D')
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(date_modified)
+        Else NULL
+        End
+      As stop_fy_calc
+    , job_status_code
+    , job_title
+    , trim(employer_name1 || ' ' || employer_name2)
+      As employer_name
+    , self_employ_ind
+    , matching_status_ind
+  From employment
+  Where employ_relat_code In ('PE', 'PF', 'SE') -- Primary, previous, secondary employer
+)
+, pit_employer As (
+  Select Distinct
+    id_number
+    , Case
+        -- Address must be active during the training period
+        When start_fy_calc <= training_fy
+          Then Case
+            -- Still active
+            When stop_fy_calc Is Null
+              Then 'Y'
+            When job_status_code In ('C', 'D')
+              Then 'Y'
+            -- Point-in-time active
+            When stop_fy_calc > training_fy
+              Then 'Y'
+            End
+        End
+      As was_active
+  From employer_dts
+  Cross Join params
+)
+, pit_bus_addr As (
+  Select
+    id_number
+    , 'Y' As was_active
+  From addresses
+  Where addr_types Like '%B%'
+)
 , employer_hh As (
   Select
-    household_id
-    , Listagg(trim(business_title || '; ' || job_title), ' // ') Within Group (Order By employer.id_number Asc)
-      As bus_title_string
-    , Listagg(matching_status_ind, ' ') Within Group (Order By employer.id_number Asc)
-      As bus_gift_match
-    , Listagg(high_level_job_title, '; ') Within Group (Order By employer.id_number Asc)
-      As bus_high_lvl_job_title
-    , Listagg(career_specs, '; ') Within Group (Order By employer.id_number Asc)
-      As bus_career_specs
-  From employer
-  Inner Join hh
-    On hh.id_number = employer.id_number
-  Group By household_id
+    hh.household_id
+    , 'Y' As bus_is_employed
+  From hh
+  Left Join pit_employer
+    On pit_employer.id_number = hh.id_number
+  Left Join pit_bus_addr
+    On pit_bus_addr.household_id = hh.household_id
+  Where pit_employer.was_active = 'Y'
+    Or pit_bus_addr.was_active = 'Y'
+  Group By hh.household_id
 )
 
 /*************************
@@ -630,29 +857,7 @@ Select
   , hh.household_state
   , hh.household_country
   , hh.household_continent
-  , Case
-      When employer_hh.bus_title_string Is Not Null
-        And employer_hh.bus_title_string Not In (';', '; // ;')
-          Then 'Y'
-      Else 'N'
-      End
-    As bus_is_employed
-  , Case
-      When employer_hh.bus_title_string Not In (';', '; // ;')
-        Then employer_hh.bus_title_string
-      End
-    As bus_title_string
-  , employer_hh.bus_high_lvl_job_title
-  , employer_hh.bus_career_specs
-  , Case
-      When employer_hh.bus_career_specs Like '%Bank%'
-        Or employer_hh.bus_career_specs Like '%Financ%'
-        Or employer_hh.bus_career_specs Like '%Invest%'
-        Then 'Y'
-      End
-    As bus_career_spec_finance
-  , Case When employer_hh.bus_gift_match Like '%Y%' Then 'Y' Else 'N' End
-    As bus_gift_match
+  , employer_hh.bus_is_employed
   -- Contact indicators
   , Case When addresses.addr_types Like '%H%' Then 'Y' Else 'N' End
     As has_home_addr
