@@ -2,6 +2,8 @@ Create Or Replace View point_in_time_model As
 
 With
 
+-- N.B. work in progress as of 2018-10-12
+
 /*************************
 Parameters
 *************************/
@@ -460,7 +462,7 @@ Entity information
 )
 , pit_bus_addr As (
   Select
-    id_number
+    household_id
     , 'Y' As was_active
   From addresses
   Where addr_types Like '%B%'
@@ -484,39 +486,61 @@ Prospect information
 *************************/
 
 /* Ever had a KSM program interest */
-, ksm_prs_ids As (
-  Select Distinct
-    hh.household_id
+, prs_dt As (
+    Select
+    prs.prospect_id
+    , prs_e.id_number
+    , prs.active_ind As program_active_ind
+    , prospect.active_ind As prospect_active_ind
+    , prs.start_date
+    , prs.stop_date
+    , prs.date_added
+    , prs.date_modified
+    , Case
+        When prs.start_date Is Not Null
+            Then rpt_pbh634.ksm_pkg.get_fiscal_year(prs.start_date)
+        Else rpt_pbh634.ksm_pkg.get_fiscal_year(prs.date_added)
+        End
+      As start_fy_calc
+    , Case
+        When prs.stop_date Is Not Null
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(prs.stop_date)
+        When prs.active_ind = 'N'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(prs.date_modified)
+        Else NULL
+        End
+      As stop_fy_calc
   From program_prospect prs
   Inner Join prospect_entity prs_e
     On prs_e.prospect_id = prs.prospect_id
-  Inner Join hh
-    On hh.id_number = prs_e.id_number
+  Inner Join prospect
+    On prospect.prospect_id = prs.prospect_id
   Where prs.program_code = 'KM'
+)
+, ksm_prs_ids As (
+  Select Distinct
+    hh.household_id
+  From prs_dt
+  Inner Join hh
+    On hh.id_number = prs_dt.id_number
+  Cross Join params
+  Where start_fy_calc <= training_fy
 )
 
 /* Active KSM prospect records */
 , ksm_prs_ids_active As (
   Select Distinct
     hh.household_id
-  From program_prospect prs
-  Inner Join prospect_entity prs_e
-    On prs_e.prospect_id = prs.prospect_id
+  From prs_dt
+  Cross Join params
   Inner Join hh
-    On hh.id_number = prs_e.id_number
-  Inner Join prospect
-    On prs.prospect_id = prospect.prospect_id
-  Inner Join entity
-    On entity.id_number = prs_e.id_number
-  Where prs.program_code = 'KM'
-    -- Active only
-    And prs.active_ind = 'Y'
-    And prospect.active_ind = 'Y'
-    -- Exclude deceased, purgable
-    And entity.record_status_code Not In ('D', 'X')
-    -- Exclude Disqualified, Permanent Stewardship
-    And prs.stage_code Not In (7, 11)
-    And prospect.stage_code Not In (7, 11)
+    On hh.id_number = prs_dt.id_number
+  Where start_fy_calc <= training_fy
+    -- Can't see historical prospect status; use stop_fy_calc as a substitute
+    And (
+      stop_fy_calc Is Null
+      Or stop_fy_calc > training_fy
+    )
 )
 
 /* Visits in last 5 FY */
