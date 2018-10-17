@@ -600,11 +600,30 @@ Prospect information
 , gc_dat As (
   Select
     hh.household_id
+    , gct.club_description
     , gc.gift_club_code
-    , substr(gc.gift_club_start_date, 1, 4)
-      As start_yr
-    , substr(gc.gift_club_end_date, 1, 4)
-      As stop_yr
+    , gc.gift_club_start_date As start_dt
+    , gc.gift_club_end_date As stop_dt
+    , Case
+        When substr(gc.gift_club_start_date, 1, 4) <> '0000'
+          And substr(gc.gift_club_start_date, 5, 2) <> '00'
+            Then to_number(substr(gc.gift_club_start_date, 1, 4)) +
+              (Case When to_number(substr(gc.gift_club_start_date, 5, 2)) >= 9 Then 1 Else 0 End)
+        When substr(gc.gift_club_start_date, 1, 4) <> '0000'
+          Then to_number(substr(gc.gift_club_start_date, 1, 4))
+        Else ksm_pkg.get_fiscal_year(gc.date_added)
+        End
+      As start_fy_calc
+    , Case
+        When substr(gc.gift_club_end_date, 1, 4) <> '0000'
+          And substr(gc.gift_club_end_date, 5, 2) <> '00'
+            Then to_number(substr(gc.gift_club_end_date, 1, 4)) +
+              (Case When to_number(substr(gc.gift_club_end_date, 5, 2)) >= 9 Then 1 Else 0 End)
+        When substr(gc.gift_club_end_date, 1, 4) <> '0000'
+          Then to_number(substr(gc.gift_club_end_date, 1, 4))
+        Else ksm_pkg.get_fiscal_year(gc.date_added)
+        End
+      As stop_fy_calc
     , Case
         When gc.gift_club_code = 'LKM'
           Then 'KSM' -- Kellogg Leadership Circle
@@ -616,6 +635,7 @@ Prospect information
         End
       As gc_category
   From gift_clubs gc
+  Cross Join params
   Inner Join hh
     On hh.id_number = gc.gift_club_id_number
   Inner Join gift_club_table gct
@@ -627,15 +647,17 @@ Prospect information
 , gc_summary As (
   Select
     household_id
-    , count(Distinct Case When gc_category = 'KSM' Then stop_yr Else NULL End)
+    , count(Distinct Case When gc_category = 'KSM' Then stop_fy_calc Else NULL End)
       As gift_club_klc_yrs
-    , count(Distinct Case When gc_category = 'BEQ' Then stop_yr Else NULL End)
+    , count(Distinct Case When gc_category = 'BEQ' Then stop_fy_calc Else NULL End)
       As gift_club_bequest_yrs
-    , count(Distinct Case When gc_category = 'LOYAL' Then stop_yr Else NULL End)
+    , count(Distinct Case When gc_category = 'LOYAL' Then stop_fy_calc Else NULL End)
       As gift_club_loyal_yrs
-    , count(Distinct Case When gc_category In ('LDR', 'KSM') Then stop_yr Else NULL End)
+    , count(Distinct Case When gc_category In ('LDR', 'KSM') Then stop_fy_calc Else NULL End)
       As gift_club_nu_ldr_yrs
   From gc_dat
+  Cross Join params
+  Where start_fy_calc <= training_fy
   Group By household_id
 )
 
