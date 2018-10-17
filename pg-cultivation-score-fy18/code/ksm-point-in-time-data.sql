@@ -556,8 +556,8 @@ Prospect information
   From contact_report
   Inner Join hh
     On hh.id_number = contact_report.id_number
-  Cross Join cal
-  Where rpt_pbh634.ksm_pkg.get_fiscal_year(contact_report.contact_date) Between cal.curr_fy - 5 And cal.curr_fy - 1
+  Cross Join params
+  Where rpt_pbh634.ksm_pkg.get_fiscal_year(contact_report.contact_date) Between training_fy - 4 And training_fy
     And contact_report.contact_type = 'V'
 )
 
@@ -566,29 +566,29 @@ Prospect information
   Select
     household_id
     -- Unique visits, max of 1 per day
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 1 Then contact_date Else NULL End)
+    , count(Distinct Case When fiscal_year = training_fy     Then contact_date Else NULL End)
+      As visits_cfy
+    , count(Distinct Case When fiscal_year = training_fy - 1 Then contact_date Else NULL End)
       As visits_pfy1
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 2 Then contact_date Else NULL End)
+    , count(Distinct Case When fiscal_year = training_fy - 2 Then contact_date Else NULL End)
       As visits_pfy2
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 3 Then contact_date Else NULL End)
+    , count(Distinct Case When fiscal_year = training_fy - 3 Then contact_date Else NULL End)
       As visits_pfy3
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 4 Then contact_date Else NULL End)
+    , count(Distinct Case When fiscal_year = training_fy - 4 Then contact_date Else NULL End)
       As visits_pfy4
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 5 Then contact_date Else NULL End)
-      As visits_pfy5
     -- Unique visitors based on author
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 1 Then author_id_number Else NULL End)
+    , count(Distinct Case When fiscal_year = training_fy     Then author_id_number Else NULL End)
+      As visitors_cfy
+    , count(Distinct Case When fiscal_year = training_fy - 1 Then author_id_number Else NULL End)
       As visitors_pfy1
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 2 Then author_id_number Else NULL End)
+    , count(Distinct Case When fiscal_year = training_fy - 2 Then author_id_number Else NULL End)
       As visitors_pfy2
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 3 Then author_id_number Else NULL End)
+    , count(Distinct Case When fiscal_year = training_fy - 3 Then author_id_number Else NULL End)
       As visitors_pfy3
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 4 Then author_id_number Else NULL End)
+    , count(Distinct Case When fiscal_year = training_fy - 4 Then author_id_number Else NULL End)
       As visitors_pfy4
-    , count(Distinct Case When fiscal_year = cal.curr_fy - 5 Then author_id_number Else NULL End)
-      As visitors_pfy5
   From recent_visits
-  Cross Join cal
+  Cross Join params
   Group By household_id
 )
 
@@ -945,16 +945,16 @@ Select
     As ksm_prospect_active
   , Case When ksm_prs_ids.household_id Is Not Null Then 'Y' End
     As ksm_prospect_any
+  , visits.visits_cfy
   , visits.visits_pfy1
   , visits.visits_pfy2
   , visits.visits_pfy3
   , visits.visits_pfy4
-  , visits.visits_pfy5
+  , visits.visitors_cfy
   , visits.visitors_pfy1
   , visits.visitors_pfy2
   , visits.visitors_pfy3
   , visits.visitors_pfy4
-  , visits.visitors_pfy5
   -- Committee indicators
   , cmtees.committee_nu_distinct
   , cmtees.committee_nu_active
