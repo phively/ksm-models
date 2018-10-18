@@ -854,8 +854,8 @@ Prospect information
   Group By household_id
 )
 
-/* Kellogg event IDs */
-, ksm_event_ids As (
+/* All event IDs */
+, event_ids As (
   Select Distinct
     event.event_id
     , event.event_name
@@ -864,57 +864,86 @@ Prospect information
       As start_dt
     , trunc(event.event_stop_datetime)
       As stop_dt
+    -- Assume events are one day, so if stop or start date is missing, use the other 
+    -- If both are missing could fall back to date added (noisy) or omit
+    , ksm_pkg.get_fiscal_year(
+        Case
+          When event.event_start_datetime Is Not Null
+            Then trunc(event.event_start_datetime)
+          When event.event_stop_datetime Is Not Null
+            Then trunc(event.event_stop_datetime)
+          End
+      )
+      As start_fy_calc
+    , ksm_pkg.get_fiscal_year(
+        Case
+          When event.event_stop_datetime Is Not Null
+            Then trunc(event.event_stop_datetime)
+          When event.event_start_datetime Is Not Null
+            Then trunc(event.event_start_datetime)
+          End
+      )
+      As stop_fy_calc
+    , Case
+        When event.event_name Like '%KSM%'
+          Or event.event_name Like '%Kellogg%'
+          Or evo.organization_id = '0000697410' -- Kellogg Event Admin ID
+          Or lower(entity.report_name) Like lower('%Kellogg%') -- Kellogg club event organizers
+          Then 'Y'
+        End
+      As ksm_event
   From ep_event event
   Left Join ep_event_organizer evo
     On event.event_id = evo.event_id
   Left Join entity
     On entity.id_number = evo.organization_id
   Where event.master_event_id Is Null -- Do not count individual sub-events
-    And (
-      event.event_name Like '%KSM%'
-      Or event.event_name Like '%Kellogg%'
-      Or evo.organization_id = '0000697410' -- Kellogg Event Admin ID
-      Or lower(entity.report_name) Like lower('%Kellogg%') -- Kellogg club event organizers
-    )
 )
 
 /* Events data */
 , event_dat As (
   Select Distinct
     hh.household_id
-    , ksm_event_ids.event_id
-    , ksm_event_ids.event_name
+    , event_ids.event_id
+    , event_ids.event_name
+    , event_ids.ksm_event
     , tms_et.short_desc As event_type
-    , extract(year from ksm_event_ids.start_dt)
-      As start_yr
-    , extract(year from ksm_event_ids.stop_dt)
-      As stop_yr
+    , start_fy_calc
+    , stop_fy_calc
   From ep_participant ppt
-  Inner Join ksm_event_ids
-    On ksm_event_ids.event_id = ppt.event_id -- KSM events
+  Cross Join params
+  Inner Join event_ids
+    On event_ids.event_id = ppt.event_id -- KSM events
   Inner Join hh
     On hh.id_number = ppt.id_number
   Inner Join ep_participation ppn
     On ppn.registration_id = ppt.registration_id
   Left Join tms_event_type tms_et
-    On tms_et.event_type = ksm_event_ids.event_type
-  Where ppn.participation_status_code In (' ', 'P') -- Blank or Participated
+    On tms_et.event_type = event_ids.event_type
+  Where ppn.participation_status_code In (' ', 'P', 'A') -- Blank, Participated, or Accepted
+    And start_fy_calc <= training_fy
 )
 
 /* Events summary */
-, ksm_events As (
+, nu_events As (
   Select
     household_id
-    , count(Distinct event_id)
+    , count(event_id)
+      As events_attended
+    , count(start_fy_calc)
+      As events_yrs
+    , count(Distinct Case When start_fy_calc Between training_fy - 2 And training_fy Then event_id Else NULL End)
+      As events_prev_3_fy
+    , count(Distinct Case When ksm_event = 'Y' Then event_id End)
       As ksm_events_attended
-    , count(Distinct start_yr)
+    , count(Distinct Case When ksm_event = 'Y' Then start_fy_calc End)
       As ksm_events_yrs
-    , count(Distinct Case When start_yr Between cal.curr_fy - 3 And cal.curr_fy - 1 Then event_id Else NULL End)
+    , count(Distinct Case When ksm_event = 'Y' And start_fy_calc Between training_fy - 2 And training_fy Then event_id Else NULL End)
       As ksm_events_prev_3_fy
-    , count(Distinct Case When event_type = 'Reunion' Or event_name Like '%Reunion%' Then start_yr Else NULL End)
+    , count(Distinct Case When ksm_event = 'Y' And (event_type = 'Reunion' Or event_name Like '%Reunion%') Then start_fy_calc Else NULL End)
       As ksm_events_reunions
   From event_dat
-  Cross Join cal
+  Cross Join params
   Group By household_id
 )
 
@@ -1032,10 +1061,13 @@ Select
   , cmtees.committee_ksm_ldr
   , cmtees.committee_ksm_ldr_active
   -- Event indicators
-  , ksm_events.ksm_events_attended
-  , ksm_events.ksm_events_yrs
-  , ksm_events.ksm_events_prev_3_fy
-  , ksm_events.ksm_events_reunions
+  , nu_events.events_attended
+  , nu_events.events_yrs
+  , nu_events.events_prev_3_fy
+  , nu_events.ksm_events_attended
+  , nu_events.ksm_events_yrs
+  , nu_events.ksm_events_prev_3_fy
+  , nu_events.ksm_events_reunions
   -- Activity indicators
   , acts.ksm_speaker_years
   , acts.ksm_speaker_times
@@ -1076,8 +1108,8 @@ Left Join cmtees
   On cmtees.household_id = hh.household_id
 Left Join acts
   On acts.household_id = hh.household_id
-Left Join ksm_events
-  On ksm_events.household_id = hh.household_id
+Left Join nu_events
+  On nu_events.household_id = hh.household_id
 -- Conditionals
 Where
   -- Exclude organizations
