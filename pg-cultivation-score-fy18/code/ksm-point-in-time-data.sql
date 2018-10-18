@@ -666,10 +666,28 @@ Prospect information
   Select
     hh.household_id
     , activity_code
-    , substr(start_dt, 1, 4)
-      As start_yr
-    , substr(stop_dt, 1, 4)
-      As stop_yr
+    , start_dt
+    , stop_dt
+    , Case
+        When substr(start_dt, 1, 4) <> '0000'
+          And substr(start_dt, 5, 2) <> '00'
+            Then to_number(substr(start_dt, 1, 4)) +
+              (Case When to_number(substr(start_dt, 5, 2)) >= 9 Then 1 Else 0 End)
+        When substr(start_dt, 1, 4) <> '0000'
+          Then to_number(substr(start_dt, 1, 4))
+        Else ksm_pkg.get_fiscal_year(date_added)
+        End
+      As start_fy_calc
+    , Case
+        When substr(stop_dt, 1, 4) <> '0000'
+          And substr(stop_dt, 5, 2) <> '00'
+            Then to_number(substr(stop_dt, 1, 4)) +
+              (Case When to_number(substr(stop_dt, 5, 2)) >= 9 Then 1 Else 0 End)
+        When substr(stop_dt, 1, 4) <> '0000'
+          Then to_number(substr(stop_dt, 1, 4))
+        Else ksm_pkg.get_fiscal_year(date_added) -- Intentionally not date_modified; assume activity is only that year
+        End
+      As stop_fy_calc
   From activity
   Inner Join hh
     On hh.id_number = activity.id_number
@@ -680,26 +698,28 @@ Prospect information
   Select
     household_id
     -- Kellogg speakers
-    , count(Distinct Case When activity_code = 'KSP' Then stop_yr Else NULL End)
+    , count(Distinct Case When activity_code = 'KSP' Then stop_fy_calc Else NULL End)
       As ksm_speaker_years
-    , count(Case When activity_code = 'KSP' Then stop_yr Else NULL End)
+    , count(Case When activity_code = 'KSP' Then stop_fy_calc Else NULL End)
       As ksm_speaker_times
     -- Kellogg communications
-    , count(Distinct Case When activity_code = 'KCF' Then stop_yr Else NULL End)
+    , count(Distinct Case When activity_code = 'KCF' Then stop_fy_calc Else NULL End)
       As ksm_featured_comm_years
-    , count(Case When activity_code = 'KCF' Then stop_yr Else NULL End)
+    , count(Case When activity_code = 'KCF' Then stop_fy_calc Else NULL End)
       As ksm_featured_comm_times
     -- Kellogg corporate recruiter
-    , count(Distinct Case When activity_code = 'KCR' Then stop_yr Else NULL End)
+    , count(Distinct Case When activity_code = 'KCR' Then stop_fy_calc Else NULL End)
       As ksm_corp_recruiter_years
-    , count(Case When activity_code = 'KCR' Then stop_yr Else NULL End)
+    , count(Case When activity_code = 'KCR' Then stop_fy_calc Else NULL End)
       As ksm_corp_recruiter_times
     -- Season tickets for basketball and football (BBSEA, FBSEA)
-    , count(Distinct Case When activity_code In ('BBSEA', 'FBSEA') Then stop_yr Else NULL End)
+    , count(Distinct Case When activity_code In ('BBSEA', 'FBSEA') Then stop_fy_calc Else NULL End)
       As athletics_ticket_years
-    , to_number(max(Distinct Case When activity_code In ('BBSEA', 'FBSEA') Then stop_yr Else NULL End))
+    , to_number(max(Distinct Case When activity_code In ('BBSEA', 'FBSEA') Then stop_fy_calc Else NULL End))
       As athletics_ticket_last
   From activities
+  Cross Join params
+  Where start_fy_calc <= training_fy
   Group By household_id
 )
 
@@ -719,10 +739,32 @@ Prospect information
           Then 'Y'
         End
       As ksm_committee
-    , substr(c.start_dt, 1, 4)
-      As start_yr
-    , substr(c.stop_dt, 1, 4)
-      As stop_yr
+    , c.start_dt
+    , c.stop_dt
+    , c.date_added
+    , c.date_modified
+    , Case
+        When substr(c.start_dt, 1, 4) <> '0000'
+          And substr(c.start_dt, 5, 2) <> '00'
+            Then to_number(substr(c.start_dt, 1, 4)) +
+              (Case When to_number(substr(c.start_dt, 5, 2)) >= 9 Then 1 Else 0 End)
+        When substr(c.start_dt, 1, 4) <> '0000'
+          Then to_number(substr(c.start_dt, 1, 4))
+        Else ksm_pkg.get_fiscal_year(c.date_added)
+        End
+      As start_fy_calc
+    , Case
+        When substr(c.stop_dt, 1, 4) <> '0000'
+          And substr(c.stop_dt, 5, 2) <> '00'
+            Then to_number(substr(c.stop_dt, 1, 4)) +
+              (Case When to_number(substr(c.stop_dt, 5, 2)) >= 9 Then 1 Else 0 End)
+        When substr(c.stop_dt, 1, 4) <> '0000'
+          Then to_number(substr(c.stop_dt, 1, 4))
+        When c.committee_status_code = 'C' -- Assume current status is through the date entered
+          Then ksm_pkg.get_fiscal_year(c.date_modified)
+        Else ksm_pkg.get_fiscal_year(c.date_added) -- Assume non-current status was one year only
+        End
+      As stop_fy_calc
   From committee c
   Inner Join hh
     On hh.id_number = c.id_number
@@ -733,6 +775,7 @@ Prospect information
   Left Join tms_committee_role tms_r
     On tms_r.committee_role_code = c.committee_role_code
   Where c.committee_status_code In ('C', 'F', 'A', 'U') -- Current, Former, Active, Inactive; A/I for historic tracking
+    And c.committee_role_code Not In ('EF') -- Our NU Follower
 )
 
 /* Committee summary */
@@ -741,13 +784,13 @@ Prospect information
     household_id
     , count(Distinct committee_code)
       As committee_nu_distinct
-    , count(Distinct Case When start_yr <> '0000' Then start_yr Else NULL End)
+    , count(Distinct stop_fy_calc)
       As committee_nu_years
     , count(Distinct Case When committee_status_code = 'C' Then committee_code Else NULL End)
       As committee_nu_active
     , count(Distinct Case When ksm_committee = 'Y' Then committee_code Else NULL End)
       As committee_ksm_distinct
-    , count(Distinct Case When ksm_committee = 'Y' And start_yr <> '0000' Then start_yr Else NULL End)
+    , count(Distinct Case When ksm_committee = 'Y' Then stop_fy_calc Else NULL End)
       As committee_ksm_years
     , count(Distinct Case When ksm_committee = 'Y' And committee_status_code = 'C' Then committee_code Else NULL End)
       As committee_ksm_active
@@ -806,6 +849,8 @@ Prospect information
       End)
       As committee_ksm_ldr_active
   From cmtee
+  Cross Join params
+  Where cmtee.start_fy_calc <= training_fy
   Group By household_id
 )
 
