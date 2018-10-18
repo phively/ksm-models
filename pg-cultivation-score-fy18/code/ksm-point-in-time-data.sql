@@ -655,6 +655,16 @@ Prospect information
       As gift_club_loyal_yrs
     , count(Distinct Case When gc_category In ('LDR', 'KSM') Then stop_fy_calc Else NULL End)
       As gift_club_nu_ldr_yrs
+    , sum(Case When training_fy     Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As gift_clubs_cfy
+    , sum(Case When training_fy - 1 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As gift_clubs_pfy1
+    , sum(Case When training_fy - 2 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As gift_clubs_pfy2
+    , sum(Case When training_fy - 3 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As gift_clubs_pfy3
+    , sum(Case When training_fy - 4 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As gift_clubs_pfy4
   From gc_dat
   Cross Join params
   Where start_fy_calc <= training_fy
@@ -717,6 +727,17 @@ Prospect information
       As athletics_ticket_years
     , to_number(max(Distinct Case When activity_code In ('BBSEA', 'FBSEA') Then stop_fy_calc Else NULL End))
       As athletics_ticket_last
+    -- Yearly summary
+    , sum(Case When training_fy     Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As activities_cfy
+    , sum(Case When training_fy - 1 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As activities_pfy1
+    , sum(Case When training_fy - 2 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As activities_pfy2
+    , sum(Case When training_fy - 3 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As activities_pfy3
+    , sum(Case When training_fy - 4 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As activities_pfy4
   From activities
   Cross Join params
   Where start_fy_calc <= training_fy
@@ -848,6 +869,17 @@ Prospect information
         Else NULL
       End)
       As committee_ksm_ldr_active
+    -- Yearly summary
+    , sum(Case When training_fy     Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As committees_cfy
+    , sum(Case When training_fy - 1 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As committees_pfy1
+    , sum(Case When training_fy - 2 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As committees_pfy2
+    , sum(Case When training_fy - 3 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As committees_pfy3
+    , sum(Case When training_fy - 4 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As committees_pfy4
   From cmtee
   Cross Join params
   Where cmtee.start_fy_calc <= training_fy
@@ -921,7 +953,6 @@ Prospect information
   Left Join tms_event_type tms_et
     On tms_et.event_type = event_ids.event_type
   Where ppn.participation_status_code In (' ', 'P', 'A') -- Blank, Participated, or Accepted
-    And start_fy_calc <= training_fy
 )
 
 /* Events summary */
@@ -942,8 +973,20 @@ Prospect information
       As ksm_events_prev_3_fy
     , count(Distinct Case When ksm_event = 'Y' And (event_type = 'Reunion' Or event_name Like '%Reunion%') Then start_fy_calc Else NULL End)
       As ksm_events_reunions
+    -- Yearly summary
+    , sum(Case When training_fy     Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As events_cfy
+    , sum(Case When training_fy - 1 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As events_pfy1
+    , sum(Case When training_fy - 2 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As events_pfy2
+    , sum(Case When training_fy - 3 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As events_pfy3
+    , sum(Case When training_fy - 4 Between start_fy_calc And stop_fy_calc Then 1 Else 0 End)
+      As events_pfy4
   From event_dat
   Cross Join params
+  Where start_fy_calc <= training_fy
   Group By household_id
 )
 
@@ -1035,6 +1078,11 @@ Select
   , gc_summary.gift_club_bequest_yrs
   , gc_summary.gift_club_loyal_yrs
   , gc_summary.gift_club_nu_ldr_yrs
+  , gc_summary.gift_clubs_cfy
+  , gc_summary.gift_clubs_pfy1
+  , gc_summary.gift_clubs_pfy2
+  , gc_summary.gift_clubs_pfy3
+  , gc_summary.gift_clubs_pfy4
   -- Prospect indicators
   , prs.evaluation_rating
   , Case When ksm_prs_ids_active.household_id Is Not Null Then 'Y' End
@@ -1060,6 +1108,11 @@ Select
   , cmtees.committee_ksm_years
   , cmtees.committee_ksm_ldr
   , cmtees.committee_ksm_ldr_active
+  , cmtees.committees_cfy
+  , cmtees.committees_pfy1
+  , cmtees.committees_pfy2
+  , cmtees.committees_pfy3
+  , cmtees.committees_pfy4
   -- Event indicators
   , nu_events.events_attended
   , nu_events.events_yrs
@@ -1068,6 +1121,11 @@ Select
   , nu_events.ksm_events_yrs
   , nu_events.ksm_events_prev_3_fy
   , nu_events.ksm_events_reunions
+  , nu_events.events_cfy
+  , nu_events.events_pfy1
+  , nu_events.events_pfy2
+  , nu_events.events_pfy3
+  , nu_events.events_pfy4
   -- Activity indicators
   , acts.ksm_speaker_years
   , acts.ksm_speaker_times
@@ -1077,6 +1135,11 @@ Select
   , acts.ksm_corp_recruiter_times
   , acts.athletics_ticket_years
   , acts.athletics_ticket_last
+  , acts.activities_cfy
+  , acts.activities_pfy1
+  , acts.activities_pfy2
+  , acts.activities_pfy3
+  , acts.activities_pfy4
 From hh
 Inner Join entity
   On entity.id_number = hh.id_number
