@@ -26,19 +26,31 @@ params As (
 )
 
 /* Householded transactions, summing together split allocations within the same receipt number */
+, daf As (
+  Select Distinct
+    tx_number
+    , 'Y' As daf_assoc
+  From nu_gft_trp_gifttrans
+  Where associated_code = 'D'
+)
 -- No need to make point-in-time
 , giving_hh As (
   Select
     household_id
-    , tx_number
+    , gthh.tx_number
+    , gthh.pledge_number
     , tx_gypm_ind
+    , daf.daf_assoc
     , payment_type
     , allocation_code
     , trunc(date_of_record)
       As date_of_record
     , fiscal_year
     , hh_recognition_credit
-  From v_ksm_giving_trans_hh
+    , legal_amount
+  From v_ksm_giving_trans_hh gthh
+  Left Join daf
+    On daf.tx_number = gthh.tx_number
 )
 , giving_hh_amt As (
   Select
@@ -50,6 +62,51 @@ params As (
   Group By
     household_id
     , tx_number
+)
+, planned_gifts As (
+  Select
+    tx_number
+    , sum(legal_amount)
+      As nu_planned_giving
+  From nu_gft_trp_gifttrans
+  Cross Join params
+  Where transaction_type In ('BE', 'LE')
+    And fiscal_year  <= training_fy
+  Group By tx_number
+)
+, pit_plg_payments As (
+  Select
+    pledge_number
+    , tx_gypm_ind
+    , sum(legal_amount)
+      As future_amt
+  From giving_hh
+  Cross Join params
+  Where fiscal_year > training_fy -- Future pledge payments need to be added into balance
+    And tx_gypm_ind = 'Y'
+  Group By
+    pledge_number
+    , tx_gypm_ind
+)
+, pit_pledge_bal As (
+  Select Distinct
+    household_id
+    , sum(plgd.prim_pledge_remaining_balance + nvl(pit_plg_payments.future_amt, 0))
+      As pledge_balance
+    , sum(planned_gifts.nu_planned_giving)
+      As nu_planned_giving
+  From table(ksm_pkg.plg_discount) plgd
+  Cross Join params
+  Inner Join giving_hh
+    On giving_hh.tx_number = plgd.pledge_number
+    And hh_recognition_credit > 0
+  Left Join pit_plg_payments
+    On pit_plg_payments.pledge_number = plgd.pledge_number
+  Left Join planned_gifts
+    On planned_gifts.tx_number = plgd.pledge_number
+  Where fiscal_year <= training_fy
+    And pledge_amount > 0
+  Group By household_id
 )
 
 /* First year of Kellogg giving */
@@ -78,6 +135,15 @@ params As (
       As gifts_fys_supported
     , min(ksm_giving_yr.first_year)
       As giving_first_year
+    , count(Case When fiscal_year <= training_fy Then daf_assoc End)
+      As daf_gifts
+    , sum(Case When daf_assoc = 'Y' And fiscal_year <= training_fy
+        Then hh_recognition_credit Else 0 End)
+      As daf_gifts_amt
+    , min(pit_pledge_bal.pledge_balance)
+      As pledge_balance
+    , min(pit_pledge_bal.nu_planned_giving)
+      As nu_planned_giving
     -- First year giving
     , sum(Case When fiscal_year = ksm_giving_yr.first_year And tx_gypm_ind <> 'P'
         Then hh_recognition_credit End)
@@ -130,34 +196,46 @@ params As (
         And hh_recognition_credit > 0 And fiscal_year <= training_fy
           Then tx_number End)
       As gifts_stock
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 1
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy2
+        Then hh_recognition_credit End)
+      As cash_target_fy2
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1
+        Then hh_recognition_credit End)
+      As cash_target_fy1
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy
         Then hh_recognition_credit End)
       As cash_pfy1
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 2
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 1
         Then hh_recognition_credit End)
       As cash_pfy2
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 3
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 2
         Then hh_recognition_credit End)
       As cash_pfy3
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 4
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 3
         Then hh_recognition_credit End)
       As cash_pfy4
-    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 - 5
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 4
         Then hh_recognition_credit End)
       As cash_pfy5
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 1
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy2
+        Then hh_recognition_credit End)
+      As ngc_target_fy2
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1
+        Then hh_recognition_credit End)
+      As ngc_target_fy1
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = training_fy
         Then hh_recognition_credit End)
       As ngc_pfy1
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 2
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = training_fy - 1
         Then hh_recognition_credit End)
       As ngc_pfy2
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 3
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = training_fy - 2
         Then hh_recognition_credit End)
       As ngc_pfy3
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 4
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = training_fy - 3
         Then hh_recognition_credit End)
       As ngc_pfy4
-    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy1 - 5
+    , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = training_fy - 4
         Then hh_recognition_credit End)
       As ngc_pfy5
   From giving_hh
@@ -168,6 +246,8 @@ params As (
     And giving_hh_amt.txn = giving_hh.tx_number
   Left Join ksm_giving_yr
     On ksm_giving_yr.household_id = giving_hh.household_id
+  Left Join pit_pledge_bal
+    On pit_pledge_bal.household_id = giving_hh.household_id
   Group By giving_hh.household_id
 )
 
@@ -1062,12 +1142,20 @@ Select
   , ksm_giving.gifts_cash
   , ksm_giving.gifts_credit_card
   , ksm_giving.gifts_stock
+  , ksm_giving.daf_gifts
+  , ksm_giving.daf_gifts_amt
+  , ksm_giving.pledge_balance
+  , ksm_giving.nu_planned_giving
   -- Recent giving
+  , ksm_giving.cash_target_fy2
+  , ksm_giving.cash_target_fy1
   , ksm_giving.cash_pfy1
   , ksm_giving.cash_pfy2
   , ksm_giving.cash_pfy3
   , ksm_giving.cash_pfy4
   , ksm_giving.cash_pfy5
+  , ksm_giving.ngc_target_fy2
+  , ksm_giving.ngc_target_fy1
   , ksm_giving.ngc_pfy1
   , ksm_giving.ngc_pfy2
   , ksm_giving.ngc_pfy3
