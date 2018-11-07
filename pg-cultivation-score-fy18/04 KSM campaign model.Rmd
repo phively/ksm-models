@@ -300,7 +300,7 @@ The overarching goal is to predict giving over the final two years of the campai
 
 $$ E \left( \text{giving, donor | covariates} \right) = E \left(\text{giving | donor, covariates} \right) P \left(\text{donor | covariates} \right) $$
 
-Estimate the expected future value as the product of an expected value and a probability. This can also be thought of as separate capacity and affinity models, and should give more useful estimates than $E\left( \text{giving | covariates}) \right)$, which is left-censored by \$0.
+Estimate the expected future value as the product of an expected value and a probability. This can also be thought of as separate capacity and affinity models, and should give more useful estimates than $E\left( \text{giving | covariates} \right)$, which is left-censored by \$0.
 
 It'll be informative seeing what features are more or less important at each stage of the two-step procedure, though I expect overall accuracy to suffer somewhat. Down the road it would be interesting to compare this to other methods, like trees and boosting.
 
@@ -320,6 +320,12 @@ As a general principle, point-in-time data is derived from entered date ranges w
   * Engagement counts
 
 This is implemented by [this SQL code](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/ksm-point-in-time-data-pull.sql).
+
+```{r}
+# Import data
+
+```
+
 
 # Probability model
 

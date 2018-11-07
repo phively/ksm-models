@@ -1,4 +1,4 @@
-Create Or Replace View point_in_time_model As
+Create Table point_in_time_model As
 
 With
 
