@@ -1,0 +1,77 @@
+---
+title: "05 KSM predictive model"
+output: html_notebook
+---
+
+# Goal
+
+Build a basic campaign prioritization model using all relevant variables extracted from the database and identified in previous work.
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(gridExtra)
+library(splines)
+library(foreach)
+library(lubridate)
+library(wranglR)
+
+# Functions adapted from previous analysis steps
+source('code/functions.R')
+
+# Visualization functions adapted fron previous analysis steps
+source('code/functions_viz.R')
+```
+
+# KSM model goals
+
+The overarching goal is to predict giving over the final two years of the campaign. Ideally, I'd want to find expected future value, not just difference from expected value today. Consider the following:
+
+$$ E \left( \text{giving, donor | covariates} \right) = E \left(\text{giving | donor, covariates} \right) P \left(\text{donor | covariates} \right) $$
+
+Estimate the expected future value as the product of an expected value and a probability. This can also be thought of as separate capacity and affinity models, and should give more useful estimates than $E\left( \text{giving | covariates} \right)$, which is left-censored by \$0.
+
+It'll be informative seeing what features are more or less important at each stage of the two-step procedure, though I expect overall accuracy to suffer somewhat. Down the road it would be interesting to compare this to other methods, like trees and boosting.
+
+# KSM model variables
+
+The target variable is the sum of new gifts and commitments from 9/1/16 to 8/31/18 (FY17-18), given the state of the database on 8/31/16 (FY16).
+
+As a general principle, point-in-time data is derived from entered date ranges where possible. Where dates are missing, it will be based upon the date added or date modified audit trail for each field, as suitable. The following data types received this treatment:
+
+  * All dollar amounts
+  * All giving behavior counts and years
+  * Student/alumni status
+  * All prospect assignments and ratings
+  * All contact information and indicators
+  * Employment
+  * Visits and outreach
+  * Engagement counts
+
+This is implemented by [this SQL code](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/ksm-point-in-time-data-pull.sql).
+
+```{r}
+# Import data
+filepath <- 'data/2018-11-08 point-in-time data.xlsx'
+sheetname <- 'Select point_in_time_model'
+source('code/generate-pit-data.R')
+
+# Run data generation function
+modeling.data <- generate_pit_data(filepath, sheetname)
+```
+
+
+# Probability model
+
+Logistic regression has been the workhorse of fundraising models for years. Some special considerations for this application:
+
+  * Minimizing predictive error, e.g. finding the model $\text{argmin}_m \sum_i \left[ y_i - \widehat{m}_x(x_i) \right]^2$, on in-sample data is the *wrong* metric!
+  * Focus on identifying as many current prospects as possible (minimizing type II error); type I is acceptable as these become new prospects.
+  * Avoid overfitting the training data. Techniques like [cross-validation](https://en.wikipedia.org/wiki/Cross-validation_(statistics)) are highly recommended.
+  * Avoid [endogenous](https://en.wikipedia.org/wiki/Endogeneity_(econometrics)) variables; in this context, that means those that are causally associated with the outcome being measured, e.g. don't use `Lifetime.Giving` as a predictor if the response variable is `Largest.Gift`.
+
+I have [previously found](https://github.com/phively/ksm-models/tree/master/af-10k-fy17) that penalized logistic regression, such as implemented in R by the glmnet package, works better than standard logistic regression, so that's the technique that I'll use here.
+
+## Variable selection
+

@@ -1,3 +1,6 @@
+Drop Table point_in_time_model
+;
+
 Create Table point_in_time_model As
 
 With
@@ -1273,3 +1276,4 @@ Where
     Or ksm_giving.giving_first_year Is Not Null
     Or ksm_prs_ids.household_id Is Not Null
   )
+;
