@@ -2,7 +2,7 @@ generate_pit_data <- function(filepath, sheetname) {
 
   # filepath argument is from the working folder, e.g. 'data/2017-12-01.csv', not from root
   # sheetname argument is the name of the Excel sheet to be imported
-  
+
   ### Numeric discretizer helper function
   discretizer <- function(variable, n) {
     case_when(
@@ -30,15 +30,20 @@ generate_pit_data <- function(filepath, sheetname) {
   
   full.data <- full.data %>%
     
-    # Convert NA to 0
-    mutate_all(
-      funs(
-        ifelse(is.na(.), 0, .)
-      )
+    # Convert to numeric
+    mutate(
+      FIRST_KSM_YEAR = as.numeric(FIRST_KSM_YEAR)
     ) %>%
+    
+    # Convert numeric NA to 0
+    mutate_if(is.numeric, replace_na, replace = 0) %>%
+    
+    # Convert string NA to ''
+    mutate_if(is.character, replace_na, replace = '') %>%
 
     # Convert to date
     mutate(
+        # Text to date
         DOB = ToDate(BIRTH_DT, method = 'ymd')
     ) %>%
     
@@ -53,7 +58,7 @@ generate_pit_data <- function(filepath, sheetname) {
       , HOUSEHOLD_STATE = factor(HOUSEHOLD_STATE) %>% relevel(ref = 'IL') # Illinois
       , HOUSEHOLD_COUNTRY = factor(HOUSEHOLD_COUNTRY) %>% relevel(ref = 'United States')
       , HOUSEHOLD_CONTINENT = factor(HOUSEHOLD_CONTINENT) %>% relevel(ref = 'North America')
-      , EVALUATION_RATING = factor(EVALUATION_RATING) %>% relevel(ref = '0') # Unrated
+      , EVALUATION_RATING = factor(EVALUATION_RATING) %>% relevel(ref = '') # Unrated
       
       # Indicators
       , BUS_IS_EMPLOYED = factor(BUS_IS_EMPLOYED == 'Y')
@@ -102,13 +107,13 @@ generate_pit_data <- function(filepath, sheetname) {
       , GIVING_MAX_CASH_YR = ifelse(is.na(GIVING_MAX_CASH_DT), RECORD_YR, year(GIVING_MAX_CASH_DT))
       , GIVING_MAX_CASH_MO = ifelse(is.na(GIVING_MAX_CASH_DT), month(ENTITY_DT_ADDED), month(GIVING_MAX_CASH_DT))
           %>% factor()
-        
+
       # HOUSEHOLD_RECORD: combine AL(umni) and ST(udent) levels
       , HOUSEHOLD_RECORD = fct_collapse(HOUSEHOLD_RECORD, AL = c('AL', 'ST'))
-      
+
       # PROGRAM_GROUP: treat UNK as NULL
       , PROGRAM_GROUP = fct_collapse(PROGRAM_GROUP, NONE = c('UNK', ''))
-      
+
       # For PREF_ADDR_TYPE_CODE combine:
       # H, UH into home (home, unverified home)
       # A, AH, S, UX into alternate home (alternate, alternate home, seasonal, unverified alt home)
@@ -120,19 +125,19 @@ generate_pit_data <- function(filepath, sheetname) {
           , ALT = c('A', 'AH', 'S', 'UX')
           , BUS = c('AB', 'B', 'C', 'UB')
       )
-      
+
       # Combine KSM_PROSPECT_ACTIVE and KSM_PROSPECT_ANY
       , KSM_PROSPECT = case_when(
             KSM_PROSPECT_ACTIVE == TRUE ~ 'Current'
           , KSM_PROSPECT_ANY == TRUE ~ 'Past'
           , TRUE ~ 'No') %>% factor()
-      
+
       # Indicator combining HAS_SEASONAL_ADDR with HAS_ALT_HOME_ADDR
       , HAS_ALT_HOME_OR_SEASONAL_ADDR = case_when(
             HAS_ALT_HOME_ADDR == 'TRUE' ~ 'TRUE'
           , HAS_SEASONAL_ADDR == 'TRUE' ~ 'TRUE'
           , TRUE ~ 'FALSE') %>% factor()
-      
+
       # Drop international HOUSEHOLD_STATE values
       , HOUSEHOLD_STATE = fct_collapse(HOUSEHOLD_STATE
           , INTL = c(
@@ -140,7 +145,7 @@ generate_pit_data <- function(filepath, sheetname) {
               'QLD', 'SA', 'SK', 'TAS', 'VIC', 'WAU'
             )
       )
-      
+
       # Group U.S. states into Census regions
       , HOUSEHOLD_REGION = fct_collapse(HOUSEHOLD_STATE
           , NEWENG = c('CT', 'ME', 'MA', 'NH', 'RI', 'VT')
@@ -154,45 +159,45 @@ generate_pit_data <- function(filepath, sheetname) {
           , WSTPAC = c('AK', 'CA', 'HI', 'OR', 'WA')
           , INTL = c('INTL', 'PR', 'VI')
       )
-      
+
       # KSM_CORP_RECRUITER_YEARS treated as binary
       , KSM_CORP_RECRUITER_YEARS = discretizer(KSM_CORP_RECRUITER_YEARS, 1)
           %>% factor()
-      
+
       # Discretize GIFTS_CREDIT_CARD into 0, 1, 2+
       , GIFTS_CREDIT_CARD = discretizer(GIFTS_CREDIT_CARD, 2)
           %>% factor()
-      
+
       # GIFTS_STOCK treated as binary
       , GIFTS_STOCK = discretizer(GIFTS_STOCK, 1)
           %>% factor()
-      
+
       # GIFT_CLUB_BEQUEST_YRS treated as binary
       , GIFT_CLUB_BEQUEST_YRS = discretizer(GIFT_CLUB_BEQUEST_YRS, 1)
           %>% factor()
-      
+
       # KSM_SPEAKER_YEARS treated as binary
       , KSM_SPEAKER_YEARS = discretizer(KSM_SPEAKER_YEARS, 1)
           %>% factor()
-      
+
       # Discretize KSM_EVENTS_REUNIONS into 0, 1, 2, 3+
       , KSM_EVENTS_REUNIONS = discretizer(KSM_EVENTS_REUNIONS, 3)
           %>% factor()
-      
+
       # KSM_FEATURED_COMM_YEARS treated as binary
       , KSM_FEATURED_COMM_YEARS = discretizer(KSM_FEATURED_COMM_YEARS, 1)
           %>% factor()
-      
+
       # GIFT_CLUB_NU_LDR_YRS treated as binary
       , GIFT_CLUB_NU_LDR_YRS = discretizer(GIFT_CLUB_NU_LDR_YRS, 1)
           %>% factor()
-      
+
       # Total visits
-      , VISITS_5FY = VISITS_PFY1 + VISITS_PFY2 + VISITS_PFY3 + VISITS_PFY4 + VISITS_PFY5
-      
+      , VISITS_5FY = VISITS_CFY + VISITS_PFY1 + VISITS_PFY2 + VISITS_PFY3 + VISITS_PFY4
+
       # Total visitors
-      , VISITORS_5FY = VISITORS_PFY1 + VISITORS_PFY2 + VISITORS_PFY3 + VISITORS_PFY4 + VISITORS_PFY5
-      
+      , VISITORS_5FY = VISITORS_CFY + VISITORS_PFY1 + VISITORS_PFY2 + VISITORS_PFY3 + VISITORS_PFY4
+
       # X-out-of-5 loyalty
       # 1/5 * [1{CASH_PFY1 > 0} + 1{CASH_PFY2 > 0} + 1{CASH_PFY3 > 0} + 1{CASH_PFY4 > 0} + 1{CASH_PFY5 > 0}]
       , LOYAL_5_PCT = 1/5 * {
@@ -202,7 +207,7 @@ generate_pit_data <- function(filepath, sheetname) {
         + ifelse(CASH_PFY4 > 0, 1, 0)
         + ifelse(CASH_PFY5 > 0, 1, 0)
       }
-      
+
       # UPGRADE3: net upgrades/downgrades in FY-1, FY-2, FY-3 (+2 to -2)
       # sign(FY1 - FY2)  + sign(FY2 - FY1)
       # 2 downgrades in a row would be -2, a downgrade followed by steady or steady then downgrade is -1,
@@ -210,13 +215,13 @@ generate_pit_data <- function(filepath, sheetname) {
       , UPGRADE3 = {
           sign(CASH_PFY1 - CASH_PFY2) + sign(CASH_PFY2 - CASH_PFY3)
       } %>% factor()
-      
+
       # Giving velocity definitions
-      
+
       # VELOCITY3 is the Blackbaud definition
       , vdenom = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
       , VELOCITY3 = CASH_PFY1 / ifelse(vdenom == 0, max(CASH_PFY1, 1E-99), vdenom)
-        
+
       # VELOCITY3 discretized based on data exploration
       , VELOCITY_BINS = case_when(
           CASH_PFY1 == 0 & vdenom == 0 ~ 'A. Non'
@@ -226,12 +231,12 @@ generate_pit_data <- function(filepath, sheetname) {
         , VELOCITY3 == 1 ~ 'E. Unchanged'
         , VELOCITY3 > 1 ~ 'F. Up'
       ) %>% factor()
-      
+
       # Alternate velocity definition: linear signed difference rather than ratio
       , vavg = 1/3 * (CASH_PFY2 + CASH_PFY3 + CASH_PFY4)
       , VELOCITY3_LIN = CASH_PFY1 - vavg
       , VELOCITY3_LIN = log10(abs(VELOCITY3_LIN) + 1) * sign(VELOCITY3_LIN)
-      
+
       # Binary indicator for $10K+ cash donors
       , GAVE_10K = ifelse(GIVING_MAX_CASH_AMT >= 10000, 1, 0)
       
@@ -245,16 +250,16 @@ generate_pit_data <- function(filepath, sheetname) {
       , -KSM_PROSPECT_ANY
       , -HAS_ALT_HOME_ADDR
       , -HAS_SEASONAL_ADDR
+      , -VISITS_CFY
       , -VISITS_PFY1
       , -VISITS_PFY2
       , -VISITS_PFY3
       , -VISITS_PFY4
-      , -VISITS_PFY5
+      , -VISITORS_CFY
       , -VISITORS_PFY1
       , -VISITORS_PFY2
       , -VISITORS_PFY3
       , -VISITORS_PFY4
-      , -VISITORS_PFY5
       , -vdenom
       , -vavg
     )
