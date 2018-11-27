@@ -40,7 +40,7 @@ generate_pit_data <- function(filepath, sheetname) {
     
     # Convert string NA to ''
     mutate_if(is.character, replace_na, replace = '') %>%
-
+    
     # Convert to date
     mutate(
         # Text to date
@@ -250,6 +250,8 @@ generate_pit_data <- function(filepath, sheetname) {
       , -KSM_PROSPECT_ANY
       , -HAS_ALT_HOME_ADDR
       , -HAS_SEASONAL_ADDR
+      , -GIVING_MAX_CASH_DT
+      , -GIVING_MAX_PLEDGE_DT
       , -VISITS_CFY
       , -VISITS_PFY1
       , -VISITS_PFY2

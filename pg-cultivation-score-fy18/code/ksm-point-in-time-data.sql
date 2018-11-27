@@ -199,6 +199,18 @@ params As (
         And hh_recognition_credit > 0 And fiscal_year <= training_fy
           Then tx_number End)
       As gifts_stock
+    , count(Case When tx_gypm_ind In('G', 'Y') And hh_recognition_credit > 0 And fiscal_year <= training_fy
+        Then tx_number Else NULL End)
+      As gifts_outrights_payments
+    , count(Case When tx_gypm_ind = 'P' And hh_recognition_credit > 0 And fiscal_year <= training_fy
+        Then tx_number Else NULL End)
+      As gifts_pledges
+, count(Case When tx_gypm_ind = 'P' And hh_recognition_credit <= 0 And fiscal_year <= training_fy
+        Then tx_number Else NULL End)
+      As gifts_pledges_never_paid
+    , count(Case When tx_gypm_ind = 'M' And hh_recognition_credit > 0 And fiscal_year <= training_fy
+        Then tx_number Else NULL End)
+      As gifts_matches
     , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy2
         Then hh_recognition_credit End)
       As cash_target_fy2
@@ -1127,16 +1139,25 @@ Select
   , ksm_giving.giving_first_year
   , ksm_giving.giving_first_year_cash_amt
   , ksm_giving.giving_first_year_pledge_amt
-  , Case When ksm_giving.giving_max_cash_amt Is Not Null Then ksm_giving.giving_max_cash_fy End
+  , Case When ksm_giving.giving_max_cash_amt Is Not Null
+      Then ksm_giving.giving_max_cash_fy End
     As giving_max_cash_fy
-  , Case When ksm_giving.giving_max_cash_amt Is Not Null Then ksm_giving.giving_max_cash_dt End
+  , Case When ksm_giving.giving_max_cash_amt Is Not Null
+      Then ksm_giving.giving_max_cash_dt End
     As giving_max_cash_dt
   , ksm_giving.giving_max_cash_amt
-  , Case When ksm_giving.giving_max_pledge_amt Is Not Null Then ksm_giving.giving_max_pledge_fy End
+  , Case When ksm_giving.giving_max_pledge_amt Is Not Null
+      And ksm_giving.gifts_pledges > 0
+      Then ksm_giving.giving_max_pledge_fy End
     As giving_max_pledge_fy
-  , Case When ksm_giving.giving_max_pledge_amt Is Not Null Then ksm_giving.giving_max_pledge_dt End
+  , Case When ksm_giving.giving_max_pledge_amt Is Not Null
+      And ksm_giving.gifts_pledges > 0
+      Then ksm_giving.giving_max_pledge_dt End
     As giving_max_pledge_dt
-  , ksm_giving.giving_max_pledge_amt
+  , Case When ksm_giving.giving_max_pledge_amt Is Not Null
+      And ksm_giving.gifts_pledges > 0
+      Then ksm_giving.giving_max_pledge_amt End
+    As giving_max_pledge_amt
   , ksm_giving.giving_cash_total
   , ksm_giving.giving_pledge_total
   , ksm_giving.giving_ngc_total
@@ -1145,6 +1166,10 @@ Select
   , ksm_giving.gifts_cash
   , ksm_giving.gifts_credit_card
   , ksm_giving.gifts_stock
+  , ksm_giving.gifts_outrights_payments
+  , ksm_giving.gifts_pledges
+  , ksm_giving.gifts_pledges_never_paid
+  , ksm_giving.gifts_matches
   , ksm_giving.daf_gifts
   , ksm_giving.daf_gifts_amt
   , ksm_giving.pledge_balance

@@ -199,3 +199,38 @@ calc_partial_resids <- function(model, inds, xname, df = NULL) {
     }
   ) %>% return()
 }
+# Boruta: create data frame from results
+Borutadata <- function(boruta.results, excludes = NULL) {
+  data.frame(Importance = boruta.results$ImpHistory) %>%
+    gather('Variable', 'Importance') %>%
+    # Remove Importance. from the front of every variable name
+    mutate(Variable = gsub('Importance.', '', Variable)) %>%
+    # Append decision to the data frame
+    left_join(
+      data.frame(
+        Decision = boruta.results$finalDecision %>% relevel('Confirmed')
+        , Variable = names(boruta.results$finalDecision)
+      ) %>% mutate(Variable = as.character(Variable))
+      , by = 'Variable'
+    ) %>%
+    # Label shadow variables Reference
+    mutate(Decision = factor(Decision, levels = c(levels(Decision), 'Reference'))) %>%
+    ReplaceValues(old.val = NA, new.val = 'Reference') %>%
+    # Drop uninformative variables and -Inf rows
+    filter(Variable %nin% excludes & Importance != -Inf) %>%
+    # Return results
+    return()
+}
+# Boruta: create plots from data frame
+Borutaplotter <- function(boruta.results, title = 'Variable importances under Boruta algorithm') {
+  # Plot results
+  ggplot(boruta.results, aes(x = reorder(Variable, Importance, FUN = median), y = Importance, fill = Decision)) +
+    geom_boxplot(alpha = .3) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)
+          , panel.grid.minor = element_line(linetype = 'dotted')) +
+    scale_fill_manual(values = c('green', 'yellow', 'red', 'black')) +
+    labs(title = title, x = 'Variable', y = 'Importance') %>%
+    suppressMessages() %>%
+    # Return results
+    return()
+}
