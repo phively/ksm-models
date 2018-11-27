@@ -16,6 +16,7 @@ library(splines)
 library(foreach)
 library(lubridate)
 library(wranglR)
+library(Boruta)
 
 # Functions adapted from previous analysis steps
 source('code/functions.R')
@@ -59,8 +60,19 @@ source('code/generate-pit-data.R')
 
 # Run data generation function
 modeling.data <- generate_pit_data(filepath, sheetname)
-```
 
+# Create response variables
+modeling.data <- modeling.data %>% mutate(
+  rv.amt = NGC_TARGET_FY2 + NGC_TARGET_FY1
+  , rv.gave = rv.amt > 0
+) %>% select(
+  # Drop future data
+  -NGC_TARGET_FY2
+  , -NGC_TARGET_FY1
+  , -CASH_TARGET_FY2
+  , -CASH_TARGET_FY1
+)
+```
 
 # Probability model
 
@@ -73,5 +85,33 @@ Logistic regression has been the workhorse of fundraising models for years. Some
 
 I have [previously found](https://github.com/phively/ksm-models/tree/master/af-10k-fy17) that penalized logistic regression, such as implemented in R by the glmnet package, works better than standard logistic regression, so that's the technique that I'll use here.
 
+Here, the response variable is:
+
+$$ Y_i = I \left( \text{FY18Giving}_i + \text{FY17Giving}_i > 0  \right) $$
+
 ## Variable selection
+
+I like computing random forest variable importance, e.g. [Sauve & Tuleau-Malot (2014)](https://hal-unice.archives-ouvertes.fr/hal-00551375/document), to pre-screen variables. Define variable importance in a random forest as the change in MSE when permuting a given observation vector. One nice feature is that highly correlated variables should be similarly important.
+
+
+```{r}
+# Sample rows
+prop = 1/100 # Proportion of data to sample
+set.seed(287092)
+samp <- sample_n(modeling.data, size = nrow(modeling.data) * prop)
+
+# Run Boruta algorithm
+(rf.vars <- Boruta(
+    y = as.numeric(samp$rv.gave)
+    , x = samp %>% select(-rv.amt, -rv.gave)
+    , seed = 5993207
+  )
+)
+```
+
+Plot the results.
+
+```{r, fig.width = 16, fig.height = 8}
+rf.vars %>% Borutadata() %>% Borutaplotter()
+```
 

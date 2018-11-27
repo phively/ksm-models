@@ -205,7 +205,7 @@ params As (
     , count(Case When tx_gypm_ind = 'P' And hh_recognition_credit > 0 And fiscal_year <= training_fy
         Then tx_number Else NULL End)
       As gifts_pledges
-, count(Case When tx_gypm_ind = 'P' And hh_recognition_credit <= 0 And fiscal_year <= training_fy
+    , count(Case When tx_gypm_ind = 'P' And hh_recognition_credit <= 0 And fiscal_year <= training_fy
         Then tx_number Else NULL End)
       As gifts_pledges_never_paid
     , count(Case When tx_gypm_ind = 'M' And hh_recognition_credit > 0 And fiscal_year <= training_fy
