@@ -687,6 +687,62 @@ Prospect information
   Group By household_id
 )
 
+/* Point-in-time evaluation rating */
+, all_evals As (
+  Select
+    e.id_number
+    , e.prospect_id
+    , e.evaluation_type
+    , tet.short_desc As eval_type_desc
+    , trunc(e.evaluation_date) As eval_start_dt
+    -- Computed stop date for most recent active eval is just the end of this month
+    -- For inactive evals, take the day before the next rating as the current rating's stop date
+    -- If null, fill in modified date
+    , Case
+        When active_ind = 'Y' And evaluation_date = max(evaluation_date)
+          Over(Partition By Case When prospect_id Is Not Null Then to_char(prospect_id) Else id_number End)
+          Then last_day(cal.today)
+        Else nvl(
+          min(trunc(evaluation_date))
+            Over(Partition By Case When prospect_id Is Not Null Then to_char(prospect_id) Else id_number End
+              Order By evaluation_date Asc Rows Between 1 Following And Unbounded Following) - 1
+          , trunc(e.date_modified)
+        )
+      End As eval_stop_dt
+    , e.evaluator_id_number
+    , e.active_ind
+    , e.rating_code
+    , trt.short_desc As rating_desc
+    , e.xcomment As rating_comment
+    -- Numeric value of lower end of eval rating range, using regular expressions
+    , Case
+        When trt.rating_code = 0 Then 0 -- Under $10K becomes 0
+        Else rpt_pbh634.ksm_pkg.get_number_from_dollar(trt.short_desc)
+      End As rating_lower_bound
+  From evaluation e
+  Cross Join rpt_pbh634.v_current_calendar cal
+  Inner Join tms_evaluation_type tet On tet.evaluation_type = e.evaluation_type
+  Inner Join tms_rating trt On trt.rating_code = e.rating_code
+  Where tet.evaluation_type In ('PR', 'UR') -- Research, UOR
+)
+, evals As (
+  Select
+    hh.household_id
+    , min(rating_lower_bound) keep(dense_rank First
+        Order By eval_start_dt Desc, eval_stop_dt Desc, rating_lower_bound Desc)
+      As evaluation_lower_bound
+  From all_evals
+  Cross Join params
+  Inner Join hh
+    On hh.id_number = all_evals.id_number
+  Where to_date(params.training_fy || '0831', 'yyyymmdd') Between eval_start_dt And eval_stop_dt
+    And evaluation_type = 'PR'
+  Group By hh.household_id
+)
+/*, uor As (
+  -- needs to join prospect id to hh id
+)
+
 /*************************
  Engagement information
 *************************/
@@ -1203,7 +1259,8 @@ Select
   , gc_summary.gift_clubs_pfy3
   , gc_summary.gift_clubs_pfy4
   -- Prospect indicators
-  , prs.evaluation_rating
+  , evals.evaluation_lower_bound
+--  , uor.uor_lower_bound
   , Case When ksm_prs_ids_active.household_id Is Not Null Then 'Y' End
     As ksm_prospect_active
   , Case When ksm_prs_ids.household_id Is Not Null Then 'Y' End
@@ -1276,15 +1333,19 @@ Left Join emails
 Left Join employer_hh
   On employer_hh.household_id = hh.household_id
 -- Prospect
-Left Join nu_prs_trp_prospect prs
-  On prs.id_number = hh.id_number
 Left Join ksm_prs_ids
   On ksm_prs_ids.household_id = hh.household_id
 Left Join ksm_prs_ids_active
   On ksm_prs_ids_active.household_id = hh.household_id
 Left Join visits
   On visits.household_id = hh.household_id
--- Engagement
+-- Entity evaluation history
+Left Join evals
+  On evals.household_id = hh.household_id
+/*-- UOR history
+Left Join uor
+  On uor.household_id = hh.household_id
+*/-- Engagement
 Left Join gc_summary
   On gc_summary.household_id = hh.household_id
 Left Join cmtees
