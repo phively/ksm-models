@@ -1091,6 +1091,9 @@ Prospect information
 
 Select
   rownum As rn
+  , params.training_fy
+  , params.target_fy1
+  , params.target_fy2
   -- Identifiers
   , hh.id_number
   , hh.report_name
@@ -1257,6 +1260,7 @@ Select
   , acts.activities_pfy3
   , acts.activities_pfy4
 From hh
+Cross Join params
 Inner Join entity
   On entity.id_number = hh.id_number
 -- Giving
