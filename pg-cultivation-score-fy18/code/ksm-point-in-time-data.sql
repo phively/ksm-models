@@ -5,7 +5,7 @@ Create Table point_in_time_model As
 
 With
 
--- N.B. work in progress as of 2018-10-12
+-- N.B. work in progress as of 2018-11-29
 
 /*************************
 Parameters
@@ -15,18 +15,14 @@ params As (
     2016 As training_fy
     , 2017 As target_fy1
     , 2018 As target_fy2
+    , cal.yesterday As data_as_of
   From DUAL
+  Cross Join v_current_calendar cal
 )
 
 /*************************
  Giving queries
 *************************/
-
-/* Current calendar */
-, cal As (
-  Select *
-  From v_current_calendar
-)
 
 /* Householded transactions, summing together split allocations within the same receipt number */
 , daf As (
@@ -254,7 +250,6 @@ params As (
         Then hh_recognition_credit End)
       As ngc_pfy5
   From giving_hh
-  Cross Join cal
   Cross Join params
   Inner Join giving_hh_amt
     On giving_hh_amt.hhid = giving_hh.household_id
@@ -272,7 +267,23 @@ Entity information
 
 /* KSM householding */
 , hh As (
-  Select *
+  Select
+    household_id
+    , id_number
+    , report_name
+    , record_status_code
+    , person_or_org
+    , household_record
+    , institutional_suffix
+    , first_ksm_year
+    , degrees_concat
+    , program_group
+    , spouse_first_ksm_year
+    , spouse_suffix
+    , household_city
+    , household_state
+    , household_country
+    , household_continent
   From v_entity_ksm_households
 )
 
@@ -637,6 +648,21 @@ Prospect information
       Or stop_fy_calc > training_fy
     )
 )
+, ksm_prs_to_hh As (
+  Select Distinct
+    hh.household_id
+    , prs_dt.prospect_id
+  From prs_dt
+  Cross Join params
+  Inner Join hh
+    On hh.id_number = prs_dt.id_number
+  Where start_fy_calc <= training_fy
+    -- Can't see historical prospect status; use stop_fy_calc as a substitute
+    And (
+      stop_fy_calc Is Null
+      Or stop_fy_calc > training_fy
+    )
+)
 
 /* Visits in last 5 FY */
 , recent_visits As (
@@ -739,8 +765,19 @@ Prospect information
     And evaluation_type = 'PR'
   Group By hh.household_id
 )
-/*, uor As (
-  -- needs to join prospect id to hh id
+, uor As (
+  Select
+    ksm_prs_to_hh.household_id
+    , min(rating_lower_bound) keep(dense_rank First
+        Order By eval_start_dt Desc, eval_stop_dt Desc, rating_lower_bound Desc)
+      As uor_lower_bound
+  From all_evals
+  Cross Join params
+  Inner Join ksm_prs_to_hh
+    On ksm_prs_to_hh.prospect_id = all_evals.prospect_id
+  Where to_date(params.training_fy || '0831', 'yyyymmdd') Between eval_start_dt And eval_stop_dt
+    And evaluation_type = 'UR'
+  Group By ksm_prs_to_hh.household_id
 )
 
 /*************************
@@ -1150,6 +1187,7 @@ Select
   , params.training_fy
   , params.target_fy1
   , params.target_fy2
+  , params.data_as_of
   -- Identifiers
   , hh.id_number
   , hh.report_name
@@ -1260,7 +1298,7 @@ Select
   , gc_summary.gift_clubs_pfy4
   -- Prospect indicators
   , evals.evaluation_lower_bound
---  , uor.uor_lower_bound
+  , uor.uor_lower_bound
   , Case When ksm_prs_ids_active.household_id Is Not Null Then 'Y' End
     As ksm_prospect_active
   , Case When ksm_prs_ids.household_id Is Not Null Then 'Y' End
@@ -1342,10 +1380,10 @@ Left Join visits
 -- Entity evaluation history
 Left Join evals
   On evals.household_id = hh.household_id
-/*-- UOR history
+-- UOR history
 Left Join uor
   On uor.household_id = hh.household_id
-*/-- Engagement
+-- Engagement
 Left Join gc_summary
   On gc_summary.household_id = hh.household_id
 Left Join cmtees

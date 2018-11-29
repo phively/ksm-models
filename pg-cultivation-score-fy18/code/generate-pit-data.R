@@ -23,8 +23,8 @@ generate_pit_data <- function(filepath, sheetname) {
     # Drop any null rows
     filter(!is.na(RN)) %>%
     
-    # Drop row numbers and year fields
-    select(-RN, -TRAINING_FY, -TARGET_FY1, -TARGET_FY2)
+    # Drop row numbers and date fields
+    select(-RN, -TRAINING_FY, -TARGET_FY1, -TARGET_FY2, -DATA_AS_OF)
   
   ### Set column types
   
