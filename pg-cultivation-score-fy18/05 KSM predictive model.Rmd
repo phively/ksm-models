@@ -1,6 +1,11 @@
 ---
 title: "05 KSM predictive model"
-output: html_notebook
+output:
+  html_notebook:
+    code_folding: hide
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
 ---
 
 # Goal
