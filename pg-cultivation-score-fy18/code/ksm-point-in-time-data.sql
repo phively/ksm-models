@@ -47,6 +47,8 @@ params As (
     , fiscal_year
     , hh_recognition_credit
     , legal_amount
+    , af_flag
+    , cru_flag
   From v_ksm_giving_trans_hh gthh
   Left Join daf
     On daf.tx_number = gthh.tx_number
@@ -183,6 +185,12 @@ params As (
     , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year <= training_fy
         Then hh_recognition_credit Else 0 End)
       As giving_ngc_total
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year <= training_fy And af_flag = 'Y'
+        Then hh_recognition_credit Else 0 End)
+      As giving_af_total
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year <= training_fy And cru_flag = 'Y'
+        Then hh_recognition_credit Else 0 End)
+      As giving_cru_total
     , count(Distinct Case When payment_type = 'Cash / Check' And tx_gypm_ind <> 'M'
         And hh_recognition_credit > 0 And fiscal_year <= training_fy
           Then tx_number End)
@@ -249,6 +257,48 @@ params As (
     , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = training_fy - 4
         Then hh_recognition_credit End)
       As ngc_pfy5
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy2 And af_flag = 'Y'
+        Then hh_recognition_credit End)
+      As af_target_fy2
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 And af_flag = 'Y'
+        Then hh_recognition_credit End)
+      As af_target_fy1
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy And af_flag = 'Y'
+        Then hh_recognition_credit End)
+      As af_pfy1
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 1 And af_flag = 'Y'
+        Then hh_recognition_credit End)
+      As af_pfy2
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 2 And af_flag = 'Y'
+        Then hh_recognition_credit End)
+      As af_pfy3
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 3 And af_flag = 'Y'
+        Then hh_recognition_credit End)
+      As af_pfy4
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 4 And af_flag = 'Y'
+        Then hh_recognition_credit End)
+      As af_pfy5
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy2 And cru_flag = 'Y'
+        Then hh_recognition_credit End)
+      As cru_target_fy2
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = target_fy1 And cru_flag = 'Y'
+        Then hh_recognition_credit End)
+      As cru_target_fy1
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy And cru_flag = 'Y'
+        Then hh_recognition_credit End)
+      As cru_pfy1
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 1 And cru_flag = 'Y'
+        Then hh_recognition_credit End)
+      As cru_pfy2
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 2 And cru_flag = 'Y'
+        Then hh_recognition_credit End)
+      As cru_pfy3
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 3 And cru_flag = 'Y'
+        Then hh_recognition_credit End)
+      As cru_pfy4
+    , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 4 And cru_flag = 'Y'
+        Then hh_recognition_credit End)
+      As cru_pfy5
   From giving_hh
   Cross Join params
   Inner Join giving_hh_amt
@@ -259,6 +309,52 @@ params As (
   Left Join pit_pledge_bal
     On pit_pledge_bal.household_id = giving_hh.household_id
   Group By giving_hh.household_id
+)
+
+/* Point-in-time AF classification */
+-- This should align with the af_giving_segment definition from v_ksm_giving_summary
+-- KLC deliberately excluded because the criteria have changed multiple times from year to year
+, cru_type As (
+  Select
+    household_id
+    -- CRU status categorizer
+    , Case
+        When cru_pfy1 > 0 Then 'Donor'
+        When cru_pfy2 > 0 Then 'LYBUNT'
+        When cru_pfy3 + cru_pfy4 + cru_pfy5 > 0 Then 'PYBUNT'
+        When giving_cru_total > 0 Then 'Lapsed'
+        When giving_cash_total + giving_pledge_total > 0 Then 'Non'
+        End
+      As cru_status
+    -- CRU giving segment
+    , Case
+        -- 3 years in a row is loyal
+        When cru_pfy1 > 0
+          And cru_pfy2 > 0
+          And cru_pfy3 > 0
+            Then 'Loyal 3+'
+        -- 2 of 3 is loyal
+        When (cru_pfy1 > 0 And cru_pfy2 > 0)
+          Or (cru_pfy1 > 0 And cru_pfy3 > 0)
+          Or (cru_pfy2 > 0 And cru_pfy3 > 0)
+            Then 'Loyal 2 of 3'
+        -- Standard designation
+        When cru_pfy1 > 0
+          Then 'Donor'
+        When cru_pfy2 > 0
+          Then 'LYBUNT'
+        When cru_pfy3 > 0
+          Or cru_pfy4 > 0
+          Or cru_pfy5 > 0
+          Then 'PYBUNT'
+        When giving_cru_total > 0
+          Then 'Lapsed'
+        When giving_cash_total + giving_pledge_total > 0
+          Then 'Non'
+        End
+      As cru_giving_segment
+  From ksm_giving
+  Cross Join params
 )
 
 /*************************
@@ -1258,6 +1354,8 @@ Select
   , ksm_giving.giving_cash_total
   , ksm_giving.giving_pledge_total
   , ksm_giving.giving_ngc_total
+  , ksm_giving.giving_af_total
+  , ksm_giving.giving_cru_total
   , ksm_giving.gifts_allocs_supported
   , ksm_giving.gifts_fys_supported
   , ksm_giving.gifts_cash
@@ -1286,6 +1384,24 @@ Select
   , ksm_giving.ngc_pfy3
   , ksm_giving.ngc_pfy4
   , ksm_giving.ngc_pfy5
+  , ksm_giving.af_target_fy2
+  , ksm_giving.af_target_fy1
+  , ksm_giving.af_pfy1
+  , ksm_giving.af_pfy2
+  , ksm_giving.af_pfy3
+  , ksm_giving.af_pfy4
+  , ksm_giving.af_pfy5
+  , ksm_giving.cru_target_fy2
+  , ksm_giving.cru_target_fy1
+  , ksm_giving.cru_pfy1
+  , ksm_giving.cru_pfy2
+  , ksm_giving.cru_pfy3
+  , ksm_giving.cru_pfy4
+  , ksm_giving.cru_pfy5
+  , nvl(cru_type.cru_status, 'Never')
+    As cru_status
+  , nvl(cru_type.cru_giving_segment, 'Never')
+    As cru_giving_segment
   -- Gift clubs
   , gc_summary.gift_club_klc_yrs
   , gc_summary.gift_club_bequest_yrs
@@ -1361,6 +1477,8 @@ Inner Join entity
 -- Giving
 Left Join ksm_giving
   On ksm_giving.household_id = hh.household_id
+Left Join cru_type
+  On cru_type.household_id = hh.household_id
 -- Entity
 Left Join addresses
   On addresses.household_id = hh.household_id

@@ -85,9 +85,6 @@ generate_pit_data <- function(filepath, sheetname) {
     ## Drop fields with unhelpful or very limited data
     select(
         -HH_PRIMARY
-      , -GIVING_CASH_TOTAL
-      , -GIVING_PLEDGE_TOTAL
-      , -GIVING_NGC_TOTAL
       , -KSM_FEATURED_COMM_TIMES
       , -KSM_CORP_RECRUITER_TIMES
       , -KSM_SPEAKER_TIMES
