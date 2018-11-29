@@ -226,10 +226,10 @@ Borutaplotter <- function(boruta.results, title = 'Variable importances under Bo
   # Plot results
   ggplot(boruta.results, aes(x = reorder(Variable, Importance, FUN = median), y = Importance, fill = Decision)) +
     geom_boxplot(alpha = .3) +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)
-          , panel.grid.minor = element_line(linetype = 'dotted')) +
+    theme(panel.grid.minor = element_line(linetype = 'dotted')) +
     scale_fill_manual(values = c('green', 'yellow', 'red', 'black')) +
-    labs(title = title, x = 'Variable', y = 'Importance') %>%
+    labs(title = title, x = 'Variable', y = 'Importance') +
+    coord_flip() %>%
     suppressMessages() %>%
     # Return results
     return()
