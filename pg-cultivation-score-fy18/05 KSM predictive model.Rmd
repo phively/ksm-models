@@ -53,9 +53,12 @@ As a general principle, point-in-time data is derived from entered date ranges w
 This is implemented by [this SQL code](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/ksm-point-in-time-data-pull.sql).
 
 ```{r}
-# Import data
-filepath <- 'data/2018-11-08 point-in-time data.xlsx'
+# Parameters
+train_fy <- 2016
+filepath <- 'data/2018-11-29 point-in-time data.xlsx'
 sheetname <- 'Select point_in_time_model'
+
+# Import data
 source('code/generate-pit-data.R')
 
 # Run data generation function
@@ -71,6 +74,13 @@ modeling.data <- modeling.data %>% mutate(
   , -NGC_TARGET_FY1
   , -CASH_TARGET_FY2
   , -CASH_TARGET_FY1
+  , -AF_TARGET_FY2
+  , -AF_TARGET_FY1
+  , -CRU_TARGET_FY2
+  , -CRU_TARGET_FY1
+) %>% filter(
+  # Drop entities whose RECORD_YR is after the training year
+  RECORD_YR <= train_fy
 )
 ```
 
@@ -96,7 +106,7 @@ I like computing random forest variable importance, e.g. [Sauve & Tuleau-Malot (
 
 ```{r}
 # Sample rows
-prop = 1/100 # Proportion of data to sample
+prop = 1/20 # Proportion of data to sample
 set.seed(287092)
 samp <- sample_n(modeling.data, size = nrow(modeling.data) * prop)
 
@@ -109,9 +119,22 @@ samp <- sample_n(modeling.data, size = nrow(modeling.data) * prop)
 )
 ```
 
+Save the results.
+
+```{r}
+save(rf.vars, file = 'data/rf.vars.Rdata')
+```
+
+
 Plot the results.
 
-```{r, fig.width = 16, fig.height = 8}
+```{r, fig.width = 8, fig.height = 20}
 rf.vars %>% Borutadata() %>% Borutaplotter()
+```
+
+Basically, the algorithm creates dummy "shadow" variables, which are permuted versions of the explanatory variables appearing above, and random forests are fit on both the real and dummy variables. Intuitively, if replacing a variable with a randomly permuted version of itself does not reduce the random forest classifier's accuracy, then the variable should not be included in a final model and can be discarded.
+
+```{r}
+(recommended.vars <- TentativeRoughFix(rf.vars))
 ```
 
