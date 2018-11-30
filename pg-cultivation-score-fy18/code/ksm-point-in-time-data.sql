@@ -10,7 +10,7 @@ With
 /*************************
 Parameters
 *************************/
-params As (
+pre_params As (
   Select
     2016 As training_fy
     , 2017 As target_fy1
@@ -18,6 +18,16 @@ params As (
     , cal.yesterday As data_as_of
   From DUAL
   Cross Join v_current_calendar cal
+)
+
+, params As (
+  Select
+    training_fy
+    , target_fy1
+    , target_fy2
+    , data_as_of
+    , to_date(training_fy || '0831', 'yyyymmdd') As eofy_training
+  From pre_params
 )
 
 /*************************
@@ -236,6 +246,27 @@ params As (
     , sum(Case When tx_gypm_ind <> 'P' And fiscal_year = training_fy - 4
         Then hh_recognition_credit End)
       As cash_pfy5
+    , sum(Case When tx_gypm_ind = 'P' And fiscal_year = target_fy2
+        Then hh_recognition_credit End)
+      As pledge_target_fy2
+    , sum(Case When tx_gypm_ind = 'P' And fiscal_year = target_fy1
+        Then hh_recognition_credit End)
+      As pledge_target_fy1
+    , sum(Case When tx_gypm_ind = 'P' And fiscal_year = training_fy
+        Then hh_recognition_credit End)
+      As pledge_pfy1
+    , sum(Case When tx_gypm_ind = 'P' And fiscal_year = training_fy - 1
+        Then hh_recognition_credit End)
+      As pledge_pfy2
+    , sum(Case When tx_gypm_ind = 'P' And fiscal_year = training_fy - 2
+        Then hh_recognition_credit End)
+      As pledge_pfy3
+    , sum(Case When tx_gypm_ind = 'P' And fiscal_year = training_fy - 3
+        Then hh_recognition_credit End)
+      As pledge_pfy4
+    , sum(Case When tx_gypm_ind = 'P' And fiscal_year = training_fy - 4
+        Then hh_recognition_credit End)
+      As pledge_pfy5
     , sum(Case When tx_gypm_ind <> 'Y' And fiscal_year = target_fy2
         Then hh_recognition_credit End)
       As ngc_target_fy2
@@ -691,6 +722,7 @@ Prospect information
 , prs_dt As (
     Select
     prs.prospect_id
+    , prs.program_code
     , prs_e.id_number
     , prs.active_ind As program_active_ind
     , prospect.active_ind As prospect_active_ind
@@ -717,7 +749,6 @@ Prospect information
     On prs_e.prospect_id = prs.prospect_id
   Inner Join prospect
     On prospect.prospect_id = prs.prospect_id
-  Where prs.program_code = 'KM'
 )
 , ksm_prs_ids As (
   Select Distinct
@@ -727,6 +758,7 @@ Prospect information
     On hh.id_number = prs_dt.id_number
   Cross Join params
   Where start_fy_calc <= training_fy
+    And program_code = 'KM'
 )
 
 /* Active KSM prospect records */
@@ -738,6 +770,7 @@ Prospect information
   Inner Join hh
     On hh.id_number = prs_dt.id_number
   Where start_fy_calc <= training_fy
+    And program_code = 'KM'
     -- Can't see historical prospect status; use stop_fy_calc as a substitute
     And (
       stop_fy_calc Is Null
@@ -874,6 +907,86 @@ Prospect information
   Where to_date(params.training_fy || '0831', 'yyyymmdd') Between eval_start_dt And eval_stop_dt
     And evaluation_type = 'UR'
   Group By ksm_prs_to_hh.household_id
+)
+
+/* Point-in-time prospect managers or program managers */
+, pms As (
+  Select Distinct
+    prospect_id
+    , assignment_type
+    , assignment_id_number
+    , Case When eofy_training Between gos.start_dt And nvl(gos.stop_dt, eofy_training) Then gos.report_name End
+      As ksm_gos
+    , start_dt_calc
+    , stop_dt_calc
+    , Case When eofy_training Between start_dt_calc And nvl(stop_dt_calc, eofy_training) Then 'Y' Else 'N' End
+      As currently_assigned
+    , ceil(
+        months_between(
+          last_day(
+            Case
+              When stop_dt_calc Is Null
+                Or stop_dt_calc > eofy_training
+                  Then eofy_training
+              Else stop_dt_calc
+              End
+            )
+        , trunc(start_dt_calc, 'month'))
+      ) As months_assigned
+    , ceil(
+        months_between(
+          eofy_training
+          , last_day(Case
+            When stop_dt_calc Is Null
+              Or stop_dt_calc > eofy_training
+                Then eofy_training
+            Else stop_dt_calc
+            End
+          )
+        )
+      ) As months_since_assigned
+  From v_assignment_history ah
+  Cross Join params
+  Left Join mv_past_ksm_gos gos
+    On gos.id_number = ah.assignment_id_number
+  Where assignment_type In ('PM', 'PP') -- PM and PPM only
+    And eofy_training >= start_dt_calc
+)
+, curr_pms As (
+  Select
+    ksm_prs_to_hh.household_id
+    , Listagg(ksm_gos, '; ') Within Group (Order By months_assigned Desc)
+      As ksm_gos
+    , Case When max(ksm_gos) Is Not Null Then 'Y' End
+      As ksm_gos_flag
+    , max(months_assigned)
+      As months_assigned
+  From pms
+  Inner Join ksm_prs_to_hh
+    On ksm_prs_to_hh.prospect_id = pms.prospect_id
+  Where currently_assigned = 'Y'
+  Group By household_id
+)
+, past_pms As (
+  Select
+    ksm_prs_to_hh.household_id
+    , min(ksm_gos) keep(dense_rank First Order By stop_dt_calc Desc, months_assigned Desc)
+      As past_ksm_gos
+    , Case
+        When min(ksm_gos) keep(dense_rank First Order By stop_dt_calc Desc, months_assigned Desc) Is Not Null
+          Then 'Y'
+        Else 'N'
+        End
+      As past_ksm_gos_flag
+    , min(months_assigned) keep(dense_rank First Order By stop_dt_calc Desc, months_assigned Desc)
+      As past_go_months_assigned
+    , min(months_since_assigned) keep(dense_rank First Order By stop_dt_calc Desc, months_assigned Desc)
+      As past_go_months_since_assigned
+  From pms
+  Inner Join ksm_prs_to_hh
+    On ksm_prs_to_hh.prospect_id = pms.prospect_id
+  Where currently_assigned = 'N'
+  Group By household_id
 )
 
 /*************************
@@ -1377,6 +1490,13 @@ Select
   , ksm_giving.cash_pfy3
   , ksm_giving.cash_pfy4
   , ksm_giving.cash_pfy5
+  , ksm_giving.pledge_target_fy2
+  , ksm_giving.pledge_target_fy1
+  , ksm_giving.pledge_pfy1
+  , ksm_giving.pledge_pfy2
+  , ksm_giving.pledge_pfy3
+  , ksm_giving.pledge_pfy4
+  , ksm_giving.pledge_pfy5
   , ksm_giving.ngc_target_fy2
   , ksm_giving.ngc_target_fy1
   , ksm_giving.ngc_pfy1
@@ -1419,6 +1539,13 @@ Select
     As ksm_prospect_active
   , Case When ksm_prs_ids.household_id Is Not Null Then 'Y' End
     As ksm_prospect_any
+  , curr_pms.ksm_gos
+  , curr_pms.ksm_gos_flag
+  , curr_pms.months_assigned
+  , past_pms.past_ksm_gos
+  , past_pms.past_ksm_gos_flag
+  , past_pms.past_go_months_assigned
+  , past_pms.past_go_months_since_assigned
   , visits.visits_cfy
   , visits.visits_pfy1
   , visits.visits_pfy2
@@ -1495,6 +1622,10 @@ Left Join ksm_prs_ids_active
   On ksm_prs_ids_active.household_id = hh.household_id
 Left Join visits
   On visits.household_id = hh.household_id
+Left Join curr_pms
+  On curr_pms.household_id = hh.household_id
+Left Join past_pms
+  On past_pms.household_id = hh.household_id
 -- Entity evaluation history
 Left Join evals
   On evals.household_id = hh.household_id
