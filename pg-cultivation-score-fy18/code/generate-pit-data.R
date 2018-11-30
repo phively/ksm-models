@@ -34,6 +34,7 @@ generate_pit_data <- function(filepath, sheetname) {
     # Convert to numeric
     mutate(
       FIRST_KSM_YEAR = as.numeric(FIRST_KSM_YEAR)
+      , SPOUSE_FIRST_KSM_YEAR = as.numeric(SPOUSE_FIRST_KSM_YEAR)
     ) %>%
     
     # Convert numeric NA to 0
@@ -56,6 +57,7 @@ generate_pit_data <- function(filepath, sheetname) {
       , HOUSEHOLD_RECORD = factor(HOUSEHOLD_RECORD) %>% relevel(ref = 'AL') # Alumni
       , PROGRAM_GROUP = factor(PROGRAM_GROUP) %>% relevel(ref = 'FT') # Full-Time
       , PREF_ADDR_TYPE_CODE = factor(PREF_ADDR_TYPE_CODE) %>% relevel(ref = 'H') # Home
+      , HOUSEHOLD_CITY = factor(HOUSEHOLD_CITY) %>% relevel(ref = 'Chicago')
       , HOUSEHOLD_STATE = factor(HOUSEHOLD_STATE) %>% relevel(ref = 'IL') # Illinois
       , HOUSEHOLD_COUNTRY = factor(HOUSEHOLD_COUNTRY) %>% relevel(ref = 'United States')
       , HOUSEHOLD_CONTINENT = factor(HOUSEHOLD_CONTINENT) %>% relevel(ref = 'North America')

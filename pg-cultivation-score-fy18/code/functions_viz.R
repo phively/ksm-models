@@ -234,3 +234,20 @@ Borutaplotter <- function(boruta.results, title = 'Variable importances under Bo
     # Return results
     return()
 }
+# Plot correlations between a matrix of numeric variables
+plot_corrs <- function(numeric.data, textsize = 3) {
+  cors <- cor(numeric.data) %>% round(2)
+  # Do not fill in diagonal
+  diag(cors) <- NA
+  # Plot results
+  cors %>%
+    melt(., na.rm = TRUE) %>%
+    ggplot(aes(x = Var2, y = Var1, fill = value, label = value)) +
+    geom_tile() +
+    geom_text(size = textsize) +
+    coord_fixed() +
+    scale_fill_gradient2(low = 'blue', mid = 'white', high = 'red', limits = c (-1, 1)) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)) %>%
+  # Return results
+  return()
+}

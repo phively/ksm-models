@@ -16,6 +16,7 @@ Build a basic campaign prioritization model using all relevant variables extract
 
 ```{r setup, message = FALSE, warning = FALSE}
 library(tidyverse)
+library(reshape2)
 library(gridExtra)
 library(splines)
 library(foreach)
@@ -139,7 +140,55 @@ rf.vars %>% Borutadata() %>% Borutaplotter()
 
 Basically, the algorithm creates dummy "shadow" variables, which are permuted versions of the explanatory variables appearing above, and random forests are fit on both the real and dummy variables. Intuitively, if replacing a variable with a randomly permuted version of itself does not reduce the random forest classifier's accuracy, then the variable should not be included in a final model and can be discarded.
 
+Recall that the response variable is making a new gift or commitment at any level within the next two years. From past experience, I know that most donations are outright gifts, under $1,000, and to an annual giving allocation. So the following is not too surprising:
+
+  * Past giving is the best predictor of future giving
+  * More recent giving behavior is more predictive than less recent giving behavior
+  * Other engagement indicators (e.g. events, committees) are predictive in aggregate
+  * Cash is more predictive than new gifts & commitments
+  * Having an active home email address and home phone number is predictive
+
+I found these more surprising:
+
+  * Degree program is not predictive
+  * Having an active mailing address is not predictive
+  * Prospect indicators (is a prospect, number of visits, rating, etc.) are not predictive
+  * ID numbers are predictive, but other personal identifiers like name are not -- presumably because of the ID number/age correlation?
+
 ```{r}
 (recommended.vars <- TentativeRoughFix(rf.vars))
 ```
+
+```{r, fig.width = 16, fig.height = 16}
+# Check variable correlations
+recommended_vars <- recommended.vars$finalDecision[
+  which(recommended.vars$finalDecision == 'Confirmed')] %>% names()
+numeric_vars <- modeling.data %>%
+  select(recommended_vars) %>%
+  select(-ID_NUMBER, -HOUSEHOLD_ID) %>%
+  select_if(is.numeric)
+numeric_vars %>% plot_corrs(textsize = 2)
+```
+
+This is the correlation matrix for all `r numeric_vars %>% ncol() %>% I()` numeric variables confirmed important by the algorithm.
+
+  * AF, cash, and CRU are not as highly correlated as I would've expected. However, AF and CRU are moderately highly correlated, and CRU is more correlated with itself than AF, so consider using AF and cash only.
+  * Count of gifts and payments, count of cash gifts, count of FYs supported, and count of allocations supported are all highly correlated. Consider dropping some of them.
+
+## Cross-validation
+
+Create modeling data file.
+
+```{r}
+mdat <- modeling.data %>% select(rv.gave, recommended_vars) %>%
+  select(
+    -VELOCITY3_NGC, -VELOCITY_BINS_CASH, -VELOCITY_BINS_NGC, -VELOCITY3_LIN_NGC
+    , -CRU_PFY1, -CRU_PFY2, -CRU_PFY3, -CRU_PFY4, -CRU_PFY5
+    , -BIRTH_DT, -ID_NUMBER, -HOUSEHOLD_ID, -DEGREES_CONCAT
+    , -GIVING_NGC_TOTAL, -LOYAL_5_PCT_CASH, -UPGRADE3_NGC, -CRU_STATUS
+  )
+```
+
+
+
 
