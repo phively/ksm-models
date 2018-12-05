@@ -19,16 +19,22 @@ library(tidyverse)
 library(reshape2)
 library(gridExtra)
 library(splines)
-library(foreach)
 library(lubridate)
 library(wranglR)
 library(Boruta)
+library(foreach)
+library(doParallel)
+library(glmnet)
+library(glmnetUtils)
 
 # Functions adapted from previous analysis steps
 source('code/functions.R')
 
 # Visualization functions adapted fron previous analysis steps
 source('code/functions_viz.R')
+
+# Set number of available CPU cores
+registerDoParallel(detectCores() - 1)
 ```
 
 # KSM model goals
@@ -182,15 +188,16 @@ This is the correlation matrix for all `r numeric_vars %>% ncol() %>% I()` numer
 
 ## Cross-validation
 
-Create modeling data file.
+Begin by creating the modeling data file.
 
 ```{r}
+# Data file with variables removed
 mdat <- modeling.data %>% select(rv.gave, recommended_vars) %>%
   select(
     -VELOCITY3_NGC, -VELOCITY_BINS_NGC, -VELOCITY_BINS_CASH, -VELOCITY3_LIN_NGC
     , -GIVING_MAX_PLEDGE_YR, -GIVING_MAX_PLEDGE_FY, -CRU_STATUS
     , -NGC_PFY1, -NGC_PFY2, -NGC_PFY3, -NGC_PFY4, -NGC_PFY5
-    , -AF_PFY1, -AF_PFY2, -AF_PFY3, -AF_PFY4
+    , -AF_PFY1, -AF_PFY2, -AF_PFY3, -AF_PFY4, -AF_PFY5
     , -GIVING_MAX_CASH_FY, -GIVING_NGC_TOTAL, -UPGRADE3_NGC, -LOYAL_5_PCT_ANY
     , -DEGREES_CONCAT, -BIRTH_DT, -FIRST_KSM_YEAR
     , -ID_NUMBER, -INSTITUTIONAL_SUFFIX # Keep HHID but don't use in modeling
@@ -200,5 +207,112 @@ mdat <- modeling.data %>% select(rv.gave, recommended_vars) %>%
     # Create spouse flag
     SPOUSE_ALUM = ifelse(SPOUSE_FIRST_KSM_YEAR > 0, 'TRUE', 'FALSE') %>% factor()
   )
+
+# Cross-validation settings
+folds = 10
+reps = 5
+
+# Withhold 10% of data as test set
+xv <- KFoldXVal(mdat, k = 2, prop = .1, seed = 4960582)
+holdoutdat <- mdat[xv[[1]], ]
+traindat <- mdat[xv[[2]], ]
+remove(xv)
+```
+
+### Recommendations
+
+  * `r folds %>% I()`-fold cross-validation repeated `r reps %>% I()` times
+  * Estimate prediction error with out-of-sample classification error
+  * $\theta_{1}$ threshold (donors) set to the empirical probability in the cross-validation set
+  * Try to preserve continuous variables; reasonable monotonic transformations are fine, but avoid discretization
+  
+### Penalized logistic regression
+
+I'll use a penalized ridge regression model as implemented by glmnet. Advantages of shrinkage techniques include automatically controlling for overfitting and collinearity.
+
+```{r}
+# Store model errors
+glm_nospline <- list(NULL)
+# Seed for reproducibility
+set.seed(2934223)
+
+# Outer loop (repetitions)
+for (rep in 1:reps) {
+  # Status report 
+  paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  # Inner loop (parallel cross-validation)
+  errs_out <- foreach(
+    idx = 1:length(xv)
+    , .combine = rbind
+    , .packages = c('glmnet', 'glmnetUtils', 'dplyr', 'splines')
+  ) %dopar% {
+    # Fit temp model, where alpha = 0 is the ridge regression penalty
+      tmpmodel <- cv.glmnet(
+        rv.gave ~
+        .
+        + log10plus1(GIVING_FIRST_YEAR_CASH_AMT) - GIVING_FIRST_YEAR_CASH_AMT
+        + log10plus1(GIVING_FIRST_YEAR_PLEDGE_AMT) - GIVING_FIRST_YEAR_PLEDGE_AMT
+        + log10plus1(GIVING_MAX_CASH_AMT) - GIVING_MAX_CASH_AMT
+        + log10plus1(GIVING_MAX_PLEDGE_AMT) - GIVING_MAX_PLEDGE_AMT
+        + log10plus1(GIVING_CASH_TOTAL) - GIVING_CASH_TOTAL
+        + log10plus1(GIVING_PLEDGE_TOTAL) - GIVING_PLEDGE_TOTAL
+        + log10plus1(GIVING_AF_TOTAL) - GIVING_AF_TOTAL
+        + log10plus1(GIVING_CRU_TOTAL) - GIVING_CRU_TOTAL
+        + sqrt(GIFTS_ALLOCS_SUPPORTED) - GIFTS_ALLOCS_SUPPORTED
+        + sqrt(GIFTS_FYS_SUPPORTED) - GIFTS_FYS_SUPPORTED
+        + sqrt(GIFTS_CASH) - GIFTS_CASH
+        + sqrt(GIFTS_OUTRIGHTS_PAYMENTS) - GIFTS_OUTRIGHTS_PAYMENTS
+        + log10plus1(CASH_PFY1) - CASH_PFY1
+        + log10plus1(CASH_PFY2) - CASH_PFY2
+        + log10plus1(CASH_PFY3) - CASH_PFY3
+        + log10plus1(CASH_PFY4) - CASH_PFY4
+        + log10plus1(CASH_PFY5) - CASH_PFY5
+        + log10plus1(CRU_PFY1) - CRU_PFY1
+        + log10plus1(CRU_PFY2) - CRU_PFY2
+        + log10plus1(CRU_PFY3) - CRU_PFY3
+        + log10plus1(CRU_PFY4) - CRU_PFY4
+        + log10plus1(CRU_PFY5) - CRU_PFY5
+        + sqrt(GIFT_CLUB_KLC_YRS) - GIFT_CLUB_KLC_YRS
+        + sqrt(GIFT_CLUB_LOYAL_YRS) - GIFT_CLUB_LOYAL_YRS
+        + sqrt(GIFT_CLUBS_CFY) - GIFT_CLUBS_CFY
+        + sqrt(GIFT_CLUBS_PFY1) - GIFT_CLUBS_PFY1
+        + sqrt(GIFT_CLUBS_PFY2) - GIFT_CLUBS_PFY2
+        + log10plus1(EVALUATION_LOWER_BOUND) - EVALUATION_LOWER_BOUND
+        + log10plus1(UOR_LOWER_BOUND) - UOR_LOWER_BOUND
+        + sqrt(MONTHS_ASSIGNED) - MONTHS_ASSIGNED
+        + sqrt(COMMITTEE_NU_DISTINCT) - COMMITTEE_NU_DISTINCT
+        # Train while withholding some data
+        , data = traindat[-xv[[fold]], ] %>% select(-HOUSEHOLD_ID)
+        , family = 'binomial'
+        , alpha = 0
+        , lambda = 2^(-8:5)
+      )
+    # Prediction threshold
+    theta1 <- sum(traindat$rv.gave[-xv[[fold]]] == 1) / nrow(traindat[-xv[[fold]], ])
+    # Confusion matrix based on the withheld data
+    tmpconfus <- conf_matrix_glmnet(tmpmodel, newdata = traindat[xv[[fold]], ], rv = 'rv.gave', threshold = theta1)
+    # Return results
+    return(
+      list(
+        conf_matrix = tmpconfus$conf_matrix
+        , conf_matrix_pct = tmpconfus$conf_matrix_pct
+        , errors = data.frame(
+          reps = rep
+          , folds = fold
+          , error = tmpconfus$error
+          , precision = tmpconfus$precision
+          , sensitivity = tmpconfus$sensitivity
+          , F1_score = tmpconfus$F1_score
+        )
+      )
+    )
+  }
+  # Write results to errors data frame
+  glm_nospline <- c(glm_nospline, errs_out)
+  # Status report
+  paste(' - Iteration', rep, 'ending at', Sys.time()) %>% print()
+}
 ```
 
