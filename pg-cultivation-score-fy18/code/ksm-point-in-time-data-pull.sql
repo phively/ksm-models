@@ -1,9 +1,15 @@
 -- Retrieve results
 Select *
 From point_in_time_model
-Where rn <= 47000
+Where rn <= 36000
 
--- Second half
+-- Next set
 Select *
 From point_in_time_model
-Where rn > 47000
+Where rn > 36000
+  And rn <= 72000
+  
+-- Next set
+Select *
+From point_in_time_model
+Where rn > 72000

@@ -61,7 +61,7 @@ This is implemented by [this SQL code](https://github.com/phively/ksm-models/blo
 ```{r}
 # Parameters
 train_fy <- 2016
-filepath <- 'data/2018-11-29 point-in-time data.xlsx'
+filepath <- 'data/2018-11-30 point-in-time data.xlsx'
 sheetname <- 'Select point_in_time_model'
 
 # Import data
@@ -80,6 +80,8 @@ modeling.data <- modeling.data %>% mutate(
   , -NGC_TARGET_FY1
   , -CASH_TARGET_FY2
   , -CASH_TARGET_FY1
+  , -PLEDGE_TARGET_FY2
+  , -PLEDGE_TARGET_FY1
   , -AF_TARGET_FY2
   , -AF_TARGET_FY1
   , -CRU_TARGET_FY2
@@ -112,18 +114,21 @@ I like computing random forest variable importance, e.g. [Sauve & Tuleau-Malot (
 
 ```{r}
 # Sample rows
-prop = 1/20 # Proportion of data to sample
+prop = 1/5 # Proportion of data to sample
 set.seed(287092)
 samp <- sample_n(modeling.data, size = nrow(modeling.data) * prop)
 
 # Run Boruta algorithm
-(rf.vars <- Boruta(
+rf.vars <- Boruta(
     y = as.numeric(samp$rv.gave)
     , x = samp %>% select(-rv.amt, -rv.gave)
     , seed = 5993207
   )
-)
 ```
+```{r}
+rf.vars %>% print()
+```
+
 
 Save the results.
 
@@ -135,7 +140,7 @@ save(rf.vars, file = 'data/rf.vars.Rdata')
 Plot the results.
 
 ```{r, fig.width = 8, fig.height = 20}
-rf.vars %>% Borutadata() %>% Borutaplotter()
+(pmod_plot <- rf.vars %>% Borutadata() %>% Borutaplotter())
 ```
 
 Basically, the algorithm creates dummy "shadow" variables, which are permuted versions of the explanatory variables appearing above, and random forests are fit on both the real and dummy variables. Intuitively, if replacing a variable with a randomly permuted version of itself does not reduce the random forest classifier's accuracy, then the variable should not be included in a final model and can be discarded.
@@ -146,14 +151,14 @@ Recall that the response variable is making a new gift or commitment at any leve
   * More recent giving behavior is more predictive than less recent giving behavior
   * Other engagement indicators (e.g. events, committees) are predictive in aggregate
   * Cash is more predictive than new gifts & commitments
-  * Having an active home email address and home phone number is predictive
+  * Having active home contact information is predictive
 
 I found these more surprising:
 
-  * Degree program is not predictive
-  * Having an active mailing address is not predictive
-  * Prospect indicators (is a prospect, number of visits, rating, etc.) are not predictive
+  * Having business contact information is not predictive
+  * Prospect indicators (is a prospect, number of visits, rating, etc.) are only weakly predictive
   * ID numbers are predictive, but other personal identifiers like name are not -- presumably because of the ID number/age correlation?
+  * KSM-specific engagement is more predictive than NU engagement
 
 ```{r}
 (recommended.vars <- TentativeRoughFix(rf.vars))
@@ -172,7 +177,7 @@ numeric_vars %>% plot_corrs(textsize = 2)
 
 This is the correlation matrix for all `r numeric_vars %>% ncol() %>% I()` numeric variables confirmed important by the algorithm.
 
-  * AF, cash, and CRU are not as highly correlated as I would've expected. However, AF and CRU are moderately highly correlated, and CRU is more correlated with itself than AF, so consider using AF and cash only.
+  * AF, cash, and CRU are not as highly correlated as I would've expected. However, AF and CRU are moderately highly correlated, AF's definition has changed over time, so consider using CRU and cash only.
   * Count of gifts and payments, count of cash gifts, count of FYs supported, and count of allocations supported are all highly correlated. Consider dropping some of them.
 
 ## Cross-validation
@@ -182,13 +187,18 @@ Create modeling data file.
 ```{r}
 mdat <- modeling.data %>% select(rv.gave, recommended_vars) %>%
   select(
-    -VELOCITY3_NGC, -VELOCITY_BINS_CASH, -VELOCITY_BINS_NGC, -VELOCITY3_LIN_NGC
-    , -CRU_PFY1, -CRU_PFY2, -CRU_PFY3, -CRU_PFY4, -CRU_PFY5
-    , -BIRTH_DT, -ID_NUMBER, -HOUSEHOLD_ID, -DEGREES_CONCAT
-    , -GIVING_NGC_TOTAL, -LOYAL_5_PCT_CASH, -UPGRADE3_NGC, -CRU_STATUS
+    -VELOCITY3_NGC, -VELOCITY_BINS_NGC, -VELOCITY_BINS_CASH, -VELOCITY3_LIN_NGC
+    , -GIVING_MAX_PLEDGE_YR, -GIVING_MAX_PLEDGE_FY, -CRU_STATUS
+    , -NGC_PFY1, -NGC_PFY2, -NGC_PFY3, -NGC_PFY4, -NGC_PFY5
+    , -AF_PFY1, -AF_PFY2, -AF_PFY3, -AF_PFY4
+    , -GIVING_MAX_CASH_FY, -GIVING_NGC_TOTAL, -UPGRADE3_NGC, -LOYAL_5_PCT_ANY
+    , -DEGREES_CONCAT, -BIRTH_DT, -FIRST_KSM_YEAR
+    , -ID_NUMBER, -INSTITUTIONAL_SUFFIX # Keep HHID but don't use in modeling
+    , -KSM_GOS, -HOUSEHOLD_COUNTRY
+    , -KSM_EVENTS_ATTENDED, -EVENTS_ATTENDED
+  ) %>% mutate(
+    # Create spouse flag
+    SPOUSE_ALUM = ifelse(SPOUSE_FIRST_KSM_YEAR > 0, 'TRUE', 'FALSE') %>% factor()
   )
 ```
-
-
-
 

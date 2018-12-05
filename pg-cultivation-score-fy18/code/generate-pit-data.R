@@ -77,6 +77,7 @@ generate_pit_data <- function(filepath, sheetname) {
       , HAS_BUS_EMAIL = factor(HAS_BUS_EMAIL == 'Y')
       , KSM_PROSPECT_ACTIVE = factor(KSM_PROSPECT_ACTIVE == 'Y')
       , KSM_PROSPECT_ANY = factor(KSM_PROSPECT_ANY == 'Y')
+      , KSM_GOS_FLAG = factor(KSM_GOS_FLAG == 'Y')
     )
   
   ### Modeling data

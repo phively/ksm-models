@@ -955,6 +955,7 @@ Prospect information
 , curr_pms As (
   Select
     ksm_prs_to_hh.household_id
+    -- Order by months assigned, not by PM or PPM
     , Listagg(ksm_gos, '; ') Within Group (Order By months_assigned Desc)
       As ksm_gos
     , Case When max(ksm_gos) Is Not Null Then 'Y' End
@@ -970,6 +971,7 @@ Prospect information
 , past_pms As (
   Select
     ksm_prs_to_hh.household_id
+    -- Order by recency and months assigned, not by PM or PPM
     , min(ksm_gos) keep(dense_rank First Order By stop_dt_calc Desc, months_assigned Desc)
       As past_ksm_gos
     , Case

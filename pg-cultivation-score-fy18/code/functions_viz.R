@@ -222,13 +222,14 @@ Borutadata <- function(boruta.results, excludes = NULL) {
     return()
 }
 # Boruta: create plots from data frame
-Borutaplotter <- function(boruta.results, title = 'Variable importances under Boruta algorithm') {
+Borutaplotter <- function(boruta.results, title = 'Variable importances under Boruta algorithm', ytextsize = 6) {
   # Plot results
   ggplot(boruta.results, aes(x = reorder(Variable, Importance, FUN = median), y = Importance, fill = Decision)) +
     geom_boxplot(alpha = .3) +
     theme(panel.grid.minor = element_line(linetype = 'dotted')) +
     scale_fill_manual(values = c('green', 'yellow', 'red', 'black')) +
     labs(title = title, x = 'Variable', y = 'Importance') +
+    theme(axis.text.y = element_text(size = ytextsize)) +
     coord_flip() %>%
     suppressMessages() %>%
     # Return results
