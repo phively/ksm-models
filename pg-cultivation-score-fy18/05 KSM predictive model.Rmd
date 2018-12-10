@@ -118,7 +118,7 @@ $$ Y_i = I \left( \text{FY18Giving}_i + \text{FY17Giving}_i > 0  \right) $$
 I like computing random forest variable importance, e.g. [Sauve & Tuleau-Malot (2014)](https://hal-unice.archives-ouvertes.fr/hal-00551375/document), to pre-screen variables. Define variable importance in a random forest as the change in MSE when permuting a given observation vector. One nice feature is that highly correlated variables should be similarly important.
 
 
-```{r}
+```{r, cache = TRUE}
 # Sample rows
 prop = 1/5 # Proportion of data to sample
 set.seed(287092)
@@ -206,6 +206,12 @@ mdat <- modeling.data %>% select(rv.gave, recommended_vars) %>%
   ) %>% mutate(
     # Create spouse flag
     SPOUSE_ALUM = ifelse(SPOUSE_FIRST_KSM_YEAR > 0, 'TRUE', 'FALSE') %>% factor()
+  ) %>% mutate_if(
+    # Numeric variables over 1E4 get a log10 transformation
+    function(x) {
+      ifelse(is.numeric(x), max(x) >= 1E4, FALSE)
+    }
+    , log10plus1
   )
 
 # Cross-validation settings
@@ -231,58 +237,30 @@ remove(xv)
 I'll use a penalized ridge regression model as implemented by glmnet. Advantages of shrinkage techniques include automatically controlling for overfitting and collinearity.
 
 ```{r}
+### DELETE BELOW - FOR TESTING ONLY ###
+traindat <- holdoutdat
+### DELETE ABOVE - FOR TESTING ONLY ###
+
 # Store model errors
-glm_nospline <- list(NULL)
+glm_nospline <- list()
 # Seed for reproducibility
 set.seed(2934223)
 
 # Outer loop (repetitions)
 for (rep in 1:reps) {
   # Status report 
-  paste('+ Iteration', rep, 'beginning at', Sys.time()) %>% print()
+  paste('+ Iteration', rep, 'beginning at:', Sys.time()) %>% print()
   # Create cross-validation indices
   xv <- KFoldXVal(traindat, k = folds)
   # Inner loop (parallel cross-validation)
   errs_out <- foreach(
-    idx = 1:length(xv)
-    , .combine = rbind
+    fold = 1:length(xv)
+    , .combine = c
     , .packages = c('glmnet', 'glmnetUtils', 'dplyr', 'splines')
   ) %dopar% {
     # Fit temp model, where alpha = 0 is the ridge regression penalty
       tmpmodel <- cv.glmnet(
-        rv.gave ~
-        .
-        + log10plus1(GIVING_FIRST_YEAR_CASH_AMT) - GIVING_FIRST_YEAR_CASH_AMT
-        + log10plus1(GIVING_FIRST_YEAR_PLEDGE_AMT) - GIVING_FIRST_YEAR_PLEDGE_AMT
-        + log10plus1(GIVING_MAX_CASH_AMT) - GIVING_MAX_CASH_AMT
-        + log10plus1(GIVING_MAX_PLEDGE_AMT) - GIVING_MAX_PLEDGE_AMT
-        + log10plus1(GIVING_CASH_TOTAL) - GIVING_CASH_TOTAL
-        + log10plus1(GIVING_PLEDGE_TOTAL) - GIVING_PLEDGE_TOTAL
-        + log10plus1(GIVING_AF_TOTAL) - GIVING_AF_TOTAL
-        + log10plus1(GIVING_CRU_TOTAL) - GIVING_CRU_TOTAL
-        + sqrt(GIFTS_ALLOCS_SUPPORTED) - GIFTS_ALLOCS_SUPPORTED
-        + sqrt(GIFTS_FYS_SUPPORTED) - GIFTS_FYS_SUPPORTED
-        + sqrt(GIFTS_CASH) - GIFTS_CASH
-        + sqrt(GIFTS_OUTRIGHTS_PAYMENTS) - GIFTS_OUTRIGHTS_PAYMENTS
-        + log10plus1(CASH_PFY1) - CASH_PFY1
-        + log10plus1(CASH_PFY2) - CASH_PFY2
-        + log10plus1(CASH_PFY3) - CASH_PFY3
-        + log10plus1(CASH_PFY4) - CASH_PFY4
-        + log10plus1(CASH_PFY5) - CASH_PFY5
-        + log10plus1(CRU_PFY1) - CRU_PFY1
-        + log10plus1(CRU_PFY2) - CRU_PFY2
-        + log10plus1(CRU_PFY3) - CRU_PFY3
-        + log10plus1(CRU_PFY4) - CRU_PFY4
-        + log10plus1(CRU_PFY5) - CRU_PFY5
-        + sqrt(GIFT_CLUB_KLC_YRS) - GIFT_CLUB_KLC_YRS
-        + sqrt(GIFT_CLUB_LOYAL_YRS) - GIFT_CLUB_LOYAL_YRS
-        + sqrt(GIFT_CLUBS_CFY) - GIFT_CLUBS_CFY
-        + sqrt(GIFT_CLUBS_PFY1) - GIFT_CLUBS_PFY1
-        + sqrt(GIFT_CLUBS_PFY2) - GIFT_CLUBS_PFY2
-        + log10plus1(EVALUATION_LOWER_BOUND) - EVALUATION_LOWER_BOUND
-        + log10plus1(UOR_LOWER_BOUND) - UOR_LOWER_BOUND
-        + sqrt(MONTHS_ASSIGNED) - MONTHS_ASSIGNED
-        + sqrt(COMMITTEE_NU_DISTINCT) - COMMITTEE_NU_DISTINCT
+        rv.gave ~ .
         # Train while withholding some data
         , data = traindat[-xv[[fold]], ] %>% select(-HOUSEHOLD_ID)
         , family = 'binomial'
@@ -312,7 +290,43 @@ for (rep in 1:reps) {
   # Write results to errors data frame
   glm_nospline <- c(glm_nospline, errs_out)
   # Status report
-  paste(' - Iteration', rep, 'ending at', Sys.time()) %>% print()
+  paste(' -Iteration', rep, 'ending at:   ', Sys.time()) %>% print()
 }
+```
+
+```{r}
+# Function to reshape list data
+combine_xval <- function(xval_results = list()) {
+  # Function to reformat list output into groups
+  delister <- function(full_list, first_idx = 1, seq) {
+    output <- list()
+    idx <- seq(first_idx, length(full_list), by = seq)
+    for (i in 1:length(idx)) {
+      output <- c(output, full_list[idx[i]])
+    }
+    return(output)
+  }
+  # Separate the output into groups of 3
+  conf_matrix = delister(xval_results, 1, 3)
+  conf_matrix_pct = delister(xval_results, 2, 3)
+  errors = delister(xval_results, 3, 3)
+  # Turn errors into a data frame
+  errors <- foreach(i = 1:length(errors), .combine = rbind) %do% {
+    return(errors[[i]])
+  } %>% data.frame()
+  # Return organized list
+  return(
+    list(
+      conf_matrix = conf_matrix
+      , conf_matrix_pct = conf_matrix_pct
+      , errors = errors
+    )
+  )
+}
+```
+
+```{r, rows.print = 1000}
+test <- combine_xval(glm_nospline)
+test$errors
 ```
 
