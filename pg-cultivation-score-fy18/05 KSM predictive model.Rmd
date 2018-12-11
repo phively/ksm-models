@@ -231,16 +231,14 @@ remove(xv)
   * Estimate prediction error with out-of-sample classification error
   * $\theta_{1}$ threshold (donors) set to the empirical probability in the cross-validation set
   * Try to preserve continuous variables; reasonable monotonic transformations are fine, but avoid discretization
-  
+
 ### Penalized logistic regression
 
 I'll use a penalized ridge regression model as implemented by glmnet. Advantages of shrinkage techniques include automatically controlling for overfitting and collinearity.
 
 ```{r}
-### DELETE BELOW - FOR TESTING ONLY ###
-traindat <- holdoutdat
-### DELETE ABOVE - FOR TESTING ONLY ###
-
+# Store timings
+timestamps <- list()
 # Store model errors
 glm_nospline <- list()
 # Seed for reproducibility
@@ -249,7 +247,9 @@ set.seed(2934223)
 # Outer loop (repetitions)
 for (rep in 1:reps) {
   # Status report 
-  paste('+ Iteration', rep, 'beginning at:', Sys.time()) %>% print()
+  timestamp <- paste('+ Iteration', rep, 'beginning at:', Sys.time())
+  print(timestamp)
+  timestamps <- c(timestamps, timestamp)
   # Create cross-validation indices
   xv <- KFoldXVal(traindat, k = folds)
   # Inner loop (parallel cross-validation)
@@ -290,7 +290,9 @@ for (rep in 1:reps) {
   # Write results to errors data frame
   glm_nospline <- c(glm_nospline, errs_out)
   # Status report
-  paste(' -Iteration', rep, 'ending at:   ', Sys.time()) %>% print()
+  timestamp <- paste(' -Iteration', rep, 'ending at:   ', Sys.time())
+  print(timestamp)
+  timestamps <- c(timestamps, timestamp)
 }
 ```
 
@@ -326,7 +328,39 @@ combine_xval <- function(xval_results = list()) {
 ```
 
 ```{r, rows.print = 1000}
-test <- combine_xval(glm_nospline)
-test$errors
+# Save results
+glm_nospline_results <- combine_xval(glm_nospline)
+glm_nospline_timestamps <- timestamps
+save(glm_nospline_results, glm_nospline_timestamps, file = 'data/glm_nospline.Rdata')
 ```
+
+```{r}
+grid.arrange(
+    histogrammer(glm_nospline_results$errors, 'error', h = .0005, fill = 'pink')
+  , histogrammer(glm_nospline_results$errors, 'precision', h = .005, fill = 'cyan')
+  , histogrammer(glm_nospline_results$errors, 'sensitivity', h = .005, fill = 'green')
+)
+```
+
+Let TP, TN, FP, FN refer to true positives, true negatives, false positives, and false negatives respectively.
+
+$$ \text{error} = \frac{FP + FN}{n}$$
+$$ \text{precision} = \frac{TP}{TP + FP}$$
+$$ \text{sensitivity} = \frac{TP}{TP + FN}$$
+
+Compared to the AF $10K model, this has higher error due to the decreased sensitivity, but much higher precision.
+
+```{r}
+glm_nospline <- cv.glmnet(
+  rv.gave ~ .
+  , data = traindat %>% select(-HOUSEHOLD_ID)
+  , family = 'binomial'
+  , alpha = 0
+)
+```
+
+### Standard logistic regression
+
+Consider a standard logistic regression model to get a sense of the explanatory variables.
+
 

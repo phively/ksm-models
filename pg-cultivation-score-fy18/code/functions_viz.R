@@ -8,6 +8,17 @@ scatterplotter <- function(data, x, y, color = NULL, ytrans = 'identity', ylabel
     scale_y_continuous(trans = ytrans, breaks = c(0, 10^(0:12)), labels = ylabels)
 }
 
+# Generic function to plot cross-validated error metrics
+histogrammer <- function(errordata, varname, h = .005, fill = 'gray') {
+  data.frame(x = errordata[, varname]) %>%
+  ggplot(aes(x = x)) +
+    geom_histogram(aes(y = ..density..), alpha = .5, binwidth = h, fill = fill) +
+    geom_density(alpha = .5) +
+    geom_vline(aes(xintercept = mean(x), color = 'mean')) +
+    geom_vline(aes(xintercept = median(x), color = 'median'), linetype = 'dashed') +
+    labs(x = varname)
+}
+
 # Create coefficients data frame
 create_coefs <- function(model_list) {
   foreach(i = 1:length(model_list), .combine = 'rbind') %do% {
