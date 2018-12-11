@@ -12,6 +12,35 @@ log10plus1_trans <- function(x) {
   )
 }
 
+# glm confusion matrix
+conf_matrix <- function(model, newdata = NULL, threshold = .5) {
+  results <- data.frame(
+    pred = predict(model, newdata = newdata, type = 'response') >= threshold
+  )
+  if (is.null(newdata)) {
+    results$truth = model$y
+  } else {
+    results$truth = newdata$GAVE_10K
+  }
+  results_tbl <- table(truth = results$truth, prediction = results$pred)
+  error <- (results_tbl[1, 2] + results_tbl[2, 1]) / sum(results_tbl)
+  precision <- results_tbl[2, 2] / sum(results_tbl[, 2])
+  sensitivity <- results_tbl[2, 2] / sum(results_tbl[2, ])
+  return(
+    list(
+      # Confusion matrix counts
+        conf_matrix = results_tbl
+      # Confusion matrix percents
+      , conf_matrix_pct = results_tbl / nrow(results)
+      # Statistics
+      , error = error
+      , precision = precision
+      , sensitivity = sensitivity
+      , F1_score = (precision * sensitivity) / (precision + sensitivity)
+    )
+  )
+}
+
 # glmnet confusion matrix
 conf_matrix_glmnet <- function(model, newdata = NULL, rv = NULL, threshold = .5) {
   results <- data.frame(

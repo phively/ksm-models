@@ -295,6 +295,11 @@ for (rep in 1:reps) {
   timestamps <- c(timestamps, timestamp)
 }
 ```
+```{r}
+glm_nospline_timestamps %>% unlist() %>% print()
+```
+
+
 
 ```{r}
 # Function to reshape list data
@@ -350,17 +355,112 @@ $$ \text{sensitivity} = \frac{TP}{TP + FN}$$
 
 Compared to the AF $10K model, this has higher error due to the decreased sensitivity, but much higher precision.
 
+The metrics to beat so far:
+
 ```{r}
-glm_nospline <- cv.glmnet(
-  rv.gave ~ .
-  , data = traindat %>% select(-HOUSEHOLD_ID)
-  , family = 'binomial'
-  , alpha = 0
+(
+model_compare <- data.frame(
+  glm_nospline_baseline = glm_nospline_results$errors %>%
+    select(-reps, -folds) %>%
+    colMeans()
+)
 )
 ```
 
 ### Standard logistic regression
 
-Consider a standard logistic regression model to get a sense of the explanatory variables.
+Consider a standard logistic regression model to get a better sense of the explanatory variables.
 
+```{r}
+glm_standard <- glm(
+  rv.gave ~ .
+  , data = traindat %>% select(-HOUSEHOLD_ID) %>%
+    select(-RECORD_STATUS_CODE) # Results in separation if included
+  , family = 'binomial'
+)
+```
+```{r}
+summary(glm_standard)
+```
+```{r, fig.width = 20, fig.height = 20}
+summary(glm_standard, corr = TRUE)$correlation %>%
+  data.frame() %>%
+  plot_corrs()
+```
+
+Pretty eyewatering. Look at the term plots.
+
+```{r}
+termplot(glm_standard)
+```
+
+Definitely keep:
+
+  * Program group looks very interesting
+  * CRU giving segment looks very interesting too
+  * Spouse alum or spouse KSM year, not both
+  
+Definitely drop:
+
+  * Pref addr type code
+  * Has Home Email
+  * Gifts credit card
+  * Gift clubs fields
+  * KSM GOs flag
+  * KSM Events Reunions
+  * Giving max pledge mo
+
+Needs transformation:
+
+  * Giving first year
+  * Months assigned
+  * Events prev 3 FY
+  * Events CFY
+  * Athletics ticket last
+  * Record yr
+  * Max cash year
+
+Duplicative:
+
+  * Giving first year pledge amt
+  * Giving max cash amt
+  * Giving AF total
+  * Gifts outrights payments
+  * CRU PFY1 through 5
+  * Committees CFY and PFY 1-3
+  * Events yrs and KSM events yrs
+  * Velocity3 cash
+  * Spouse first KSM year
+
+```{r}
+glm_standard <- glm_standard %>% update(
+  data = traindat %>% select(
+    -HOUSEHOLD_ID
+    , -RECORD_STATUS_CODE
+    # Drop
+    , PREF_ADDR_TYPE_CODE
+    , -HAS_HOME_EMAIL
+    , -GIFTS_CREDIT_CARD
+    , -contains('GIFT_CLUB')
+    , -KSM_GOS_FLAG
+    , -KSM_EVENTS_REUNIONS
+    , -GIVING_MAX_PLEDGE_MO
+    # Duplicative
+    , -GIVING_FIRST_YEAR_PLEDGE_AMT
+    , -GIVING_MAX_CASH_AMT
+    , -GIVING_AF_TOTAL
+    , -GIFTS_OUTRIGHTS_PAYMENTS
+    , -contains('CRU_PFY')
+    , -contains('COMMITTEES_')
+    , -contains('EVENTS_YRS')
+    , -VELOCITY3_CASH
+    , -SPOUSE_FIRST_KSM_YEAR
+  )
+)
+```
+```{r}
+summary(glm_standard)
+```
+
+Nice drop in the AIC.
 
