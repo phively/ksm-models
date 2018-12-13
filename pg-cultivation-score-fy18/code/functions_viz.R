@@ -19,6 +19,27 @@ histogrammer <- function(errordata, varname, h = .005, fill = 'gray') {
     labs(x = varname)
 }
 
+# Generic function to extract partial residuals for any model using residuals(..., type = 'partial')
+extract_partials <- function(model, var.resp, var.expl) {
+  resids <- data.frame(
+    expl = model$model %>% data.frame() %>% select(var.expl) %>% unlist()
+    , residuals(model, type = 'partial')
+    , class = paste0('traindat$', vr, ' %>% + 0') %>% parse(text = .) %>% eval() %>% as.factor()
+  ) %>%
+    select(
+      expl
+      , resids = var.expl
+      , class
+    ) %>% setNames(
+      c(var.expl, 'resids', var.resp)
+    )
+}
+
+# Generic function to plot calibration results
+plot_calibration <- function() {
+  
+}
+
 # Create coefficients data frame
 create_coefs <- function(model_list) {
   foreach(i = 1:length(model_list), .combine = 'rbind') %do% {

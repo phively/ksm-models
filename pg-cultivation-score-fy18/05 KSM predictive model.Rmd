@@ -232,7 +232,7 @@ remove(xv)
   * $\theta_{1}$ threshold (donors) set to the empirical probability in the cross-validation set
   * Try to preserve continuous variables; reasonable monotonic transformations are fine, but avoid discretization
 
-### Penalized logistic regression
+### Baseline penalized logistic regression
 
 I'll use a penalized ridge regression model as implemented by glmnet. Advantages of shrinkage techniques include automatically controlling for overfitting and collinearity.
 
@@ -334,16 +334,16 @@ combine_xval <- function(xval_results = list()) {
 
 ```{r, rows.print = 1000}
 # Save results
-glm_nospline_results <- combine_xval(glm_nospline)
-glm_nospline_timestamps <- timestamps
-save(glm_nospline_results, glm_nospline_timestamps, file = 'data/glm_nospline.Rdata')
+glm_ridge_baseline_results <- combine_xval(glm_nospline)
+glm_ridge_baseline_timestamps <- timestamps
+save(glm_ridge_baseline_results, glm_ridge_baseline_timestamps, file = 'data/glm_nospline.Rdata')
 ```
 
 ```{r}
 grid.arrange(
-    histogrammer(glm_nospline_results$errors, 'error', h = .0005, fill = 'pink')
-  , histogrammer(glm_nospline_results$errors, 'precision', h = .005, fill = 'cyan')
-  , histogrammer(glm_nospline_results$errors, 'sensitivity', h = .005, fill = 'green')
+    histogrammer(glm_ridge_baseline_results$errors, 'error', h = .0005, fill = 'pink')
+  , histogrammer(glm_ridge_baseline_results$errors, 'precision', h = .005, fill = 'cyan')
+  , histogrammer(glm_ridge_baseline_results$errors, 'sensitivity', h = .005, fill = 'green')
 )
 ```
 
@@ -360,7 +360,7 @@ The metrics to beat so far:
 ```{r}
 (
 model_compare <- data.frame(
-  glm_nospline_baseline = glm_nospline_results$errors %>%
+  glm_ridge_baseline = glm_ridge_baseline_results$errors %>%
     select(-reps, -folds) %>%
     colMeans()
 )
@@ -462,5 +462,158 @@ glm_standard <- glm_standard %>% update(
 summary(glm_standard)
 ```
 
-Nice drop in the AIC.
+That's a nice drop in the AIC.
+
+```{r}
+dfs <- 4
+```
+
+
+Now introduce splines on the numeric variables, arbitrarily setting df = `r dfs %>% I()`.
+
+```{r}
+glm_st_splines <- glm(
+  rv.gave ~
+    PROGRAM_GROUP +
+    PREF_ADDR_TYPE_CODE +
+    HOUSEHOLD_CONTINENT +
+    BUS_IS_EMPLOYED +
+    HAS_HOME_ADDR +
+    HAS_HOME_PHONE +
+    ns(YEARS_SINCE_FIRST_GIFT, df = dfs) +
+    ns(GIVING_FIRST_YEAR_CASH_AMT, df = dfs) +
+    ns(GIVING_MAX_PLEDGE_AMT, df = dfs) +
+    ns(GIVING_CASH_TOTAL, df = dfs) +
+    ns(GIVING_PLEDGE_TOTAL, df = dfs) +
+    ns(GIVING_CRU_TOTAL, df = dfs) +
+    ns(GIFTS_ALLOCS_SUPPORTED, df = dfs) +
+    ns(GIFTS_FYS_SUPPORTED, df = dfs) +
+    ns(GIFTS_CASH, df = dfs) +
+    ns(GIFTS_PLEDGES, df = dfs) +
+    ns(CASH_PFY1, df = dfs) +
+    ns(CASH_PFY2, df = dfs) +
+    ns(CASH_PFY3, df = dfs) +
+    ns(CASH_PFY4, df = dfs) +
+    ns(CASH_PFY5, df = dfs) +
+    CRU_GIVING_SEGMENT +
+    ns(EVALUATION_LOWER_BOUND, df = dfs) +
+    ns(UOR_LOWER_BOUND, df = dfs) +
+    ns(MONTHS_ASSIGNED, df = dfs) +
+    ns(COMMITTEE_NU_DISTINCT, df = dfs) +
+    ns(COMMITTEE_NU_YEARS, df = dfs) +
+    ns(COMMITTEE_KSM_DISTINCT, df = dfs) +
+    ns(EVENTS_PREV_3_FY, df = dfs) +
+    ns(EVENTS_CFY, df = dfs) +
+    ns(EVENTS_PFY1, df = dfs) +
+    ns(ATHLETICS_TICKET_YEARS, df = dfs) +
+    ns(YEARS_SINCE_ATHLETICS_TICKETS, df = dfs) +
+    ns(RECORD_YR, df = dfs) +
+    ns(YEARS_SINCE_MAX_CASH_YR, df = dfs) +
+    GIVING_MAX_CASH_MO +
+    KSM_PROSPECT +
+    ns(VISITORS_5FY, df = dfs) +
+    LOYAL_5_PCT_CASH +
+    UPGRADE3_CASH +
+    VELOCITY3_LIN_CASH +
+    SPOUSE_ALUM
+  , data = traindat %>% mutate(
+    YEARS_SINCE_FIRST_GIFT = 2016 - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, 2017)
+    , YEARS_SINCE_ATHLETICS_TICKETS = 2016 - ifelse(ATHLETICS_TICKET_LAST > 0, ATHLETICS_TICKET_LAST, 2017)
+    , YEARS_SINCE_MAX_CASH_YR = 2016 - ifelse(GIVING_MAX_CASH_YR > 0, GIVING_MAX_CASH_YR, 2017)
+  )
+  , family = 'binomial'
+)
+```
+```{r}
+summary(glm_st_splines)
+```
+
+```{r}
+termplot(glm_st_splines)
+```
+
+Some more thoughts.
+
+  * Don't put splines on the already-transformed giving variables
+  * Consider the standard square root variance stabilizing transformation for counts
+  * Try using "years since last (behavior) year"
+
+```{r}
+glm_st_splines <- glm(
+  rv.gave ~
+    PROGRAM_GROUP +
+    HOUSEHOLD_CONTINENT +
+    BUS_IS_EMPLOYED +
+    HAS_HOME_ADDR +
+    HAS_HOME_PHONE +
+    # YEARS_SINCE_FIRST_GIFT +
+    GIVING_FIRST_YEAR_CASH_AMT +
+    # GIVING_MAX_PLEDGE_AMT +
+    GIVING_CASH_TOTAL +
+    # GIVING_PLEDGE_TOTAL +
+    # GIVING_CRU_TOTAL +
+    # sqrt(GIFTS_ALLOCS_SUPPORTED) +
+    sqrt(GIFTS_FYS_SUPPORTED) +
+    # sqrt(GIFTS_CASH) +
+    # sqrt(GIFTS_PLEDGES) +
+    # CASH_PFY1 +
+    # CASH_PFY2 +
+    # CASH_PFY3 +
+    CASH_PFY4 +
+    CASH_PFY5 +
+    CRU_GIVING_SEGMENT +
+    # EVALUATION_LOWER_BOUND +
+    # UOR_LOWER_BOUND +
+    sqrt(MONTHS_ASSIGNED) +
+    # sqrt(COMMITTEE_NU_DISTINCT) +
+    # sqrt(COMMITTEE_NU_YEARS) +
+    # sqrt(COMMITTEE_KSM_DISTINCT) +
+    # sqrt(EVENTS_PREV_3_FY) +
+    sqrt(EVENTS_CFY) +
+    # sqrt(EVENTS_PFY1) +
+    # sqrt(ATHLETICS_TICKET_YEARS) +
+    YEARS_SINCE_ATHLETICS_TICKETS +
+    ns(RECORD_YR, df = 5) +
+    YEARS_SINCE_MAX_CASH_YR +
+    GIVING_MAX_CASH_MO +
+    # KSM_PROSPECT +
+    # sqrt(VISITORS_5FY) +
+    LOYAL_5_PCT_CASH +
+    # UPGRADE3_CASH +
+    VELOCITY3_LIN_CASH +
+    SPOUSE_ALUM
+  , data = traindat %>% mutate(
+    YEARS_SINCE_FIRST_GIFT = 2016 - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, 2017)
+    , YEARS_SINCE_ATHLETICS_TICKETS = 2016 - ifelse(ATHLETICS_TICKET_LAST > 0, ATHLETICS_TICKET_LAST, 2017)
+    , YEARS_SINCE_MAX_CASH_YR = 2016 - ifelse(GIVING_MAX_CASH_YR > 0, GIVING_MAX_CASH_YR, 2017)
+  )
+  , family = 'binomial'
+)
+```
+```{r}
+summary(glm_st_splines)
+```
+
+```{r}
+tmp.ns <- conf_matrix(glm_standard, newdata = holdoutdat)
+tmp.s <- conf_matrix(glm_st_splines, newdata = holdoutdat %>% mutate(
+    YEARS_SINCE_FIRST_GIFT = 2016 - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, 2017)
+    , YEARS_SINCE_ATHLETICS_TICKETS = 2016 - ifelse(ATHLETICS_TICKET_LAST > 0, ATHLETICS_TICKET_LAST, 2017)
+    , YEARS_SINCE_MAX_CASH_YR = 2016 - ifelse(GIVING_MAX_CASH_YR > 0, GIVING_MAX_CASH_YR, 2017)
+  )
+)
+model_compare <- cbind(
+  model_compare
+  , glm_nospline = c(tmp.ns$err, tmp.ns$prec, tmp.ns$sens, tmp.ns$F1)
+  , glm_spline = c(tmp.s$err, tmp.s$prec, tmp.s$sens, tmp.ns$F1)
+)
+remove(tmp.ns, tmp.s)
+```
+```{r}
+print(model_compare)
+```
+
+```{r}
+
+```
 

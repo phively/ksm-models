@@ -20,7 +20,7 @@ conf_matrix <- function(model, newdata = NULL, threshold = .5) {
   if (is.null(newdata)) {
     results$truth = model$y
   } else {
-    results$truth = newdata$GAVE_10K
+    results$truth = newdata[, 1] %>% unlist()
   }
   results_tbl <- table(truth = results$truth, prediction = results$pred)
   error <- (results_tbl[1, 2] + results_tbl[2, 1]) / sum(results_tbl)
