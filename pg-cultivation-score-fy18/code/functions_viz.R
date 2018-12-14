@@ -24,7 +24,7 @@ extract_partials <- function(model, var.resp, var.expl) {
   resids <- data.frame(
     expl = model$model %>% data.frame() %>% select(var.expl) %>% unlist()
     , residuals(model, type = 'partial')
-    , class = paste0('traindat$', vr, ' %>% + 0') %>% parse(text = .) %>% eval() %>% as.factor()
+    , class = paste0('model$model$', var.resp, ' + 0') %>% parse(text = .) %>% eval() %>% as.factor()
   ) %>%
     select(
       expl
@@ -36,8 +36,19 @@ extract_partials <- function(model, var.resp, var.expl) {
 }
 
 # Generic function to plot calibration results
-plot_calibration <- function() {
-  
+plot_calibration <- function(model, newdata, smooth.method = 'loess', title.label = NULL) {
+  data.frame(
+    class = (newdata[, 1] + 0) %>% unlist()
+    , prediction = predict(model, newdata = newdata, type = 'response')
+  ) %>%
+    setNames(c('class', 'prediction')) %>%
+  ggplot(aes(x = prediction, y = class)) +
+    geom_point(aes(color = as.factor(class))) +
+    geom_smooth(method = smooth.method) +
+    geom_abline(slope = 1, intercept = 0) +
+    labs(title = paste0(title.label, ' OOS smoother (', smooth.method, '), penalized coefficients'), color = 'class'
+         , x = 'predicted probability'
+         , y = 'observed probability')
 }
 
 # Create coefficients data frame

@@ -299,8 +299,6 @@ for (rep in 1:reps) {
 glm_nospline_timestamps %>% unlist() %>% print()
 ```
 
-
-
 ```{r}
 # Function to reshape list data
 combine_xval <- function(xval_results = list()) {
@@ -332,11 +330,23 @@ combine_xval <- function(xval_results = list()) {
 }
 ```
 
-```{r, rows.print = 1000}
+```{r}
 # Save results
 glm_ridge_baseline_results <- combine_xval(glm_nospline)
 glm_ridge_baseline_timestamps <- timestamps
-save(glm_ridge_baseline_results, glm_ridge_baseline_timestamps, file = 'data/glm_nospline.Rdata')
+glm_ridge_baseline_model <- cv.glmnet(
+        rv.gave ~ .
+        , data = traindat %>% select(-HOUSEHOLD_ID)
+        , family = 'binomial'
+        , alpha = 0
+        , lambda = 2^(-8:5)
+      )
+save(
+  glm_ridge_baseline_model
+  , glm_ridge_baseline_results
+  , glm_ridge_baseline_timestamps
+  , file = 'data/glm_ridge_baseline.Rdata'
+)
 ```
 
 ```{r}
@@ -594,6 +604,8 @@ glm_st_splines <- glm(
 summary(glm_st_splines)
 ```
 
+### Comparison
+
 ```{r}
 tmp.ns <- conf_matrix(glm_standard, newdata = holdoutdat)
 tmp.s <- conf_matrix(glm_st_splines, newdata = holdoutdat %>% mutate(
@@ -614,6 +626,31 @@ print(model_compare)
 ```
 
 ```{r}
-
+plot_calibration(
+  glm_ridge_baseline_model
+  , newdata = holdoutdat
+  , title.label = 'GLM ridge baseline'
+)
 ```
+
+A solid but not amazing result.
+
+```{r}
+plot_calibration(glm_standard, newdata = holdoutdat, title.label = 'GLM standard')
+```
+
+```{r}
+plot_calibration(
+  glm_st_splines
+  , newdata = holdoutdat %>% mutate(
+    YEARS_SINCE_FIRST_GIFT = 2016 - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, 2017)
+    , YEARS_SINCE_ATHLETICS_TICKETS = 2016 - ifelse(ATHLETICS_TICKET_LAST > 0, ATHLETICS_TICKET_LAST, 2017)
+    , YEARS_SINCE_MAX_CASH_YR = 2016 - ifelse(GIVING_MAX_CASH_YR > 0, GIVING_MAX_CASH_YR, 2017)
+  )
+  , title.label = 'GLM splines'
+)
+```
+
+
+
 
