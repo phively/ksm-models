@@ -12,6 +12,13 @@ log10plus1_trans <- function(x) {
   )
 }
 
+# Negative square root function
+neg_sqrt_trans <- function() scales::trans_new(
+  'neg_sqrt'
+  , function(x) {sign(x) * sqrt(abs(x))}
+  , function(x) {sign(x) * x^2}
+)
+
 # glm confusion matrix
 conf_matrix <- function(model, newdata = NULL, threshold = .5) {
   results <- data.frame(
@@ -69,4 +76,17 @@ conf_matrix_glmnet <- function(model, newdata = NULL, rv = NULL, threshold = .5)
       , F1_score = (precision * sensitivity) / (precision + sensitivity)
     )
   )
+}
+
+# ROC matrix generation
+roc_matrix_gen <- function(model, data) {
+  data.frame(
+    X1 = predict(model, newdata = data, type = 'response')
+    , y = (data[, 1] + 0) %>% unlist()
+  ) %>% arrange(desc(X1)) %>%
+    mutate(
+      TPR = cumsum(y) / sum(y)
+      , FPR = cumsum(y == 0) / sum(y == 0)
+    ) %>%
+    return()
 }
