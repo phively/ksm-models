@@ -807,5 +807,80 @@ These are pretty similar, but again the nospline glm appears to be a reasonable 
 
 # Regression model
 
+I [found previously](https://cdn.rawgit.com/phively/ksm-models/c58e8065/pg-cultivation-score-fy18/02%20Cultivation%20score%20weights.nb.html) that linear regression actually works pretty well for predicting cumulative giving amounts, particularly when conditioning on donor status (thereby excluding all 0 entries).
+
+$$ E \left(\text{log giving | donor, covariates} \right) = E\left(\text{log}\left(Y_i\right)\right) = X_i \boldsymbol{\beta} $$
+
+Here, $Y_i = \text{FY18Giving}_i + \text{FY17Giving}_i$ and the training data $X_i$ includes the observations where $Y_i > 0$.
+
+## Variable selection
+
+I'll again pre-screen variables with the Boruta algorithm, but this time the response variable is continuous and only donors will be included.
+
+```{r, cache = TRUE}
+# Sample rows
+prop = 1/5 # Proportion of data to sample
+set.seed(7968177)
+# Include only entities who gave
+samp <- sample_n(
+  modeling.data %>% filter(rv.gave)
+  , size = nrow(modeling.data %>% filter(rv.gave)) * prop
+) %>% select(
+  -rv.gave, -ID_NUMBER, -HOUSEHOLD_ID, -INSTITUTIONAL_SUFFIX, -DEGREES_CONCAT
+)
+
+# Run Boruta algorithm, but only on entities that gave
+rf.vars.lm <- Boruta(
+    y = log10(samp$rv.amt)
+    , x = samp %>% select(-rv.amt)
+    , seed = 3371662
+  )
+```
+```{r}
+rf.vars.lm %>% print()
+```
+
+Save the results.
+
+```{r}
+save(rf.vars.lm, file = 'data/rf.vars.lm.Rdata')
+```
+
+```{r, fig.width = 8, fig.height = 20}
+(lmod_plot <- rf.vars.lm %>% Borutadata() %>% Borutaplotter())
+```
+
+Some unsurprising findings:
+
+  * Again, past giving is the best predictor of future giving, particularly past upgrades (velocity)
+  * Last year's giving is more predictive than less recent giving
+  * Prospect assignment and length of assignment is predictive of future giving
+  * UOR and evaluation rating are predictive
+  * Gift club membership is predictive
+  * Kellogg event attendance is predictive
+  * Home contact information is again predictive
+  
+And some surprising ones:
+
+  * Total cash giving is more predictive than total new gifts and commitments. Perhaps there's an unfulfilled pledge effect hidden away?
+  * Giving 5 years ago is also pretty predictive - perhaps a paid off pledge effect?
+  * Committee participation is not predictive
+  * Donor Advised Fund and stock gifts are not predictive
+  * Contact information is not predictive
+
+```{r}
+(recommended.vars.lm <- TentativeRoughFix(rf.vars.lm))
+```
+
+```{r, fig.width = 16, fig.height = 16}
+# Check variable correlations
+recommended_vars_lm <- recommended.vars.lm$finalDecision[
+  which(recommended.vars.lm$finalDecision == 'Confirmed')] %>% names()
+numeric_vars_lm <- modeling.data %>%
+  filter(rv.gave) %>%
+  select(recommended_vars_lm) %>%
+  select_if(is.numeric)
+numeric_vars_lm %>% plot_corrs(textsize = 2)
+```
 
 
