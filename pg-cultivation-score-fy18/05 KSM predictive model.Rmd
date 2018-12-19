@@ -339,10 +339,10 @@ glm_ridge_baseline_model <- cv.glmnet(
         , data = traindat %>% select(-HOUSEHOLD_ID)
         , family = 'binomial'
         , alpha = 0
-        , lambda = 2^(-8:5)
       )
 save(
-  glm_ridge_baseline_model
+  glm_nospline
+  , glm_ridge_baseline_model
   , glm_ridge_baseline_results
   , glm_ridge_baseline_timestamps
   , file = 'data/glm_ridge_baseline.Rdata'
@@ -407,16 +407,18 @@ termplot(glm_standard)
 Definitely keep:
 
   * Program group looks very interesting
+  * Pref addr type code could be interesting
   * CRU giving segment looks very interesting too
   * Spouse alum or spouse KSM year, not both
   
 Definitely drop:
 
-  * Pref addr type code
   * Has Home Email
   * Gifts credit card
   * Gift clubs fields
   * KSM GOs flag
+  * Evaluation and UOR
+  * KSM prospect flag
   * KSM Events Reunions
   * Giving max pledge mo
 
@@ -448,11 +450,13 @@ glm_standard <- glm_standard %>% update(
     -HOUSEHOLD_ID
     , -RECORD_STATUS_CODE
     # Drop
-    , PREF_ADDR_TYPE_CODE
     , -HAS_HOME_EMAIL
     , -GIFTS_CREDIT_CARD
     , -contains('GIFT_CLUB')
     , -KSM_GOS_FLAG
+    , -EVALUATION_LOWER_BOUND
+    , -UOR_LOWER_BOUND
+    , -KSM_PROSPECT
     , -KSM_EVENTS_REUNIONS
     , -GIVING_MAX_PLEDGE_MO
     # Duplicative
@@ -472,13 +476,13 @@ glm_standard <- glm_standard %>% update(
 summary(glm_standard)
 ```
 
-That's a nice drop in the AIC.
+The AIC is higher, but comparable. 
+
+### Logistic regression with splines
 
 ```{r}
 dfs <- 4
 ```
-
-### Logistic regression with splines
 
 Now introduce splines on the numeric variables, arbitrarily setting df = `r dfs %>% I()`.
 
@@ -553,12 +557,13 @@ Some more thoughts.
 glm_st_splines <- glm(
   rv.gave ~
     PROGRAM_GROUP +
+    PREF_ADDR_TYPE_CODE +
     HOUSEHOLD_CONTINENT +
     BUS_IS_EMPLOYED +
     HAS_HOME_ADDR +
     HAS_HOME_PHONE +
-    # YEARS_SINCE_FIRST_GIFT +
-    GIVING_FIRST_YEAR_CASH_AMT +
+    # ns(YEARS_SINCE_FIRST_GIFT, 2) +
+    # GIVING_FIRST_YEAR_CASH_AMT +
     # GIVING_MAX_PLEDGE_AMT +
     GIVING_CASH_TOTAL +
     # GIVING_PLEDGE_TOTAL +
@@ -566,16 +571,16 @@ glm_st_splines <- glm(
     # sqrt(GIFTS_ALLOCS_SUPPORTED) +
     sqrt(GIFTS_FYS_SUPPORTED) +
     # sqrt(GIFTS_CASH) +
-    # sqrt(GIFTS_PLEDGES) +
-    # CASH_PFY1 +
-    # CASH_PFY2 +
-    # CASH_PFY3 +
+    sqrt(GIFTS_PLEDGES) +
+    CASH_PFY1 +
+    CASH_PFY2 +
+    CASH_PFY3 +
     CASH_PFY4 +
     CASH_PFY5 +
     CRU_GIVING_SEGMENT +
     # EVALUATION_LOWER_BOUND +
     # UOR_LOWER_BOUND +
-    sqrt(MONTHS_ASSIGNED) +
+    # sqrt(MONTHS_ASSIGNED) +
     # sqrt(COMMITTEE_NU_DISTINCT) +
     # sqrt(COMMITTEE_NU_YEARS) +
     # sqrt(COMMITTEE_KSM_DISTINCT) +
@@ -583,7 +588,7 @@ glm_st_splines <- glm(
     sqrt(EVENTS_CFY) +
     # sqrt(EVENTS_PFY1) +
     # sqrt(ATHLETICS_TICKET_YEARS) +
-    YEARS_SINCE_ATHLETICS_TICKETS +
+    # YEARS_SINCE_ATHLETICS_TICKETS +
     ns(RECORD_YR, df = 5) +
     YEARS_SINCE_MAX_CASH_YR +
     GIVING_MAX_CASH_MO +
@@ -591,11 +596,10 @@ glm_st_splines <- glm(
     # sqrt(VISITORS_5FY) +
     LOYAL_5_PCT_CASH +
     # UPGRADE3_CASH +
-    VELOCITY3_LIN_CASH +
+    # VELOCITY3_LIN_CASH +
     SPOUSE_ALUM
   , data = traindat %>% mutate(
     YEARS_SINCE_FIRST_GIFT = 2016 - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, 2017)
-    , YEARS_SINCE_ATHLETICS_TICKETS = 2016 - ifelse(ATHLETICS_TICKET_LAST > 0, ATHLETICS_TICKET_LAST, 2017)
     , YEARS_SINCE_MAX_CASH_YR = 2016 - ifelse(GIVING_MAX_CASH_YR > 0, GIVING_MAX_CASH_YR, 2017)
   )
   , family = 'binomial'
@@ -605,20 +609,23 @@ glm_st_splines <- glm(
 summary(glm_st_splines)
 ```
 
+Again, similar AIC.
+
 ### Penalized logistic regression, dropped variables
 
-Fit a logistic regression model with the ridge penalizer using the same subset of variables chosen in the previuos step.
+Fit a logistic regression model with the ridge penalizer using the same subset of variables chosen in the previous step.
 
 ```{r}
 glm_ridge_cv <- cv.glmnet(
-  rv.gave ~ 
+  rv.gave ~
     PROGRAM_GROUP +
+    PREF_ADDR_TYPE_CODE +
     HOUSEHOLD_CONTINENT +
     BUS_IS_EMPLOYED +
     HAS_HOME_ADDR +
     HAS_HOME_PHONE +
-    # YEARS_SINCE_FIRST_GIFT +
-    GIVING_FIRST_YEAR_CASH_AMT +
+    # ns(YEARS_SINCE_FIRST_GIFT, 2) +
+    # GIVING_FIRST_YEAR_CASH_AMT +
     # GIVING_MAX_PLEDGE_AMT +
     GIVING_CASH_TOTAL +
     # GIVING_PLEDGE_TOTAL +
@@ -626,16 +633,16 @@ glm_ridge_cv <- cv.glmnet(
     # sqrt(GIFTS_ALLOCS_SUPPORTED) +
     sqrt(GIFTS_FYS_SUPPORTED) +
     # sqrt(GIFTS_CASH) +
-    # sqrt(GIFTS_PLEDGES) +
-    # CASH_PFY1 +
-    # CASH_PFY2 +
-    # CASH_PFY3 +
+    sqrt(GIFTS_PLEDGES) +
+    CASH_PFY1 +
+    CASH_PFY2 +
+    CASH_PFY3 +
     CASH_PFY4 +
     CASH_PFY5 +
     CRU_GIVING_SEGMENT +
     # EVALUATION_LOWER_BOUND +
     # UOR_LOWER_BOUND +
-    sqrt(MONTHS_ASSIGNED) +
+    # sqrt(MONTHS_ASSIGNED) +
     # sqrt(COMMITTEE_NU_DISTINCT) +
     # sqrt(COMMITTEE_NU_YEARS) +
     # sqrt(COMMITTEE_KSM_DISTINCT) +
@@ -643,7 +650,7 @@ glm_ridge_cv <- cv.glmnet(
     sqrt(EVENTS_CFY) +
     # sqrt(EVENTS_PFY1) +
     # sqrt(ATHLETICS_TICKET_YEARS) +
-    YEARS_SINCE_ATHLETICS_TICKETS +
+    # YEARS_SINCE_ATHLETICS_TICKETS +
     ns(RECORD_YR, df = 5) +
     YEARS_SINCE_MAX_CASH_YR +
     GIVING_MAX_CASH_MO +
@@ -651,7 +658,7 @@ glm_ridge_cv <- cv.glmnet(
     # sqrt(VISITORS_5FY) +
     LOYAL_5_PCT_CASH +
     # UPGRADE3_CASH +
-    VELOCITY3_LIN_CASH +
+    # VELOCITY3_LIN_CASH +
     SPOUSE_ALUM
   , data = traindat %>% mutate(
     YEARS_SINCE_FIRST_GIFT = 2016 - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, 2017)
@@ -715,7 +722,7 @@ print(model_compare)
 With threshold $\theta =$ `r theta1 %>% round(3) %>% I()` the glm_ridge model is the winner.
 
 ```{r}
-# Calculateions
+# Calculations
 tmp.ns <- conf_matrix(glm_standard, newdata = holdoutdat)
 tmp.s <- conf_matrix(glm_st_splines, newdata = holdout_new)
 tmp.rs <- conf_matrix_glmnet(glm_ridge_cv, newdata = holdout_new, rv = 'rv.gave')
@@ -760,7 +767,7 @@ glm_preds %>%
        , y = 'observed probability')
 ```
 
-Interestingly, out-of-box baseline ridge regression outperforms the ridge regression model with fewer explanatory variables. Between these four I'd take the nospline glm due to its interpretability.
+Interestingly, out-of-box baseline ridge regression outperforms the ridge regression model with fewer explanatory variables. Between these four I'd take the spline glm due to its interpretability.
 
 We can also look at the ROC curves.
 
@@ -803,7 +810,7 @@ data.frame(
 )
 ```
 
-These are pretty similar, but again the nospline glm appears to be a reasonable choice.
+These are almost indistinguishable, but again the spline glm appears to be a reasonable choice.
 
 # Regression model
 
@@ -819,12 +826,13 @@ I'll again pre-screen variables with the Boruta algorithm, but this time the res
 
 ```{r, cache = TRUE}
 # Sample rows
-prop = 1/5 # Proportion of data to sample
+prop = 1 # Proportion of data to sample; 1 for all donors
 set.seed(7968177)
 # Include only entities who gave
 samp <- sample_n(
   modeling.data %>% filter(rv.gave)
   , size = nrow(modeling.data %>% filter(rv.gave)) * prop
+  , replace = FALSE
 ) %>% select(
   -rv.gave, -ID_NUMBER, -HOUSEHOLD_ID, -INSTITUTIONAL_SUFFIX, -DEGREES_CONCAT
 )
@@ -852,19 +860,18 @@ save(rf.vars.lm, file = 'data/rf.vars.lm.Rdata')
 
 Some unsurprising findings:
 
-  * Again, past giving is the best predictor of future giving, particularly past upgrades (velocity)
-  * Last year's giving is more predictive than less recent giving
+  * Again, past giving is the best predictor of future giving, particularly past totals and upgrades (velocity)
+  * Generally speaking, more recent giving is more predictive than less recent giving
   * Prospect assignment and length of assignment is predictive of future giving
   * UOR and evaluation rating are predictive
   * Gift club membership is predictive
-  * Kellogg event attendance is predictive
-  * Home contact information is again predictive
+  * Event attendance is predictive
   
 And some surprising ones:
 
-  * Total cash giving is more predictive than total new gifts and commitments. Perhaps there's an unfulfilled pledge effect hidden away?
+  * Max cash giving is more predictive than new gifts and commitments. Perhaps there's an unfulfilled pledge effect hidden away?
   * Giving 5 years ago is also pretty predictive - perhaps a paid off pledge effect?
-  * Committee participation is not predictive
+  * Besides overall tenure, committee participation is not predictive
   * Donor Advised Fund and stock gifts are not predictive
   * Contact information is not predictive
 
@@ -883,4 +890,8 @@ numeric_vars_lm <- modeling.data %>%
 numeric_vars_lm %>% plot_corrs(textsize = 2)
 ```
 
+  * Probably only one of AF or CRU by year should be kept.
+  * Probably only one of visitors and visits should be kept.
+
+## Cross-validation
 
