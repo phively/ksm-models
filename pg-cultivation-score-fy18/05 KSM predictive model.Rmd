@@ -872,7 +872,7 @@ And some surprising ones:
   * Max cash giving is more predictive than new gifts and commitments. Perhaps there's an unfulfilled pledge effect hidden away?
   * Giving 5 years ago is also pretty predictive - perhaps a paid off pledge effect?
   * Besides overall tenure, committee participation is not predictive
-  * Donor Advised Fund and stock gifts are not predictive
+  * Donor Advised Fund giving amounts and stock gifts are not predictive
   * Contact information is not predictive
 
 ```{r}
@@ -895,3 +895,136 @@ numeric_vars_lm %>% plot_corrs(textsize = 2)
 
 ## Cross-validation
 
+The modeling data file is a slightly trimmed version of modeling.data.
+
+```{r}
+# Data file with variables removed
+lmdat <- modeling.data %>%
+  filter(rv.gave) %>%
+  select(rv.amt, recommended_vars_lm) %>%
+  select(
+    -GIVING_AF_TOTAL
+    , -KSM_GOS
+    , -contains('AF_PFY')
+    , -VELOCITY3_LIN_CASH
+    , -VELOCITY_BINS_NGC
+    , -VELOCITY_BINS_CASH
+    , -VELOCITY3_CASH
+    , -VELOCITY3_NGC
+    , -GIFTS_CASH
+    , -VISITORS_5FY
+    , -FIRST_KSM_YEAR
+    , -GIVING_PLEDGE_TOTAL
+    , -GIVING_MAX_CASH_FY
+    , -GIFTS_MATCHES
+    , -CRU_STATUS
+    , -BIRTH_DT
+    , -SPOUSE_SUFFIX
+    , -PAST_KSM_GOS_FLAG
+    , -GIVING_MAX_PLEDGE_MO
+    , -UPGRADE3_NGC
+  ) %>% mutate(
+    # Create spouse flag
+    SPOUSE_ALUM = ifelse(SPOUSE_FIRST_KSM_YEAR > 0, 'TRUE', 'FALSE') %>% factor()
+    # Lump together little-used continents
+    , HOUSEHOLD_CONTINENT = fct_lump(HOUSEHOLD_CONTINENT, prop = .0075)
+    # Lump together little-used regions
+    , HOUSEHOLD_REGION = fct_collapse(
+        HOUSEHOLD_REGION
+        , 'NB' = 'INTL'
+    )
+  ) %>% mutate_if(
+    # Numeric variables over 1E4 get a log10 transformation
+    function(x) {
+      ifelse(is.numeric(x), max(x) >= 1E4, FALSE)
+    }
+    , log10plus1
+  ) %>% select(
+    -SPOUSE_FIRST_KSM_YEAR
+  )
+
+# Cross-validation settings
+folds = 10
+reps = 5
+
+# Withhold 10% of data as test set
+xv <- KFoldXVal(lmdat, k = 2, prop = .1, seed = 1626452)
+holdoutdat <- lmdat[xv[[1]], ]
+traindat <- lmdat[xv[[2]], ]
+remove(xv)
+```
+
+### Baseline linear regression
+
+The model to beat will be a generic regression model with all variables previously identified as important.
+
+```{r}
+# Store timings
+timestamps <- list()
+# Store linear models
+lm_baseline <- list()
+# Seed for reproducibility
+set.seed(2285286)
+
+# Outer loop (repetitions)
+for (rep in 1:reps) {
+  # Status report 
+  timestamp <- paste('+ Iteration', rep, 'beginning at:', Sys.time())
+  print(timestamp)
+  timestamps <- c(timestamps, timestamp)
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  # Inner loop (parallel cross-validation)
+  models_out <- foreach(
+    fold = 1:length(xv)
+    , .combine = list
+    , .multicombine = TRUE
+    , .packages = c('dplyr', 'splines')
+  ) %dopar% {
+    # Fit temp model
+      tmpmodel <- lm(
+        rv.amt ~ .
+        # Train while withholding some data
+        , data = traindat[-xv[[fold]], ]
+      )
+      preds <- data.frame(
+        prediction = predict(tmpmodel, newdata = traindat[xv[[fold]], ], type = 'response')
+        , actual = traindat$rv.amt[xv[[fold]]]
+      )
+    # Return results
+    return(
+      list(
+        rep = rep
+        , fold = fold
+        , model = tmpmodel
+        , predictions = preds
+      )
+    )
+  }
+  # Write results to errors data frame
+  lm_baseline <- c(lm_baseline, models_out)
+  # Status report
+  timestamp <- paste(' -Iteration', rep, 'ending at:   ', Sys.time())
+  print(timestamp)
+  timestamps <- c(timestamps, timestamp)
+}
+```
+
+
+### Linear regression with splines
+
+
+
+### Ridge regression
+
+
+
+### LASSO
+
+
+
+### Comparison
+
+
+
+# Conclusions
