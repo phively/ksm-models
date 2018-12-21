@@ -236,9 +236,9 @@ remove(xv)
 
 I'll use a penalized ridge regression model as implemented by glmnet. Advantages of shrinkage techniques include automatically controlling for overfitting and collinearity.
 
-```{r}
+```{r, cache = TRUE}
 # Store timings
-timestamps <- list()
+glm_ridge_baseline_timestamps <- list()
 # Store model errors
 glm_nospline <- list()
 # Seed for reproducibility
@@ -249,7 +249,7 @@ for (rep in 1:reps) {
   # Status report 
   timestamp <- paste('+ Iteration', rep, 'beginning at:', Sys.time())
   print(timestamp)
-  timestamps <- c(timestamps, timestamp)
+  glm_ridge_baseline_timestamps <- c(glm_ridge_baseline_timestamps, timestamp)
   # Create cross-validation indices
   xv <- KFoldXVal(traindat, k = folds)
   # Inner loop (parallel cross-validation)
@@ -292,11 +292,11 @@ for (rep in 1:reps) {
   # Status report
   timestamp <- paste(' -Iteration', rep, 'ending at:   ', Sys.time())
   print(timestamp)
-  timestamps <- c(timestamps, timestamp)
+  glm_ridge_baseline_timestamps <- c(glm_ridge_baseline_timestamps, timestamp)
 }
 ```
 ```{r}
-glm_nospline_timestamps %>% unlist() %>% print()
+glm_ridge_baseline_timestamps %>% unlist() %>% print()
 ```
 
 ```{r}
@@ -333,7 +333,6 @@ combine_xval <- function(xval_results = list()) {
 ```{r}
 # Save results
 glm_ridge_baseline_results <- combine_xval(glm_nospline)
-glm_ridge_baseline_timestamps <- timestamps
 glm_ridge_baseline_model <- cv.glmnet(
         rv.gave ~ .
         , data = traindat %>% select(-HOUSEHOLD_ID)
@@ -1010,6 +1009,61 @@ for (rep in 1:reps) {
 }
 ```
 
+```{r, warning = FALSE, error = FALSE}
+lm_models <- ListExtract(lm_baseline, 'model')
+lm_preds <- ListExtract(lm_baseline, 'predictions')
+n <- folds * reps
+```
+```{r, warning = FALSE, error = FALSE}
+# r^2 plots
+plot_r2(lm_models) +
+  geom_text(y = seq(10, 150, length.out = n), label = 1:n, color = 'blue') 
+```
+
+The $r^2$ results are good for this application (anything over .5 or so is reasonable).
+
+```{r, warning = FALSE, error = FALSE}
+plot_mses(lm_models, lm_preds)
+```
+
+This is a pretty good result, and the out-sample MSE is only slightly worse than the in-sample MSE.
+
+```{r, message = FALSE, warning = FALSE}
+plot_resids(lm_models, lm_preds)$insample
+```
+
+```{r, warning = FALSE, error = FALSE}
+plot_resids(lm_models, lm_preds)$outsample
+```
+
+On average the model slightly overestimates on the low end and underestimates on the high end.
+
+```{r}
+plot_qq(lm_models, lm_preds)$insample
+```
+
+```{r}
+plot_qq(lm_models, lm_preds)$outsample
+```
+
+The Q-Q plots support the earlier observation that there's extra density in the tails.
+
+Consider the model coefficients.
+
+```{r, warning = FALSE, error = FALSE, fig.width = 12, fig.height = 6}
+p.sig <- .05
+plot_coefs(lm_models) +
+  guides(color = FALSE) +
+  scale_y_continuous(trans = 'neg_sqrt')
+```
+
+```{r, warning = FALSE, error = FALSE, rows.print = 1000}
+coef_pm_table(lm_models, p.sig)
+```
+
+The table indicates the number of models in which the coefficient was significantly positive or negative (or not signficantly different from 0) at the $p =$ `r p.sig %>% I()` level.
+
+ 
 
 ### Linear regression with splines
 

@@ -88,7 +88,8 @@ plot_r2 <- function(model_list, type = 'r.squared') {
     )
 }
 # Plot cross-validated coefficients
-plot_coefs <- function(model_list, conf_interval = 1 - p.sig) {
+plot_coefs <- function(model_list, p.sig = .05) {
+  conf_interval <- 1 - p.sig
   crit_val <- qnorm({1 - conf_interval} / 2) %>% abs()
   coefs <- create_coefs(model_list)
   coefs %>% full_join(
@@ -122,31 +123,39 @@ coef_pm_table <- function(model_list, pval) {
     , `-` = sum(sign(beta.hat) < 0 & Pr.t < pval)
   )
 }
-# Compute predictions
-calc_preds <- function(model_list, xval, yname) {
-  yhats <- list()
-  for (i in 1:length(model_list)) {
-    yhats[[i]] <- data.frame(
-      model = i
-      , row = xval[[i]]
-      , preds = model_list[[i]] %>% predict(newdata = mdat[xval[[i]], ])
-      , truth = mdat[xval[[i]], yname] %>% unlist() %>% log10plus1()
-    )
-  }
-  return(yhats)
+# Compute MSE
+# calc_preds <- function(model_list, xval, yname, trainingdata) {
+#   yhats <- list()
+#   for (i in 1:length(model_list)) {
+#     idx <- (i - 1) %% folds + 1
+#     yhats[[i]] <- data.frame(
+#       model = i
+#       , row = xval[[idx]]
+#       , preds = model_list[[i]] %>% predict(newdata = trainingdata[xval[[idx]], ])
+#       , truth = trainingdata[xval[[idx]], yname] %>% unlist() %>% log10plus1()
+#     )
+#   }
+#   return(yhats)
+# }
+calc_mse <- function(y, yhat) {
+  mean(
+    (y - yhat)^2, na.rm = TRUE
+  )
 }
-calc_outsample_mse <- function(model_list, xval, yname) {
-  calc_preds(model_list, xval, yname) %>%
-    lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>%
-    unlist()
-}
+# calc_outsample_mse <- function(model_list, xval, yname, trainingdata) {
+#   calc_preds(model_list, xval, yname, trainingdata) %>%
+#     lapply(function(x) calc_mse(y = x$truth, yhat = x$preds)) %>%
+#     unlist()
+# }
 # Plot MSEs by insample/outsample
-plot_mses <- function(model_list, xval, truth) {
+plot_mses <- function(model_list, outsample_predictions_list) {
   mses <- data.frame(
     insample = model_list %>%
-      lapply(function(x) calc_mse(y = model.frame(x)[, 1], yhat = predict(x))) %>%
+      lapply(function(x) mean(x$residuals^2)) %>%
       unlist()
-    , outsample = calc_outsample_mse(model_list, xval, truth)
+    , outsample = outsample_predictions_list %>%
+      lapply(function(x) calc_mse(y = x$actual, yhat = x$prediction)) %>%
+      unlist()
   ) %>% gather('type', 'MSE', 1:2)
   mses %>%
     ggplot(aes(x = MSE, color = type)) +
@@ -169,68 +178,108 @@ plot_mses <- function(model_list, xval, truth) {
     )
 }
 # Merges predicted results into one large data frame each for insample and outsample
-calc_resids <- function(model_list, xval, yname) {
-  insample <- foreach(i = 1:length(model_list), .combine = 'rbind') %do% {
-    data.frame(
-      model = i
-      , preds = model_list[[i]] %>% predict()
-      , truth = model.frame(model_list[[i]])[, 1]
-    ) %>% mutate(
-      residuals = truth - preds
-    )
-  }
-  preds <- calc_preds(model_list, xval, yname)
-  outsample <- foreach(i = 1:length(model_list), .combine = 'rbind') %do% {
-    preds[[i]]
-  } %>% mutate(
-    residuals = truth - preds
+# calc_resids <- function(model_list, xval, yname) {
+#   insample <- foreach(i = 1:length(model_list), .combine = 'rbind') %do% {
+#     data.frame(
+#       model = i
+#       , preds = model_list[[i]] %>% predict()
+#       , truth = model.frame(model_list[[i]])[, 1]
+#     ) %>% mutate(
+#       residuals = truth - preds
+#     )
+#   }
+#   preds <- calc_preds(model_list, xval, yname, trainingdata)
+#   outsample <- foreach(i = 1:length(model_list), .combine = 'rbind') %do% {
+#     preds[[i]]
+#   } %>% mutate(
+#     residuals = truth - preds
+#   )
+#   return(list(insample = insample, outsample = outsample))
+# }
+# Data frames for plotting
+insample_df <- function(model_list) {
+  insample <- data.frame(
+    resids = lapply(model_list, function(x) x$residuals) %>% unlist()
+    , preds = lapply(model_list, function(x) x$fitted) %>% unlist()
   )
-  return(list(insample = insample, outsample = outsample))
+  insample$model <- rownames(insample) %>%
+    str_extract(., pattern = '(?<=_)[0-9]*(?=\\.)') %>% 
+    as.numeric()
+  return(insample)
+}
+preds_df <- function(preds_list) {
+  data.frame(
+    resids = lapply(preds_list, function(x) {x$actual - x$prediction}) %>% unlist()
+    , preds = lapply(preds_list, function(x) x$prediction) %>% unlist()
+    , model = foreach (i = 1:length(preds_list), .combine = c) %do% {
+      names(preds_list[i]) %>%
+        str_extract(., pattern = '(?<=_)[0-9]*') %>%
+        rep(times = nrow(preds_list[[i]])) %>%
+        as.numeric()
+    }
+  )
 }
 # Plot standardized residuals; returns a list of ggplot objects $insample and $outsample
-plot_resids <- function(model_list, xval, yname, filter = 'TRUE') {
-  resids <- calc_resids(model_list, xval, yname)
-  # Plot residuals vs fitted for in-sample data
-  insample <- resids$insample %>% filter_(filter) %>%
-    ggplot(aes(x = preds, y = residuals, color = factor(model))) +
+plot_resids <- function(model_list, preds_list) {
+  insample_plot <- insample_df(model_list) %>%
+    ggplot(aes(x = preds, y = resids, color = factor(model) %>% fct_reorder(model))) +
     geom_point(alpha = .01) +
-    geom_smooth(se = FALSE) +
+    geom_smooth(se = FALSE, method = 'gam', formula = y ~ s(x, bs = 'cs')) +
     labs(title = 'In-sample residuals versus fitted', color = 'cross-validation sample')
-  # Plot residuals vs fitted for out-of-sample data
-  outsample <- resids$outsample %>% filter_(filter) %>%
-    ggplot(aes(x = preds, y = residuals, color = factor(model))) +
-    geom_point(alpha = .1) +
-    geom_smooth(se = FALSE) +
+  outsample_plot <- preds_df(preds_list) %>%
+    ggplot(aes(x = preds, y = resids, color = factor(model) %>% fct_reorder(model))) +
+    geom_point(alpha = .01) +
+    geom_smooth(se = FALSE, method = 'gam', formula = y ~ s(x, bs = 'cs')) +
     labs(title = 'Out-of-sample residuals versus fitted', color = 'cross-validation sample')
-  return(list(insample = insample, outsample = outsample))
+  return(list(insample = insample_plot, outsample = outsample_plot))
 }
 # Plot normal Q-Q visualization for residuals
-plot_qq <- function(model_list, xval, yname, filter = 'TRUE') {
-  resids <- calc_resids(model_list, xval, yname)
+plot_qq <- function(model_list, preds_list) {
   # In-sample Q-Q plot with standardized residuals
-  insample <- resids$insample %>% mutate(st.resid = residuals/sd(residuals)) %>% filter_(filter) %>%
+  insample_plot <- insample_df(model_list) %>%
+    mutate(st.resid = resids/sd(resids)) %>%
     ggplot(aes(sample = st.resid, color = factor(model))) +
     geom_qq(alpha = .05) +
     geom_qq_line() +
     labs(title = 'In-sample Q-Q plot with standardized residuals'
          , color = 'cross-validation sample')
   # Out-of-sample Q-Q plot
-  outsample <- resids$outsample %>% mutate(st.resid = residuals/sd(residuals)) %>% filter_(filter) %>%
+  outsample_plot <- preds_df(preds_list) %>%
+    mutate(st.resid = resids/sd(resids)) %>%
     ggplot(aes(sample = st.resid, color = factor(model))) +
     geom_qq(alpha = .05) +
     geom_qq_line() +
     labs(title = 'Out-of-sample Q-Q plot with standardized residuals'
          , color = 'cross-validation sample')
-  return(list(insample = insample, outsample = outsample))
+  return(list(insample = insample_plot, outsample = outsample_plot))
 }
+# Plot normal Q-Q visualization for residuals
+# plot_qq <- function(model_list, xval, yname, filter = 'TRUE') {
+#   resids <- calc_resids(model_list, xval, yname)
+#   # In-sample Q-Q plot with standardized residuals
+#   insample <- resids$insample %>% mutate(st.resid = residuals/sd(residuals)) %>% filter_(filter) %>%
+#     ggplot(aes(sample = st.resid, color = factor(model))) +
+#     geom_qq(alpha = .05) +
+#     geom_qq_line() +
+#     labs(title = 'In-sample Q-Q plot with standardized residuals'
+#          , color = 'cross-validation sample')
+#   # Out-of-sample Q-Q plot
+#   outsample <- resids$outsample %>% mutate(st.resid = residuals/sd(residuals)) %>% filter_(filter) %>%
+#     ggplot(aes(sample = st.resid, color = factor(model))) +
+#     geom_qq(alpha = .05) +
+#     geom_qq_line() +
+#     labs(title = 'Out-of-sample Q-Q plot with standardized residuals'
+#          , color = 'cross-validation sample')
+#   return(list(insample = insample, outsample = outsample))
+# }
 # Compute partial residuals
-calc_partial_resids <- function(model, inds, xname, df = NULL) {
+calc_partial_resids <- function(model, inds, xname, df = NULL, trainingdata) {
   # Quick hack to get around update() environment, not really recommended
   scoped_xname <<- xname
   scoped_spline_df <<- df
   # Partial residuals data frame
   data.frame(
-    x = mdat %>% filter(rownum %in% unlist(inds)) %>% select_(xname) %>% unlist()
+    x = trainingdata %>% filter(rownum %in% unlist(inds)) %>% select_(xname) %>% unlist()
     , y = model.frame(model)[, 1]
     , y.hat = if (!is.null(df)) {
       update(model, formula = . ~ ns(parse(text = scoped_xname) %>% eval(), df = scoped_spline_df)) %>% fitted()
