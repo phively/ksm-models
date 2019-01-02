@@ -726,7 +726,7 @@ tmp.ns <- conf_matrix(glm_standard, newdata = holdoutdat)
 tmp.s <- conf_matrix(glm_st_splines, newdata = holdout_new)
 tmp.rs <- conf_matrix_glmnet(glm_ridge_cv, newdata = holdout_new, rv = 'rv.gave')
 # Data frame
-model_compare <- cbind(
+model_compare2 <- cbind(
   glm_baseline_err
   , glm_nospline = c(tmp.ns$err, tmp.ns$prec, tmp.ns$sens, tmp.ns$F1)
   , glm_spline = c(tmp.s$err, tmp.s$prec, tmp.s$sens, tmp.ns$F1)
@@ -735,7 +735,7 @@ model_compare <- cbind(
 remove(tmp.ns, tmp.s, tmp.rs)
 ```
 ```{r}
-print(model_compare)
+print(model_compare2)
 ```
 
 But with a decision threshold of $\theta =$ 0.5 the standard glm performs somewhat better, minimizing false negatives.
@@ -1063,18 +1063,323 @@ coef_pm_table(lm_models, p.sig)
 
 The table indicates the number of models in which the coefficient was significantly positive or negative (or not signficantly different from 0) at the $p =$ `r p.sig %>% I()` level.
 
- 
+```{r}
+lm_full <- lm(rv.amt ~ ., data = traindat)
+ summary(lm_full)
+```
+
+Drop:
+
+  * Yearly cash
+  * NU committees
+  * CRU giving segment variables
+  * DAF gifts
+  * Gave 10K flag
+  * Bequests flag
+  * Loyal cash percent
+  * KLC count
+  * Yearly gift club counts
+  * Cash total
+  * NGC total
+  * First year giving
+  * First year giving amounts
+  * Max cash month
+  * Spouse alumni flag
+  * HH region
+  * HH record is NA
+  * Events attended KSM, NU
+  * Prospect flags
+  * Months assigned, present/past
+
+```{r}
+lm_trimmed <- lm_full %>% update(
+  formula = rv.amt ~
+    COMMITTEE_KSM_LDR +
+    CRU_PFY1 + CRU_PFY2 + CRU_PFY3 + CRU_PFY4 + CRU_PFY5 +
+    EVALUATION_LOWER_BOUND +
+    GIFT_CLUB_NU_LDR_YRS +
+    GIFTS_ALLOCS_SUPPORTED +
+    GIFTS_OUTRIGHTS_PAYMENTS +
+    GIVING_CRU_TOTAL +
+    GIVING_MAX_CASH_YR +
+    GIVING_MAX_PLEDGE_AMT +
+    GIVING_MAX_PLEDGE_FY +
+    HOUSEHOLD_CONTINENT +
+    KSM_GOS_FLAG +
+    LOYAL_5_PCT_ANY +
+    NGC_PFY1 + NGC_PFY2 + NGC_PFY3 + NGC_PFY4 + NGC_PFY5 +
+    PREF_ADDR_TYPE_CODE +
+    PROGRAM_GROUP +
+    RECORD_YR +
+    UOR_LOWER_BOUND +
+    UPGRADE3_CASH +
+    VELOCITY3_LIN_NGC +
+    VISITS_5FY
+)
+summary(lm_trimmed)
+```
+
+```{r}
+lm_mses <- data.frame(statistic = c('adj.r.sq', 'mse', 'mse.outsample'))
+lm_mses <- cbind(
+  lm_mses
+  , lm_full = c(
+    summary(lm_full)$adj.r.sq
+    , calc_mse(y = traindat$rv.amt, yhat = lm_full$fitted.values)
+    , calc_mse(y = holdoutdat$rv.amt, yhat = predict(lm_full, newdata = holdoutdat))
+  )
+  , lm_trimmed = c(
+    summary(lm_trimmed)$adj.r.sq
+    , calc_mse(y = traindat$rv.amt, yhat = lm_trimmed$fitted.values)
+    , calc_mse(y = holdoutdat$rv.amt, yhat = predict(lm_trimmed, newdata = holdoutdat))
+  )
+)
+```
+```{r}
+print(lm_mses)
+```
+
 
 ### Linear regression with splines
 
+Trimmed splines model, arbitrarily choosing `r dfs %>% I()` degrees of freedom.
 
+```{r}
+lm_splines <- lm(
+  rv.amt ~
+    COMMITTEE_KSM_LDR +
+    ns(CRU_PFY1, df = dfs) +
+    ns(CRU_PFY2, df = dfs) +
+    ns(CRU_PFY3, df = dfs) +
+    ns(CRU_PFY4, df = dfs) +
+    ns(CRU_PFY5, df = dfs) +
+    ns(EVALUATION_LOWER_BOUND, df = dfs) +
+    GIFT_CLUB_NU_LDR_YRS +
+    ns(GIFTS_ALLOCS_SUPPORTED, df = dfs) +
+    ns(GIFTS_OUTRIGHTS_PAYMENTS, df = dfs) +
+    ns(GIVING_CRU_TOTAL, df = dfs) +
+    ns(GIVING_MAX_CASH_YR, df = dfs) +
+    ns(GIVING_MAX_PLEDGE_AMT, df = dfs) +
+    ns(GIVING_MAX_PLEDGE_FY, df = dfs) +
+    HOUSEHOLD_CONTINENT +
+    KSM_GOS_FLAG +
+    LOYAL_5_PCT_ANY +
+    ns(NGC_PFY1, df = dfs) +
+    ns(NGC_PFY2, df = dfs) +
+    ns(NGC_PFY3, df = dfs) +
+    ns(NGC_PFY4, df = dfs) +
+    ns(NGC_PFY5, df = dfs) +
+    PREF_ADDR_TYPE_CODE +
+    PROGRAM_GROUP +
+    ns(RECORD_YR, df = dfs) +
+    ns(UOR_LOWER_BOUND, df = dfs) +
+    UPGRADE3_CASH +
+    ns(VELOCITY3_LIN_NGC, df = dfs) +
+    ns(VISITS_5FY, df = dfs)
+  , data = traindat
+)
+summary(lm_splines)
+```
+
+```{r}
+lm_mses <- cbind(
+  lm_mses
+  , lm_splines = c(
+    summary(lm_splines)$adj.r.sq
+    , calc_mse(y = traindat$rv.amt, yhat = lm_splines$fitted.values)
+    , calc_mse(y = holdoutdat$rv.amt, yhat = predict(lm_splines, newdata = holdoutdat))
+  )
+)
+```
+```{r}
+print(lm_mses)
+```
+
+
+Splines greatly improve the fit, though the degrees of freedom clearly need to be tweaked.
 
 ### Ridge regression
 
+First consider a ridge regression with all variables, including splines on the numeric ones.
+
+```{r, cache = TRUE}
+# alpha = 0 is the ridge regression penalty
+lm_ridge <- cv.glmnet(
+  rv.amt ~ .
+  , data = traindat
+  , alpha = 0
+  , lambda = 2^(-8:5)
+)
+```
+```{r}
+plot(lm_ridge)
+```
+
+```{r}
+lm_mses <- cbind(
+  lm_mses
+  , lm_ridge = c(
+    NA
+    , calc_mse(y = traindat$rv.amt, yhat = predict(lm_ridge, s = 'lambda.1se', newdata = traindat))
+    , calc_mse(y = holdoutdat$rv.amt, yhat = predict(lm_ridge, s = 'lambda.1se', newdata = holdoutdat))
+  )
+)
+```
+```{r}
+print(lm_mses)
+```
+
+### Trimmed ridge regression
+
+Next, consider a ridge regression starting with just the trimmed set of variables.
+
+```{r, cache = TRUE}
+# alpha = 0 is the ridge regression penalty
+lm_ridge_trimmed <- cv.glmnet(
+  rv.amt ~
+    COMMITTEE_KSM_LDR +
+    ns(CRU_PFY1, df = 4) +
+    ns(CRU_PFY2, df = 4) +
+    ns(CRU_PFY3, df = 4) +
+    ns(CRU_PFY4, df = 4) +
+    ns(CRU_PFY5, df = 4) +
+    ns(EVALUATION_LOWER_BOUND, df = 4) +
+    GIFT_CLUB_NU_LDR_YRS +
+    ns(GIFTS_ALLOCS_SUPPORTED, df = 4) +
+    ns(GIFTS_OUTRIGHTS_PAYMENTS, df = 4) +
+    ns(GIVING_CRU_TOTAL, df = 4) +
+    ns(GIVING_MAX_CASH_YR, df = 4) +
+    ns(GIVING_MAX_PLEDGE_AMT, df = 4) +
+    ns(GIVING_MAX_PLEDGE_FY, df = 4) +
+    HOUSEHOLD_CONTINENT +
+    KSM_GOS_FLAG +
+    LOYAL_5_PCT_ANY +
+    ns(NGC_PFY1, df = 4) +
+    ns(NGC_PFY2, df = 4) +
+    ns(NGC_PFY3, df = 4) +
+    ns(NGC_PFY4, df = 4) +
+    ns(NGC_PFY5, df = 4) +
+    PREF_ADDR_TYPE_CODE +
+    PROGRAM_GROUP +
+    ns(RECORD_YR, df = 4) +
+    ns(UOR_LOWER_BOUND, df = 4) +
+    UPGRADE3_CASH +
+    ns(VELOCITY3_LIN_NGC, df = 4) +
+    ns(VISITS_5FY, df = 4)
+  , data = traindat
+  , alpha = 0
+  , lambda = 2^(-8:5)
+)
+```
+```{r}
+plot(lm_ridge_trimmed)
+```
+
+```{r}
+lm_mses <- cbind(
+  lm_mses
+  , lm_ridge_trimmed = c(
+    NA
+    , calc_mse(y = traindat$rv.amt, yhat = predict(lm_ridge_trimmed, s = 'lambda.1se', newdata = traindat))
+    , calc_mse(y = holdoutdat$rv.amt, yhat = predict(lm_ridge_trimmed, s = 'lambda.1se', newdata = holdoutdat))
+  )
+)
+```
+```{r}
+print(lm_mses)
+```
+
+Taking variables out of the ridge regression model hurts performance.
+
+### Ridge regression with splines
+
+Consider a full ridge regression model with splines on the numeric variables.
+
+```{r}
+lm_ridge_spline <- cv.glmnet(
+  rv.amt ~
+    HOUSEHOLD_RECORD +
+    PROGRAM_GROUP +
+    PREF_ADDR_TYPE_CODE +
+    HOUSEHOLD_CONTINENT +
+    ns(GIVING_FIRST_YEAR, df = 4) +
+    ns(GIVING_FIRST_YEAR_CASH_AMT, df = 4) +
+    ns(GIVING_FIRST_YEAR_PLEDGE_AMT, df = 4) +
+    ns(GIVING_MAX_CASH_AMT, df = 4) +
+    ns(GIVING_MAX_PLEDGE_FY, df = 4) +
+    ns(GIVING_MAX_PLEDGE_AMT, df = 4) +
+    ns(GIVING_CASH_TOTAL, df = 4) +
+    ns(GIVING_NGC_TOTAL, df = 4) +
+    ns(GIVING_CRU_TOTAL, df = 4) +
+    ns(GIFTS_ALLOCS_SUPPORTED, df = 4) +
+    ns(GIFTS_FYS_SUPPORTED, df = 4) +
+    ns(GIFTS_OUTRIGHTS_PAYMENTS, df = 4) +
+    ns(DAF_GIFTS_AMT, df = 4) +
+    ns(CASH_PFY1, df = 4) +
+    ns(CASH_PFY2, df = 4) +
+    ns(CASH_PFY3, df = 4) +
+    ns(CASH_PFY4, df = 4) +
+    ns(CASH_PFY5, df = 4) +
+    ns(NGC_PFY1, df = 4) +
+    ns(NGC_PFY2, df = 4) +
+    ns(NGC_PFY3, df = 4) +
+    ns(NGC_PFY4, df = 4) +
+    ns(NGC_PFY5, df = 4) +
+    ns(CRU_PFY1, df = 4) +
+    ns(CRU_PFY2, df = 4) +
+    ns(CRU_PFY3, df = 4) +
+    ns(CRU_PFY4, df = 4) +
+    ns(CRU_PFY5, df = 4) +
+    CRU_GIVING_SEGMENT +
+    ns(GIFT_CLUB_KLC_YRS, df = 4) +
+    GIFT_CLUB_BEQUEST_YRS +
+    ns(GIFT_CLUB_LOYAL_YRS, df = 4) +
+    GIFT_CLUB_NU_LDR_YRS +
+    ns(GIFT_CLUBS_CFY, df = 4) +
+    ns(GIFT_CLUBS_PFY1, df = 4) +
+    ns(GIFT_CLUBS_PFY2, df = 4) +
+    ns(GIFT_CLUBS_PFY3, df = 4) +
+    ns(GIFT_CLUBS_PFY4, df = 4) +
+    ns(EVALUATION_LOWER_BOUND, df = 4) +
+    ns(UOR_LOWER_BOUND, df = 4) +
+    KSM_GOS_FLAG +
+    ns(MONTHS_ASSIGNED, df = 4) +
+    ns(PAST_GO_MONTHS_ASSIGNED, df = 4) +
+    ns(PAST_GO_MONTHS_SINCE_ASSIGNED, df = 4) +
+    ns(COMMITTEE_NU_DISTINCT, df = 4) +
+    ns(COMMITTEE_NU_YEARS, df = 4) +
+    ns(COMMITTEE_KSM_LDR, df = 4) +
+    ns(EVENTS_ATTENDED, df = 4) +
+    ns(EVENTS_YRS, df = 4) +
+    ns(EVENTS_PREV_3_FY, df = 4) +
+    ns(KSM_EVENTS_ATTENDED, df = 4) +
+    ns(RECORD_YR, df = 4) +
+    ns(GIVING_MAX_CASH_YR, df = 4) +
+    GIVING_MAX_CASH_MO +
+    ns(GIVING_MAX_PLEDGE_YR, df = 4) +
+    KSM_PROSPECT +
+    HOUSEHOLD_REGION +
+    ns(VISITS_5FY, df = 4) +
+    ns(LOYAL_5_PCT_CASH, df = 4) +
+    ns(LOYAL_5_PCT_ANY, df = 4) +
+    UPGRADE3_CASH +
+    ns(VELOCITY3_LIN_NGC, df = 4) +
+    ns(GAVE_10K, df = 4) +
+    SPOUSE_ALUM
+  , data = traindat
+  , alpha = 0
+  , lambda = 2^(-8:5)
+)
+```
 
 
 ### LASSO
 
+LASSO can be interpreted as automatically performing variable selection, so only one model needs to be fitted.
+
+```{r}
+
+```
 
 
 ### Comparison
