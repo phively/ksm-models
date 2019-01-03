@@ -265,7 +265,7 @@ for (rep in 1:reps) {
         , data = traindat[-xv[[fold]], ] %>% select(-HOUSEHOLD_ID)
         , family = 'binomial'
         , alpha = 0
-        , lambda = 2^(-8:5)
+        #, lambda = 2^(-8:5)
       )
     # Prediction threshold
     theta1 <- sum(traindat$rv.gave[-xv[[fold]]] == 1) / nrow(traindat[-xv[[fold]], ])
@@ -898,8 +898,9 @@ The modeling data file is a slightly trimmed version of modeling.data.
 
 ```{r}
 # Data file with variables removed
+# !diagnostics off
 lmdat <- modeling.data %>%
-  filter(rv.gave) %>%
+  filter(rv.gave == TRUE) %>%
   select(rv.amt, recommended_vars_lm) %>%
   select(
     -GIVING_AF_TOTAL
@@ -1120,7 +1121,7 @@ summary(lm_trimmed)
 ```
 
 ```{r}
-lm_mses <- data.frame(statistic = c('adj.r.sq', 'mse', 'mse.outsample'))
+lm_mses <- data.frame(statistic = c('adj.r.sq', 'mse.in', 'mse.out'))
 lm_mses <- cbind(
   lm_mses
   , lm_full = c(
@@ -1195,7 +1196,6 @@ lm_mses <- cbind(
 print(lm_mses)
 ```
 
-
 Splines greatly improve the fit, though the degrees of freedom clearly need to be tweaked.
 
 ### Ridge regression
@@ -1208,7 +1208,6 @@ lm_ridge <- cv.glmnet(
   rv.amt ~ .
   , data = traindat
   , alpha = 0
-  , lambda = 2^(-8:5)
 )
 ```
 ```{r}
@@ -1268,7 +1267,6 @@ lm_ridge_trimmed <- cv.glmnet(
     ns(VISITS_5FY, df = 4)
   , data = traindat
   , alpha = 0
-  , lambda = 2^(-8:5)
 )
 ```
 ```{r}
@@ -1360,30 +1358,296 @@ lm_ridge_spline <- cv.glmnet(
     KSM_PROSPECT +
     HOUSEHOLD_REGION +
     ns(VISITS_5FY, df = 4) +
-    ns(LOYAL_5_PCT_CASH, df = 4) +
-    ns(LOYAL_5_PCT_ANY, df = 4) +
+    ns(LOYAL_5_PCT_CASH, df = 2) +
+    ns(LOYAL_5_PCT_ANY, df = 2) +
     UPGRADE3_CASH +
     ns(VELOCITY3_LIN_NGC, df = 4) +
     ns(GAVE_10K, df = 4) +
     SPOUSE_ALUM
   , data = traindat
   , alpha = 0
-  , lambda = 2^(-8:5)
 )
 ```
+```{r}
+plot(lm_ridge_spline)
+```
 
+```{r}
+lm_mses <- cbind(
+  lm_mses
+  , lm_ridge_spline = c(
+    NA
+    , calc_mse(y = traindat$rv.amt, yhat = predict(lm_ridge_spline, s = 'lambda.1se', newdata = traindat))
+    , calc_mse(y = holdoutdat$rv.amt, yhat = predict(lm_ridge_spline, s = 'lambda.1se', newdata = holdoutdat))
+  )
+)
+```
+```{r}
+print(lm_mses)
+```
 
 ### LASSO
 
 LASSO can be interpreted as automatically performing variable selection, so only one model needs to be fitted.
 
 ```{r}
-
+lm_lasso_spline <- cv.glmnet(
+  rv.amt ~
+    HOUSEHOLD_RECORD +
+    PROGRAM_GROUP +
+    PREF_ADDR_TYPE_CODE +
+    HOUSEHOLD_CONTINENT +
+    ns(GIVING_FIRST_YEAR, df = 4) +
+    ns(GIVING_FIRST_YEAR_CASH_AMT, df = 4) +
+    ns(GIVING_FIRST_YEAR_PLEDGE_AMT, df = 4) +
+    ns(GIVING_MAX_CASH_AMT, df = 4) +
+    ns(GIVING_MAX_PLEDGE_FY, df = 4) +
+    ns(GIVING_MAX_PLEDGE_AMT, df = 4) +
+    ns(GIVING_CASH_TOTAL, df = 4) +
+    ns(GIVING_NGC_TOTAL, df = 4) +
+    ns(GIVING_CRU_TOTAL, df = 4) +
+    ns(GIFTS_ALLOCS_SUPPORTED, df = 4) +
+    ns(GIFTS_FYS_SUPPORTED, df = 4) +
+    ns(GIFTS_OUTRIGHTS_PAYMENTS, df = 4) +
+    ns(DAF_GIFTS_AMT, df = 4) +
+    ns(CASH_PFY1, df = 4) +
+    ns(CASH_PFY2, df = 4) +
+    ns(CASH_PFY3, df = 4) +
+    ns(CASH_PFY4, df = 4) +
+    ns(CASH_PFY5, df = 4) +
+    ns(NGC_PFY1, df = 4) +
+    ns(NGC_PFY2, df = 4) +
+    ns(NGC_PFY3, df = 4) +
+    ns(NGC_PFY4, df = 4) +
+    ns(NGC_PFY5, df = 4) +
+    ns(CRU_PFY1, df = 4) +
+    ns(CRU_PFY2, df = 4) +
+    ns(CRU_PFY3, df = 4) +
+    ns(CRU_PFY4, df = 4) +
+    ns(CRU_PFY5, df = 4) +
+    CRU_GIVING_SEGMENT +
+    ns(GIFT_CLUB_KLC_YRS, df = 4) +
+    GIFT_CLUB_BEQUEST_YRS +
+    ns(GIFT_CLUB_LOYAL_YRS, df = 4) +
+    GIFT_CLUB_NU_LDR_YRS +
+    ns(GIFT_CLUBS_CFY, df = 4) +
+    ns(GIFT_CLUBS_PFY1, df = 4) +
+    ns(GIFT_CLUBS_PFY2, df = 4) +
+    ns(GIFT_CLUBS_PFY3, df = 4) +
+    ns(GIFT_CLUBS_PFY4, df = 4) +
+    ns(EVALUATION_LOWER_BOUND, df = 4) +
+    ns(UOR_LOWER_BOUND, df = 4) +
+    KSM_GOS_FLAG +
+    ns(MONTHS_ASSIGNED, df = 4) +
+    ns(PAST_GO_MONTHS_ASSIGNED, df = 4) +
+    ns(PAST_GO_MONTHS_SINCE_ASSIGNED, df = 4) +
+    ns(COMMITTEE_NU_DISTINCT, df = 4) +
+    ns(COMMITTEE_NU_YEARS, df = 4) +
+    ns(COMMITTEE_KSM_LDR, df = 4) +
+    ns(EVENTS_ATTENDED, df = 4) +
+    ns(EVENTS_YRS, df = 4) +
+    ns(EVENTS_PREV_3_FY, df = 4) +
+    ns(KSM_EVENTS_ATTENDED, df = 4) +
+    ns(RECORD_YR, df = 4) +
+    ns(GIVING_MAX_CASH_YR, df = 4) +
+    GIVING_MAX_CASH_MO +
+    ns(GIVING_MAX_PLEDGE_YR, df = 4) +
+    KSM_PROSPECT +
+    HOUSEHOLD_REGION +
+    ns(VISITS_5FY, df = 4) +
+    ns(LOYAL_5_PCT_CASH, df = 2) +
+    ns(LOYAL_5_PCT_ANY, df = 2) +
+    UPGRADE3_CASH +
+    ns(VELOCITY3_LIN_NGC, df = 4) +
+    ns(GAVE_10K, df = 4) +
+    SPOUSE_ALUM
+  , data = traindat
+  , alpha = 1 # 1 is the lasso penalizer
+)
+```
+```{r}
+plot(lm_lasso_spline)
 ```
 
+```{r}
+lm_mses <- cbind(
+  lm_mses
+  , lm_lasso_spline = c(
+    NA
+    , calc_mse(y = traindat$rv.amt, yhat = predict(lm_lasso_spline, s = 'lambda.1se', newdata = traindat))
+    , calc_mse(y = holdoutdat$rv.amt, yhat = predict(lm_lasso_spline, s = 'lambda.1se', newdata = holdoutdat))
+  )
+)
+```
 
 ### Comparison
 
+Consider the out-of-sample performance of each method.
 
+```{r}
+lm_mses %>% mutate_if(is.numeric, round, 3) %>% print()
+```
+
+The lasso is outperformed by ridge regression, but the linear model with splines has comparable performance and is more interpretable.
 
 # Conclusions
+
+Looking at unoptimized models, basic logistic regression and linear regression with splines actually perform similarly to more complex penalized models, so I'd prefer to use them.
+
+I initially proposed the following model:
+
+$$ E \left( \text{giving, donor | covariates} \right) = E \left(\text{giving | donor, covariates} \right) P \left(\text{donor | covariates} \right) $$
+
+If actual future giving is $Y$ and the prediction is $\hat{Y}$ then define overall prediction error as:
+
+$$ e = Y_t - \hat{Y_t} = Y_t - E(\text{giving} | \text{gave}, X_t)P(\text{gave}|X_t) $$
+
+```{r}
+glm_dat <- modeling.data %>% mutate(
+  YEARS_SINCE_FIRST_GIFT = 2016 - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, 2017)
+  , YEARS_SINCE_ATHLETICS_TICKETS = 2016 - ifelse(ATHLETICS_TICKET_LAST > 0, ATHLETICS_TICKET_LAST, 2017)
+  , YEARS_SINCE_MAX_CASH_YR = 2016 - ifelse(GIVING_MAX_CASH_YR > 0, GIVING_MAX_CASH_YR, 2017)
+)
+lm_dat <- modeling.data %>% mutate(
+  # Create spouse flag
+  SPOUSE_ALUM = ifelse(SPOUSE_FIRST_KSM_YEAR > 0, 'TRUE', 'FALSE') %>% factor()
+  # Lump together little-used continents
+  , HOUSEHOLD_CONTINENT = fct_lump(HOUSEHOLD_CONTINENT, prop = .02)
+  # Lump together little-used regions
+  , HOUSEHOLD_REGION = fct_collapse(
+      HOUSEHOLD_REGION
+      , 'NB' = 'INTL'
+  )
+) %>% mutate_if(
+    # Numeric variables over 1E4 get a log10 transformation
+    function(x) {
+      ifelse(is.numeric(x), max(x) >= 1E4, FALSE)
+    }
+    , log10plus1
+)
+error_compare <- data.frame(
+  giving = modeling.data$rv.amt
+  , log.giving = log10plus1(modeling.data$rv.amt)
+  , gave = modeling.data$rv.gave
+  , est.giving = predict(lm_splines, newdata = lm_dat, type = 'response')
+  , est.gave = predict(glm_st_splines, newdata = glmdat, type = 'response')
+) %>% mutate(
+  ev = est.giving * est.gave
+  , error = log.giving - ev
+  , log.giving.bin = trunc(log.giving)
+  , pred.giving.bin = trunc(est.giving)
+  , ev.bin = trunc(ev)
+)
+```
+
+```{r}
+error_compare %>%
+  ggplot(aes(x = log.giving, y = est.giving, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'estimated versus actual giving')
+```
+```{r}
+paste('mse =', calc_mse(y = error_compare$log.giving, yhat = error_compare$est.giving))
+```
+
+```{r}
+error_compare %>%
+  ggplot(aes(x = log.giving, y = ev, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'expected value versus actual giving')
+```
+```{r}
+paste('mse =', calc_mse(y = error_compare$log.giving, yhat = error_compare$ev))
+```
+
+Note that training the predicted giving amounts model with donors only leads to a hugely inflated MSE when predicting giving amounts of people who turned out to be nondonors. Multiplying by the estimated probability of making a gift brings the MSE down to something reasonable as hoped.
+
+This is a little hard to read. Here's what the predicted versus actual amounts look like when binned.
+
+```{r}
+error_bin <- error_compare %>%
+  group_by(log.giving.bin, pred.giving.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+mingift <- -1
+maxgift <- 8
+error_bin %>%
+  ggplot(aes(x = log.giving.bin, y = pred.giving.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'Predicted giving')
+```
+
+A few takeaways for the giving amount model:
+
+  * Total giving during the out-of-sample time period was `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`
+  * Those predicted to give at least `r tmpcutoff <- 3; scales::dollar(10^tmpcutoff) %>% I()` gave `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * A total of `r tmpd <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% nrow(); tmpd %>% I()` donors were predicted to give at the `r scales::dollar(10^tmpcutoff) %>% I()` level and `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & log.giving.bin >= tmpcutoff) %>% nrow(); tmpn %>% I()` actually did, for a hit rate of `r (tmpn/tmpd) %>% scales::percent() %>% I()`.
+  * Average giving in this group is `r ({error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum()}/tmpd) %>% scales::dollar() %>% I()` per person.
+  * This method elimintates `r tmpd <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
+
+Here are the expected values when binned.
+
+```{r}
+ev_bin <- error_compare %>%
+  group_by(log.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+mingift <- -1
+maxgift <- 8
+ev_bin %>%
+  ggplot(aes(x = log.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'Expected value')
+```
+
+Takeaways for the expected value ranking model:
+
+  * Total giving during the out-of-sample time period was again `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`
+  * Entities with a score of `r tmpc2 <- 1; tmpc2 %>% I()` or higher (`r error_compare %>% filter(ev.bin >= tmpc2) %>% nrow()` total) gave `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * Average giving in this group is `r ({error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum()}/{error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% nrow()}) %>% scales::dollar() %>% I()` per person.
+  * This method elimintates `r tmpd <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
+
+Finally, let's look at expected value versus predicted giving.
+
+```{r}
+both_bin <- error_compare %>%
+  group_by(pred.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+mingift <- -1
+maxgift <- 8
+both_bin %>%
+  ggplot(aes(x = pred.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Predicted giving', y = 'Expected value')
+```
+
+  * Of the `r tmpsubset <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & ev.bin < tmpc2); tmpsubset %>% nrow()` individuals with a relatively high predicted giving amount (`r scales::dollar(10^tmpcutoff)`) but a 0 expected value score, only `r tmpn <- tmpsubset %>% filter(giving > 0) %>% nrow(); tmpn` were actually donors (`r (tmpn/nrow(tmpsubset)) %>% scales::percent()`), giving a total of `r tmpsubset %>% filter(giving > 0) %>% select(giving) %>% sum() %>% scales::dollar()`.
+
+We could come up with some rules of thumb, for instance anyone with predicted giving over `r scales::dollar(10^{tmpcutoff + 1})` is worth looking at, but otherwise filter out those with an EV score below `r tmpc2`.
