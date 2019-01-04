@@ -1,0 +1,41 @@
+---
+title: "05 KSM model tuning"
+output:
+  html_notebook:
+    code_folding: hide
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+Construct a final two-stage model based previous work, computing:
+
+$$ E \left( \text{giving, donor | covariates} \right) = E \left(\text{giving | donor, covariates} \right) P \left(\text{donor | covariates} \right) $$
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(reshape2)
+library(gridExtra)
+library(splines)
+library(lubridate)
+library(wranglR)
+library(Boruta)
+library(foreach)
+library(doParallel)
+library(glmnet)
+library(glmnetUtils)
+
+# Functions adapted from previous analysis steps
+source('code/functions.R')
+
+# Visualization functions adapted fron previous analysis steps
+source('code/functions_viz.R')
+
+# Set number of available CPU cores
+registerDoParallel(detectCores() - 1)
+```
+
