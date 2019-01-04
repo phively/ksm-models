@@ -10,7 +10,7 @@ output:
 
 # Goal
 
-Construct a final two-stage model based previous work, computing:
+Construct a final two-stage model based on my previous work, computing:
 
 $$ E \left( \text{giving, donor | covariates} \right) = E \left(\text{giving | donor, covariates} \right) P \left(\text{donor | covariates} \right) $$
 
