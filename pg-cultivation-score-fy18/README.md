@@ -9,4 +9,5 @@ HTML rendering:
   * [03 Data validation and export](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/03%20Data%20validation%20and%20export.nb.html)
   * [04 KSM campaign model](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/04%20KSM%20campaign%20model.nb.html)
   * [05 KSM predictive model](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/05%20KSM%20predictive%20model.nb.html)
+  * [05b GAM experimentation](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/05b%20GAM%20experimentation.nb.html)
   * [06 KSM model tuning](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/06%20KSM%20model%20tuning.nb.html)

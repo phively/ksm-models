@@ -304,3 +304,48 @@ generate_pit_data <- function(filepath, sheetname) {
   return(mdata)
   
 }
+
+generate_additional_predictors <- function(dataframe) {
+  dataframe %>%
+  mutate(
+    # Create response variables
+    rv.amt = NGC_TARGET_FY2 + NGC_TARGET_FY1
+    , rv.gave = rv.amt > 0
+  ) %>% select(
+    # Drop future data
+    -NGC_TARGET_FY2
+    , -NGC_TARGET_FY1
+    , -CASH_TARGET_FY2
+    , -CASH_TARGET_FY1
+    , -PLEDGE_TARGET_FY2
+    , -PLEDGE_TARGET_FY1
+    , -AF_TARGET_FY2
+    , -AF_TARGET_FY1
+    , -CRU_TARGET_FY2
+    , -CRU_TARGET_FY1
+  ) %>% filter(
+    # Drop entities whose RECORD_YR is after the training year
+    RECORD_YR <= train_fy
+  ) %>%
+    mutate(
+      # Create spouse flag
+      SPOUSE_ALUM = ifelse(SPOUSE_FIRST_KSM_YEAR > 0, 'TRUE', 'FALSE') %>% factor()
+      # Lump together little-used continents
+      , HOUSEHOLD_CONTINENT = fct_lump(HOUSEHOLD_CONTINENT, prop = .02)
+      # Lump together little-used regions
+      , HOUSEHOLD_REGION = fct_collapse(
+        HOUSEHOLD_REGION
+        , 'NB' = 'INTL'
+      )
+    ) %>% mutate_if(
+      # Numeric variables over 1E4 get a log10 transformation
+      function(x) {
+        ifelse(is.numeric(x), max(x) >= 1E4, FALSE)
+      }
+      , log10plus1
+    ) %>% mutate(
+      YEARS_SINCE_FIRST_GIFT = 2016 - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, 2017)
+      , YEARS_SINCE_ATHLETICS_TICKETS = 2016 - ifelse(ATHLETICS_TICKET_LAST > 0, ATHLETICS_TICKET_LAST, 2017)
+      , YEARS_SINCE_MAX_CASH_YR = 2016 - ifelse(GIVING_MAX_CASH_YR > 0, GIVING_MAX_CASH_YR, 2017)
+    )
+}
