@@ -230,6 +230,62 @@ data.frame(
 mingift <- -1
 maxgift <- 8
 a <- preds %>% 
+  ggplot(aes(x = giving, y = gam)) +
+  geom_point(color = 'gray', alpha = .5) +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5))
+b <- preds %>% 
+  ggplot(aes(x = giving, y = lm)) +
+  geom_point(color = 'gray', alpha = .5) +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5))
+c <- preds %>%
+  mutate(split = lm_part * glm) %>%
+  ggplot(aes(x = giving, y = split)) +
+  geom_point(color = 'gray', alpha = .5) +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5))
+d <- preds %>%
+  mutate(dgam = gam_part * gamp) %>%
+  ggplot(aes(x = giving, y = dgam)) +
+  geom_point(color = 'gray', alpha = .5) +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5))
+```
+```{r, fig.width = 10, fig.height = 10}
+grid.arrange(a, b, c, d)
+```
+
+```{r}
+a <- preds %>% 
   group_by(giving_bin, gam_bin) %>%
   summarise(n = length(giving), g = sum(giving)) %>%
     ggplot(aes(x = giving_bin, y = gam_bin, fill = n)) +
