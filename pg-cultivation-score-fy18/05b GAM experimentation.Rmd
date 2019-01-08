@@ -1,11 +1,14 @@
 ---
 title: "05b GAM experimentation"
 output:
+  html_document:
+    df_print: paged
+    toc: yes
   html_notebook:
     code_folding: hide
-    toc: TRUE
+    toc: yes
     toc_float:
-      collapsed: FALSE
+      collapsed: no
 ---
 
 # Goal
@@ -180,6 +183,7 @@ game <- train %>% filter(rv.gave) %>%
     s(VISITS_5FY)
   , data = .
   , family = 'gaussian'
+  , control = list(nthreads = 10)
 )
 ```
 
@@ -207,7 +211,7 @@ preds <- data.frame(
   , gam_part_bin = trunc(gam_part)
   , lm_part_bin = trunc(lm_part)
   , split_bin = trunc(lm_part * glm)
-  , double_gam_bin = trunc(gam_part * gamp)
+  , dbl_gam_bin = trunc(gam_part * gamp)
 )
 ```
 ```{r}
@@ -218,7 +222,7 @@ data.frame(
   , lm_part = calc_mse(y = test$rv.amt, yhat = preds$lm_part)
   , split_model = calc_mse(y = test$rv.amt, yhat = preds$glm * preds$lm_part)
   , split_gam = calc_mse(y = test$rv.amt, yhat = preds$gam_part * preds$glm)
-  , double_gam = calc_mse(y = test$rv.amt, yhat = preds$gam_part * preds$gamp)
+  , dbl_gam = calc_mse(y = test$rv.amt, yhat = preds$gam_part * preds$gamp)
 )
 ```
 
@@ -268,9 +272,9 @@ c <- preds %>%
   coord_equal() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5))
 d <- preds %>% 
-  group_by(giving_bin, double_gam_bin) %>%
+  group_by(giving_bin, dbl_gam_bin) %>%
   summarise(n = length(giving), g = sum(giving)) %>%
-    ggplot(aes(x = giving_bin, y = double_gam_bin, fill = n)) +
+    ggplot(aes(x = giving_bin, y = dbl_gam_bin, fill = n)) +
   geom_abline(color = 'purple', size = 2, alpha = .5) +
   geom_tile(alpha = .75) +
   geom_text(aes(label = n), color = 'white', size = 3) +
@@ -286,3 +290,4 @@ d <- preds %>%
 grid.arrange(a, b, c, d)
 ```
 
+Surprisingly to me, the lm and gam performance is very close.
