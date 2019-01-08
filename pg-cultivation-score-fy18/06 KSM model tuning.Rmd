@@ -98,19 +98,24 @@ for (rep in 1:reps) {
   errs_out <- foreach(
     giving = grid_params$giving
     , .combine = c
+    , .multicombine = TRUE
   ) %:% foreach(
     dollars = grid_params$dollars
     , .combine = c
+    , .multicombine = TRUE
   ) %:% foreach(
     engagement = grid_params$engagement
     , .combine = c
+    , .multicombine = TRUE
   ) %:% foreach(
     recordyr = grid_params$recordyr
     , .combine = c
+    , .multicombine = TRUE
   ) %:% foreach(
   # Inner loop (parallel cross-validation)
     fold = 1:length(xv)
-    , .combine = c
+    , .combine = list
+    , .multicombine = TRUE
     , .packages = c('dplyr', 'splines')
   ) %dopar% {
     # Fit temp model
@@ -194,5 +199,27 @@ for (rep in 1:reps) {
 }
 ```
 ```{r}
+for(i in 1:length(glm_timestamps)) {print(glm_timestamps[[i]])}
+```
+```{r, include = FALSE}
+# Code to create a nested list from an un-nested list
+# Not needed now that the code above uses .multicombine = TRUE
+# tmp <- list()
+# for (i in 1:1800) {
+# idx <- 3*i - 2
+#   tmp[[i]] = list(
+#     conf_matrix = glm_errs[[idx]]
+#     , conf_matrix_pct = glm_errs[[idx + 1]]
+#     , errors = glm_errs[[idx + 2]]
+#   )
+# }
+```
+```{r}
 save(glm_errs, glm_timestamps, file = 'data/06_glm_xval.Rdata')
 ```
+
+## Cross-validated errors
+
+Examine the errors for each combination of spline dfs.
+
+# Regression model
