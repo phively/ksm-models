@@ -26,6 +26,7 @@ library(wranglR)
 library(Boruta)
 library(foreach)
 library(doParallel)
+library(mgcv)
 # Functions adapted from previous analysis steps
 source('code/functions.R')
 # Visualization functions adapted fron previous analysis steps
@@ -222,4 +223,414 @@ save(glm_errs, glm_timestamps, file = 'data/06_glm_xval.Rdata')
 
 Examine the errors for each combination of spline dfs.
 
+```{r}
+glm_results <- foreach(i = ListExtract(glm_errs, 'errors'), .combine = rbind) %do% {i}
+glm_results <- glm_results %>% mutate(
+  reps = factor(reps)
+  , folds = factor(folds)
+  , giving = factor(giving)
+  , dollars = factor(dollars)
+  , engagement = factor(engagement)
+  , recordyr = factor(recordyr)
+  , splinedfs = paste0(giving, 'g ', dollars, 'd ', engagement, 'e ', recordyr, 'r')
+)
+```
+```{r}
+glm_results %>%
+  ggplot(aes(x = splinedfs, y = error)) +
+  geom_point(color = 'gray') +
+  geom_boxplot(alpha = .5) +
+  stat_summary(fun.y = mean, color = 'blue', geom = 'point', show.legend = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)) +
+  labs(x = 'spline dfs')
+```
+```{r}
+glm_results %>%
+  ggplot(aes(x = splinedfs, y = sensitivity)) +
+  geom_point(color = 'gray') +
+  geom_boxplot(alpha = .5) +
+  stat_summary(fun.y = mean, color = 'blue', geom = 'point', show.legend = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)) +
+  labs(x = 'spline dfs')
+```
+```{r}
+glm_results %>%
+  ggplot(aes(x = splinedfs, y = F1_score)) +
+  geom_point(color = 'gray') +
+  geom_boxplot(alpha = .5) +
+  stat_summary(fun.y = mean, color = 'blue', geom = 'point', show.legend = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)) +
+  labs(x = 'spline dfs')
+```
+
+Blue dots indicate means across all runs. There is honestly almost no difference between any of these models.
+
+```{r, rows.print = 100}
+glm_results %>%
+  group_by(giving, dollars, engagement, recordyr) %>%
+  summarise(mean_error = mean(error), mean_sensitivity = mean(sensitivity), mean_F1 = mean(F1_score)) %>%
+  arrange(desc(mean_sensitivity))
+```
+
+The 3-2-3-5 model appears to be reasonable.
+
+```{r}
+giving <- 3
+dollars <- 2
+engagement <- 3
+recordyr <- 5
+glm_final <- glm(
+  rv.gave ~
+  PROGRAM_GROUP +
+  PREF_ADDR_TYPE_CODE +
+  HOUSEHOLD_CONTINENT +
+  BUS_IS_EMPLOYED +
+  HAS_HOME_ADDR +
+  HAS_HOME_PHONE +
+  ns(YEARS_SINCE_FIRST_GIFT, df = giving) +
+  ns(GIVING_FIRST_YEAR_CASH_AMT, df = giving) +
+  ns(GIVING_MAX_PLEDGE_AMT, df = giving) +
+  ns(GIVING_CASH_TOTAL, df = giving) +
+  ns(GIVING_PLEDGE_TOTAL, df = giving) +
+  ns(GIVING_CRU_TOTAL, df = giving) +
+  ns(GIFTS_ALLOCS_SUPPORTED, df = giving) +
+  ns(GIFTS_FYS_SUPPORTED, df = giving) +
+  ns(GIFTS_CASH, df = giving) +
+  ns(GIFTS_PLEDGES, df = giving) +
+  ns(CASH_PFY1, df = dollars) +
+  ns(CASH_PFY2, df = dollars) +
+  ns(CASH_PFY3, df = dollars) +
+  ns(CASH_PFY4, df = dollars) +
+  ns(CASH_PFY5, df = dollars) +
+  CRU_GIVING_SEGMENT +
+  ns(EVALUATION_LOWER_BOUND, df = dollars) +
+  ns(UOR_LOWER_BOUND, df = dollars) +
+  ns(MONTHS_ASSIGNED, df = engagement) +
+  ns(COMMITTEE_NU_DISTINCT, df = engagement) +
+  ns(COMMITTEE_NU_YEARS, df = engagement) +
+  ns(COMMITTEE_KSM_DISTINCT, df = engagement) +
+  ns(EVENTS_PREV_3_FY, df = engagement) +
+  ns(EVENTS_CFY, df = engagement) +
+  ns(EVENTS_PFY1, df = engagement) +
+  ns(ATHLETICS_TICKET_YEARS, df = engagement) +
+  ns(YEARS_SINCE_ATHLETICS_TICKETS, df = engagement) +
+  ns(RECORD_YR, df = recordyr) +
+  ns(YEARS_SINCE_MAX_CASH_YR, df = giving) +
+  GIVING_MAX_CASH_MO +
+  KSM_PROSPECT +
+  ns(VISITORS_5FY, df = engagement) +
+  LOYAL_5_PCT_CASH +
+  UPGRADE3_CASH +
+  VELOCITY3_LIN_CASH +
+  SPOUSE_ALUM
+  , data = traindat
+  , family = 'binomial'
+)
+```
+```{r}
+summary(glm_final)
+```
+
+Whoops, there's collinearity. How does this compare to a generalized additive model with the corresponding degrees of freedom?
+
+```{r}
+gam_final <- gam(
+  rv.gave ~
+  PROGRAM_GROUP +
+  PREF_ADDR_TYPE_CODE +
+  HOUSEHOLD_CONTINENT +
+  BUS_IS_EMPLOYED +
+  HAS_HOME_ADDR +
+  HAS_HOME_PHONE +
+  s(YEARS_SINCE_FIRST_GIFT, k = giving) +
+  s(GIVING_FIRST_YEAR_CASH_AMT, k = giving) +
+  s(GIVING_MAX_PLEDGE_AMT, k = giving) +
+  s(GIVING_CASH_TOTAL, k = giving) +
+  s(GIVING_PLEDGE_TOTAL, k = giving) +
+  s(GIVING_CRU_TOTAL, k = giving) +
+  s(GIFTS_ALLOCS_SUPPORTED, k = giving) +
+  s(GIFTS_FYS_SUPPORTED, k = giving) +
+  s(GIFTS_CASH, k = giving) +
+  s(GIFTS_PLEDGES, k = giving) +
+  s(CASH_PFY1, k = dollars) +
+  s(CASH_PFY2, k = dollars) +
+  s(CASH_PFY3, k = dollars) +
+  s(CASH_PFY4, k = dollars) +
+  s(CASH_PFY5, k = dollars) +
+  CRU_GIVING_SEGMENT +
+  s(EVALUATION_LOWER_BOUND, k = dollars) +
+  s(UOR_LOWER_BOUND, k = dollars) +
+  s(MONTHS_ASSIGNED, k = engagement) +
+  s(COMMITTEE_NU_DISTINCT, k = engagement) +
+  s(COMMITTEE_NU_YEARS, k = engagement) +
+  s(COMMITTEE_KSM_DISTINCT, k = engagement) +
+  s(EVENTS_PREV_3_FY, k = engagement) +
+  s(EVENTS_CFY, k = engagement) +
+  s(EVENTS_PFY1, k = engagement) +
+  s(ATHLETICS_TICKET_YEARS, k = engagement) +
+  s(YEARS_SINCE_ATHLETICS_TICKETS, k = engagement) +
+  s(RECORD_YR, k = recordyr) +
+  s(YEARS_SINCE_MAX_CASH_YR, k = giving) +
+  GIVING_MAX_CASH_MO +
+  KSM_PROSPECT +
+  s(VISITORS_5FY, k = engagement) +
+  LOYAL_5_PCT_CASH +
+  UPGRADE3_CASH +
+  VELOCITY3_LIN_CASH +
+  SPOUSE_ALUM
+  , data = traindat
+  , family = 'binomial'
+  , control = list(nthreads = 10)
+)
+```
+```{r}
+summary(gam_final)
+```
+
+Comparing the model stats:
+
+```{r}
+# Prediction threshold
+theta1 <- sum(traindat$rv.gave) / nrow(traindat)
+# Confusion matrix based on the withheld data
+glm_stats <- conf_matrix(glm_final, newdata = holdoutdat, rv = 'rv.gave', threshold = theta1)
+glm_stats5 <- conf_matrix(glm_final, newdata = holdoutdat, rv = 'rv.gave', threshold = .5)
+gam_stats <- conf_matrix(gam_final, newdata = holdoutdat, rv = 'rv.gave', threshold = theta1)
+gam_stats5 <- conf_matrix(gam_final, newdata = holdoutdat, rv = 'rv.gave', threshold = .5)
+# Output
+data.frame(
+  model = c('glm', 'glm .5', 'gam', 'gam .5')
+  , error = c(glm_stats$error, glm_stats5$error, gam_stats$error, gam_stats5$error)
+  , sensitivity = c(glm_stats$sensitivity, glm_stats5$sensitivity, gam_stats$sensitivity, gam_stats5$sensitivity)
+  , F1 = c(glm_stats$F1_score, glm_stats5$F1_score, gam_stats$F1_score, gam_stats5$F1_score)
+)
+```
+
+On the out-of-sample holdout data, the GAM performs slightly better, though again the difference is minuscule.
+
+```{r}
+gam_trained <- gam(
+  rv.gave ~
+  PROGRAM_GROUP +
+  PREF_ADDR_TYPE_CODE +
+  HOUSEHOLD_CONTINENT +
+  BUS_IS_EMPLOYED +
+  HAS_HOME_ADDR +
+  HAS_HOME_PHONE +
+  s(YEARS_SINCE_FIRST_GIFT, k = giving) +
+  s(GIVING_FIRST_YEAR_CASH_AMT, k = giving) +
+  s(GIVING_MAX_PLEDGE_AMT, k = giving) +
+  s(GIVING_CASH_TOTAL, k = giving) +
+  s(GIVING_PLEDGE_TOTAL, k = giving) +
+  s(GIVING_CRU_TOTAL, k = giving) +
+  s(GIFTS_ALLOCS_SUPPORTED, k = giving) +
+  s(GIFTS_FYS_SUPPORTED, k = giving) +
+  s(GIFTS_CASH, k = giving) +
+  s(GIFTS_PLEDGES, k = giving) +
+  s(CASH_PFY1, k = dollars) +
+  s(CASH_PFY2, k = dollars) +
+  s(CASH_PFY3, k = dollars) +
+  s(CASH_PFY4, k = dollars) +
+  s(CASH_PFY5, k = dollars) +
+  CRU_GIVING_SEGMENT +
+  s(EVALUATION_LOWER_BOUND, k = dollars) +
+  s(UOR_LOWER_BOUND, k = dollars) +
+  s(MONTHS_ASSIGNED, k = engagement) +
+  s(COMMITTEE_NU_DISTINCT, k = engagement) +
+  s(COMMITTEE_NU_YEARS, k = engagement) +
+  s(COMMITTEE_KSM_DISTINCT, k = engagement) +
+  s(EVENTS_PREV_3_FY, k = engagement) +
+  s(EVENTS_CFY, k = engagement) +
+  s(EVENTS_PFY1, k = engagement) +
+  s(ATHLETICS_TICKET_YEARS, k = engagement) +
+  s(YEARS_SINCE_ATHLETICS_TICKETS, k = engagement) +
+  s(RECORD_YR, k = recordyr) +
+  s(YEARS_SINCE_MAX_CASH_YR, k = giving) +
+  GIVING_MAX_CASH_MO +
+  KSM_PROSPECT +
+  s(VISITORS_5FY, k = engagement) +
+  LOYAL_5_PCT_CASH +
+  UPGRADE3_CASH +
+  VELOCITY3_LIN_CASH +
+  SPOUSE_ALUM
+  , data = modeling.data
+  , family = 'binomial'
+  , control = list(nthreads = 10)
+)
+```
+```{r}
+# Save output
+save(gam_trained, file = 'data/06_gam_trained.Rdata')
+```
+
 # Regression model
+
+The same grid search parameters will be used as in the previous step:
+
+```{r}
+remove(dollars, engagement, giving, recordyr)
+print(grid_params)
+```
+
+```{r}
+# Store timings
+lm_timestamps <- list()
+# Store model errors
+lm_errs <- list()
+# Seed for reproducibility
+set.seed(4822677)
+
+# Outer loop (repetitions)
+for (rep in 1:reps) {
+  # Status report 
+  timestamp <- paste('+ Iteration', rep, 'beginning at:', Sys.time())
+  print(timestamp)
+  lm_timestamps <- c(lm_timestamps, timestamp)
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  # Middle loop (grid search)
+  errs_out <- foreach(
+    giving = grid_params$giving
+    , .combine = c
+    , .multicombine = TRUE
+  ) %:% foreach(
+    dollars = grid_params$dollars
+    , .combine = c
+    , .multicombine = TRUE
+  ) %:% foreach(
+    engagement = grid_params$engagement
+    , .combine = c
+    , .multicombine = TRUE
+  ) %:% foreach(
+    recordyr = grid_params$recordyr
+    , .combine = c
+    , .multicombine = TRUE
+  ) %:% foreach(
+  # Inner loop (parallel cross-validation)
+    fold = 1:length(xv)
+    , .combine = list
+    , .multicombine = TRUE
+    , .packages = c('dplyr', 'splines')
+  ) %dopar% {
+    # Fit temp model
+      tmpmodel <- lm(
+        rv.amt ~
+        COMMITTEE_KSM_LDR +
+        ns(CRU_PFY1, df = dollars) +
+        ns(CRU_PFY2, df = dollars) +
+        ns(CRU_PFY3, df = dollars) +
+        ns(CRU_PFY4, df = dollars) +
+        ns(CRU_PFY5, df = dollars) +
+        ns(EVALUATION_LOWER_BOUND, df = dollars) +
+        GIFT_CLUB_NU_LDR_YRS +
+        ns(GIFTS_ALLOCS_SUPPORTED, df = giving) +
+        ns(GIFTS_OUTRIGHTS_PAYMENTS, df = giving) +
+        ns(GIVING_CRU_TOTAL, df = giving) +
+        ns(GIVING_MAX_CASH_YR, df = giving) +
+        ns(GIVING_MAX_PLEDGE_AMT, df = giving) +
+        ns(GIVING_MAX_PLEDGE_FY, df = giving) +
+        HOUSEHOLD_CONTINENT +
+        KSM_GOS_FLAG +
+        LOYAL_5_PCT_ANY +
+        ns(NGC_PFY1, df = dollars) +
+        ns(NGC_PFY2, df = dollars) +
+        ns(NGC_PFY3, df = dollars) +
+        ns(NGC_PFY4, df = dollars) +
+        ns(NGC_PFY5, df = dollars) +
+        PREF_ADDR_TYPE_CODE +
+        PROGRAM_GROUP +
+        ns(RECORD_YR, df = recordyr) +
+        ns(UOR_LOWER_BOUND, df = dollars) +
+        UPGRADE3_CASH +
+        ns(VELOCITY3_LIN_NGC, df = dollars) +
+        ns(VISITS_5FY, df = engagement)
+        # Train while withholding some data
+        , data = traindat[-xv[[fold]], ]
+      )
+      preds <- data.frame(
+        prediction = predict(tmpmodel, newdata = traindat[xv[[fold]], ], type = 'response')
+        , actual = traindat$rv.amt[xv[[fold]]]
+      )
+    # Return results
+    return(
+      list(
+        params = data.frame(
+          reps = rep
+          , folds = fold
+          , giving = giving
+          , dollars = dollars
+          , engagement = engagement
+          , recordyr = recordyr
+        )
+        , adj.r.sq = summary(tmpmodel)$adj.r.sq
+        , oos_preds = data.frame(
+            rv.amt = traindat[xv[[fold]], 'rv.amt']
+            , preds = preds
+        )
+      )
+    )
+  }
+  # Write results to errors data frame
+  lm_errs <- c(lm_errs, errs_out)
+  # Status report
+  timestamp <- paste(' -Iteration', rep, 'ending at:   ', Sys.time())
+  print(timestamp)
+  lm_timestamps <- c(lm_timestamps, timestamp)
+}
+```
+```{r}
+save(lm_errs, lm_timestamps, file = 'data/06_lm_xval.Rdata')
+```
+
+## Cross-validated errors
+
+Statistics for the different models.
+
+```{r}
+lm_results <- foreach(i = 1:length(lm_errs), .combine = rbind) %do% {
+  data.frame(
+    lm_errs[[i]]$params
+    , adj.r.sq = lm_errs[[i]]$adj.r.sq
+    , mse = calc_mse(y = lm_errs[[i]]$oos_preds$preds.actual, yhat = lm_errs[[i]]$oos_preds$preds.prediction)
+  )
+}
+lm_results <- lm_results %>% mutate(
+  reps = factor(reps)
+  , folds = factor(folds)
+  , giving = factor(giving)
+  , dollars = factor(dollars)
+  , engagement = factor(engagement)
+  , recordyr = factor(recordyr)
+  , splinedfs = paste0(giving, 'g ', dollars, 'd ', engagement, 'e ', recordyr, 'r')
+)
+```
+```{r}
+lm_results %>%
+  ggplot(aes(x = splinedfs, y = adj.r.sq)) +
+  geom_point(color = 'gray') +
+  geom_boxplot(alpha = .5) +
+  stat_summary(fun.y = mean, color = 'blue', geom = 'point', show.legend = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)) +
+  labs(x = 'spline dfs')
+```
+```{r}
+lm_results %>%
+  ggplot(aes(x = splinedfs, y = mse)) +
+  geom_point(color = 'gray') +
+  geom_boxplot(alpha = .5) +
+  stat_summary(fun.y = mean, color = 'blue', geom = 'point', show.legend = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .3)) +
+  labs(x = 'spline dfs')
+```
+
+Average MSE appears to be a bit higher than seen previously.
+
+```{r, rows.print = 100}
+lm_results %>%
+  group_by(giving, dollars, engagement, recordyr) %>%
+  summarise(mean_mse = mean(mse), mean_adj.r.sq = mean(adj.r.sq)) %>%
+  arrange(desc(mean_adj.r.sq))
+```
+
+3, 4, 2, 5 is the smallest model maximizing $r^2_{\text{adj}}$.
+
