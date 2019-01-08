@@ -279,7 +279,7 @@ giving <- 3
 dollars <- 2
 engagement <- 3
 recordyr <- 5
-glm_final <- glm(
+glm_trained <- glm(
   rv.gave ~
   PROGRAM_GROUP +
   PREF_ADDR_TYPE_CODE +
@@ -328,13 +328,68 @@ glm_final <- glm(
 )
 ```
 ```{r}
-summary(glm_final)
+summary(glm_trained)
 ```
 
-Whoops, there's collinearity. How does this compare to a generalized additive model with the corresponding degrees of freedom?
+Whoops, there's collinearity. Let's try a trimmed model.
 
 ```{r}
-gam_final <- gam(
+glm_trained_fewsplines <- glm(
+  rv.gave ~
+  PROGRAM_GROUP +
+  PREF_ADDR_TYPE_CODE +
+  HOUSEHOLD_CONTINENT +
+  BUS_IS_EMPLOYED +
+  HAS_HOME_ADDR +
+  HAS_HOME_PHONE +
+  ns(YEARS_SINCE_FIRST_GIFT, df = 1) +
+  ns(GIVING_FIRST_YEAR_CASH_AMT, df = 1) +
+  ns(GIVING_MAX_PLEDGE_AMT, df = 1) +
+  ns(GIVING_CASH_TOTAL, df = 1) +
+  ns(GIVING_PLEDGE_TOTAL, df = 1) +
+  ns(GIVING_CRU_TOTAL, df = 1) +
+  ns(GIFTS_ALLOCS_SUPPORTED, df = 1) +
+  ns(GIFTS_FYS_SUPPORTED, df = 1) +
+  ns(GIFTS_CASH, df = 1) +
+  ns(GIFTS_PLEDGES, df = 1) +
+  ns(CASH_PFY1, df = 1) +
+  ns(CASH_PFY2, df = 1) +
+  ns(CASH_PFY3, df = 1) +
+  ns(CASH_PFY4, df = 1) +
+  ns(CASH_PFY5, df = 1) +
+  CRU_GIVING_SEGMENT +
+  ns(EVALUATION_LOWER_BOUND, df = 1) +
+  ns(UOR_LOWER_BOUND, df = 1) +
+  ns(MONTHS_ASSIGNED, df = 1) +
+  ns(COMMITTEE_NU_DISTINCT, df = 1) +
+  ns(COMMITTEE_NU_YEARS, df = 1) +
+  ns(COMMITTEE_KSM_DISTINCT, df = 1) +
+  ns(EVENTS_PREV_3_FY, df = 1) +
+  ns(EVENTS_CFY, df = 1) +
+  ns(EVENTS_PFY1, df = 1) +
+  ns(ATHLETICS_TICKET_YEARS, df = 1) +
+  ns(YEARS_SINCE_ATHLETICS_TICKETS, df = 1) +
+  ns(RECORD_YR, df = 5) +
+  ns(YEARS_SINCE_MAX_CASH_YR, df = 3) +
+  GIVING_MAX_CASH_MO +
+  KSM_PROSPECT +
+  ns(VISITORS_5FY, df = 1) +
+  LOYAL_5_PCT_CASH +
+  UPGRADE3_CASH +
+  VELOCITY3_LIN_CASH +
+  SPOUSE_ALUM
+  , data = traindat
+  , family = 'binomial'
+)
+```
+```{r}
+summary(glm_trained_fewsplines)
+```
+
+How does this compare to a generalized additive model with the corresponding degrees of freedom?
+
+```{r}
+gam_trained <- gam(
   rv.gave ~
   PROGRAM_GROUP +
   PREF_ADDR_TYPE_CODE +
@@ -384,86 +439,72 @@ gam_final <- gam(
 )
 ```
 ```{r}
-summary(gam_final)
+summary(gam_trained)
 ```
 
-Comparing the model stats:
+## Comparison
+
+Comparing the model stats on the holdout data:
 
 ```{r}
 # Prediction threshold
 theta1 <- sum(traindat$rv.gave) / nrow(traindat)
 # Confusion matrix based on the withheld data
-glm_stats <- conf_matrix(glm_final, newdata = holdoutdat, rv = 'rv.gave', threshold = theta1)
-glm_stats5 <- conf_matrix(glm_final, newdata = holdoutdat, rv = 'rv.gave', threshold = .5)
-gam_stats <- conf_matrix(gam_final, newdata = holdoutdat, rv = 'rv.gave', threshold = theta1)
-gam_stats5 <- conf_matrix(gam_final, newdata = holdoutdat, rv = 'rv.gave', threshold = .5)
+glm_stats <- conf_matrix(glm_trained, newdata = holdoutdat, rv = 'rv.gave', threshold = theta1)
+glm_stats5 <- conf_matrix(glm_trained, newdata = holdoutdat, rv = 'rv.gave', threshold = .5)
+glm_fs_stats <- conf_matrix(glm_trained_fewsplines, newdata = holdoutdat, rv = 'rv.gave', threshold = theta1)
+glm_fs_stats5 <- conf_matrix(glm_trained_fewsplines, newdata = holdoutdat, rv = 'rv.gave', threshold = .5)
+gam_stats <- conf_matrix(gam_trained, newdata = holdoutdat, rv = 'rv.gave', threshold = theta1)
+gam_stats5 <- conf_matrix(gam_trained, newdata = holdoutdat, rv = 'rv.gave', threshold = .5)
 # Output
 data.frame(
-  model = c('glm', 'glm .5', 'gam', 'gam .5')
-  , error = c(glm_stats$error, glm_stats5$error, gam_stats$error, gam_stats5$error)
-  , sensitivity = c(glm_stats$sensitivity, glm_stats5$sensitivity, gam_stats$sensitivity, gam_stats5$sensitivity)
-  , F1 = c(glm_stats$F1_score, glm_stats5$F1_score, gam_stats$F1_score, gam_stats5$F1_score)
+  model = c('glm', 'glm .5', 'glm fs', 'glm fs .5', 'gam', 'gam .5')
+  , error = c(
+    glm_stats$error, glm_stats5$error
+    , glm_fs_stats$error, glm_fs_stats5$error
+    , gam_stats$error, gam_stats5$error
+  )
+  , sensitivity = c(
+    glm_stats$sensitivity, glm_stats5$sensitivity
+    , glm_fs_stats$sensitivity, glm_fs_stats5$sensitivity
+    , gam_stats$sensitivity, gam_stats5$sensitivity
+  )
+  , F1 = c(
+    glm_stats$F1_score, glm_stats5$F1_score
+    , glm_fs_stats$F1_score, glm_fs_stats5$F1_score
+    , gam_stats$F1_score, gam_stats5$F1_score
+  )
 )
 ```
 
 On the out-of-sample holdout data, the GAM performs slightly better, though again the difference is minuscule.
 
+Finally, consider the calibration plots.
+
 ```{r}
-gam_trained <- gam(
-  rv.gave ~
-  PROGRAM_GROUP +
-  PREF_ADDR_TYPE_CODE +
-  HOUSEHOLD_CONTINENT +
-  BUS_IS_EMPLOYED +
-  HAS_HOME_ADDR +
-  HAS_HOME_PHONE +
-  s(YEARS_SINCE_FIRST_GIFT, k = giving) +
-  s(GIVING_FIRST_YEAR_CASH_AMT, k = giving) +
-  s(GIVING_MAX_PLEDGE_AMT, k = giving) +
-  s(GIVING_CASH_TOTAL, k = giving) +
-  s(GIVING_PLEDGE_TOTAL, k = giving) +
-  s(GIVING_CRU_TOTAL, k = giving) +
-  s(GIFTS_ALLOCS_SUPPORTED, k = giving) +
-  s(GIFTS_FYS_SUPPORTED, k = giving) +
-  s(GIFTS_CASH, k = giving) +
-  s(GIFTS_PLEDGES, k = giving) +
-  s(CASH_PFY1, k = dollars) +
-  s(CASH_PFY2, k = dollars) +
-  s(CASH_PFY3, k = dollars) +
-  s(CASH_PFY4, k = dollars) +
-  s(CASH_PFY5, k = dollars) +
-  CRU_GIVING_SEGMENT +
-  s(EVALUATION_LOWER_BOUND, k = dollars) +
-  s(UOR_LOWER_BOUND, k = dollars) +
-  s(MONTHS_ASSIGNED, k = engagement) +
-  s(COMMITTEE_NU_DISTINCT, k = engagement) +
-  s(COMMITTEE_NU_YEARS, k = engagement) +
-  s(COMMITTEE_KSM_DISTINCT, k = engagement) +
-  s(EVENTS_PREV_3_FY, k = engagement) +
-  s(EVENTS_CFY, k = engagement) +
-  s(EVENTS_PFY1, k = engagement) +
-  s(ATHLETICS_TICKET_YEARS, k = engagement) +
-  s(YEARS_SINCE_ATHLETICS_TICKETS, k = engagement) +
-  s(RECORD_YR, k = recordyr) +
-  s(YEARS_SINCE_MAX_CASH_YR, k = giving) +
-  GIVING_MAX_CASH_MO +
-  KSM_PROSPECT +
-  s(VISITORS_5FY, k = engagement) +
-  LOYAL_5_PCT_CASH +
-  UPGRADE3_CASH +
-  VELOCITY3_LIN_CASH +
-  SPOUSE_ALUM
-  , data = modeling.data
-  , family = 'binomial'
-  , control = list(nthreads = 10)
+glm_preds <- data.frame(
+  class = (holdoutdat$rv.gave + 0) %>% unlist()
+  , glm = predict(glm_trained, newdata = holdoutdat, type = 'response')
+  , glm_fs = predict(glm_trained_fewsplines, newdata = holdoutdat, type = 'response')
+  , gam = predict(gam_trained, newdata = holdoutdat, type = 'response') %>% as.numeric()
+) %>% gather(
+  'model', 'prediction', glm:gam
 )
 ```
 ```{r}
-# Save output
-save(gam_trained, file = 'data/06_gam_trained.Rdata')
+glm_preds %>%
+  ggplot(aes(x = prediction, y = class, group = model, color = model)) +
+  geom_point(color = 'black', alpha  = .1) +
+  geom_smooth(method = 'loess', alpha = .25) +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(title = 'Predictions with OOS smoothers'
+       , x = 'predicted probability'
+       , y = 'observed probability')
 ```
 
-# Regression model
+No difference that the eye can see.
+
+# Regression model tuning
 
 The same grid search parameters will be used as in the previous step:
 
@@ -471,6 +512,13 @@ The same grid search parameters will be used as in the previous step:
 remove(dollars, engagement, giving, recordyr)
 print(grid_params)
 ```
+
+```{r}
+lm_traindat <- traindat %>%
+  filter(rv.gave == TRUE)
+```
+
+Additionally, only the `r lm_traindat %>% nrow()` observed donors will be used to fit the regression model.
 
 ```{r}
 # Store timings
@@ -487,7 +535,7 @@ for (rep in 1:reps) {
   print(timestamp)
   lm_timestamps <- c(lm_timestamps, timestamp)
   # Create cross-validation indices
-  xv <- KFoldXVal(traindat, k = folds)
+  xv <- KFoldXVal(lm_traindat, k = folds)
   # Middle loop (grid search)
   errs_out <- foreach(
     giving = grid_params$giving
@@ -545,11 +593,11 @@ for (rep in 1:reps) {
         ns(VELOCITY3_LIN_NGC, df = dollars) +
         ns(VISITS_5FY, df = engagement)
         # Train while withholding some data
-        , data = traindat[-xv[[fold]], ]
+        , data = lm_traindat[-xv[[fold]], ]
       )
       preds <- data.frame(
-        prediction = predict(tmpmodel, newdata = traindat[xv[[fold]], ], type = 'response')
-        , actual = traindat$rv.amt[xv[[fold]]]
+        prediction = predict(tmpmodel, newdata = lm_traindat[xv[[fold]], ], type = 'response')
+        , actual = lm_traindat$rv.amt[xv[[fold]]]
       )
     # Return results
     return(
@@ -564,7 +612,7 @@ for (rep in 1:reps) {
         )
         , adj.r.sq = summary(tmpmodel)$adj.r.sq
         , oos_preds = data.frame(
-            rv.amt = traindat[xv[[fold]], 'rv.amt']
+            rv.amt = lm_traindat[xv[[fold]], 'rv.amt']
             , preds = preds
         )
       )
@@ -623,8 +671,6 @@ lm_results %>%
   labs(x = 'spline dfs')
 ```
 
-Average MSE appears to be a bit higher than seen previously.
-
 ```{r, rows.print = 100}
 lm_results %>%
   group_by(giving, dollars, engagement, recordyr) %>%
@@ -632,5 +678,371 @@ lm_results %>%
   arrange(desc(mean_adj.r.sq))
 ```
 
-3, 4, 2, 5 is the smallest model maximizing $r^2_{\text{adj}}$.
+The more df the merrier, apparently. 3, 4, 2, 7 is the smallest model maximizing $r^2_{\text{adj}}$.
 
+```{r}
+giving <- 3
+dollars <- 4
+engagement <- 2
+recordyr <- 7
+lm_trained <- lm(
+  rv.amt ~
+  COMMITTEE_KSM_LDR +
+  ns(CRU_PFY1, df = dollars) +
+  ns(CRU_PFY2, df = dollars) +
+  ns(CRU_PFY3, df = dollars) +
+  ns(CRU_PFY4, df = dollars) +
+  ns(CRU_PFY5, df = dollars) +
+  ns(EVALUATION_LOWER_BOUND, df = dollars) +
+  GIFT_CLUB_NU_LDR_YRS +
+  ns(GIFTS_ALLOCS_SUPPORTED, df = giving) +
+  ns(GIFTS_OUTRIGHTS_PAYMENTS, df = giving) +
+  ns(GIVING_CRU_TOTAL, df = giving) +
+  ns(GIVING_MAX_CASH_YR, df = giving) +
+  ns(GIVING_MAX_PLEDGE_AMT, df = giving) +
+  ns(GIVING_MAX_PLEDGE_FY, df = giving) +
+  HOUSEHOLD_CONTINENT +
+  KSM_GOS_FLAG +
+  LOYAL_5_PCT_ANY +
+  ns(NGC_PFY1, df = dollars) +
+  ns(NGC_PFY2, df = dollars) +
+  ns(NGC_PFY3, df = dollars) +
+  ns(NGC_PFY4, df = dollars) +
+  ns(NGC_PFY5, df = dollars) +
+  PREF_ADDR_TYPE_CODE +
+  PROGRAM_GROUP +
+  ns(RECORD_YR, df = recordyr) +
+  ns(UOR_LOWER_BOUND, df = dollars) +
+  UPGRADE3_CASH +
+  ns(VELOCITY3_LIN_NGC, df = dollars) +
+  ns(VISITS_5FY, df = engagement)
+  , data = lm_traindat
+)
+```
+```{r}
+summary(lm_trained)
+```
+
+However, there are lots of collinearity issues....
+
+```{r}
+lm_trained_fewsplines <- lm(
+  rv.amt ~
+  COMMITTEE_KSM_LDR +
+  ns(CRU_PFY1, df = 2) +
+  ns(CRU_PFY2, df = 1) +
+  ns(CRU_PFY3, df = 1) +
+  ns(CRU_PFY4, df = 1) +
+  ns(CRU_PFY5, df = 1) +
+  ns(EVALUATION_LOWER_BOUND, df = 1) +
+  GIFT_CLUB_NU_LDR_YRS +
+  ns(GIFTS_ALLOCS_SUPPORTED, df = 1) +
+  ns(GIFTS_OUTRIGHTS_PAYMENTS, df = 1) +
+  ns(GIVING_CRU_TOTAL, df = 1) +
+  ns(GIVING_MAX_CASH_YR, df = 1) +
+  ns(GIVING_MAX_PLEDGE_AMT, df = 1) +
+  ns(GIVING_MAX_PLEDGE_FY, df = 1) +
+  HOUSEHOLD_CONTINENT +
+  KSM_GOS_FLAG +
+  LOYAL_5_PCT_ANY +
+  ns(NGC_PFY1, df = 2) +
+  ns(NGC_PFY2, df = 1) +
+  ns(NGC_PFY3, df = 1) +
+  ns(NGC_PFY4, df = 1) +
+  ns(NGC_PFY5, df = 1) +
+  PREF_ADDR_TYPE_CODE +
+  PROGRAM_GROUP +
+  ns(RECORD_YR, df = 5) +
+  ns(UOR_LOWER_BOUND, df = 1) +
+  UPGRADE3_CASH +
+  ns(VELOCITY3_LIN_NGC, df = 7) +
+  ns(VISITS_5FY, df = 1)
+  , data = lm_traindat
+)
+```
+```{r}
+summary(lm_trained_fewsplines)
+```
+
+I'll also fit a GAM with the same initial degrees of freedom as a point of comparison.
+
+```{r}
+gam_lm_trained <- gam(
+  rv.amt ~
+  COMMITTEE_KSM_LDR +
+  s(CRU_PFY1, k = dollars) +
+  s(CRU_PFY2, k = dollars) +
+  s(CRU_PFY3, k = dollars) +
+  s(CRU_PFY4, k = dollars) +
+  s(CRU_PFY5, k = dollars) +
+  s(EVALUATION_LOWER_BOUND, k = dollars) +
+  GIFT_CLUB_NU_LDR_YRS +
+  s(GIFTS_ALLOCS_SUPPORTED, k = giving) +
+  s(GIFTS_OUTRIGHTS_PAYMENTS, k = giving) +
+  s(GIVING_CRU_TOTAL, k = giving) +
+  s(GIVING_MAX_CASH_YR, k = giving) +
+  s(GIVING_MAX_PLEDGE_AMT, k = giving) +
+  s(GIVING_MAX_PLEDGE_FY, k = giving) +
+  HOUSEHOLD_CONTINENT +
+  KSM_GOS_FLAG +
+  LOYAL_5_PCT_ANY +
+  s(NGC_PFY1, k = dollars) +
+  s(NGC_PFY2, k = dollars) +
+  s(NGC_PFY3, k = dollars) +
+  s(NGC_PFY4, k = dollars) +
+  s(NGC_PFY5, k = dollars) +
+  PREF_ADDR_TYPE_CODE +
+  PROGRAM_GROUP +
+  s(RECORD_YR, k = recordyr) +
+  s(UOR_LOWER_BOUND, k = dollars) +
+  UPGRADE3_CASH +
+  s(VELOCITY3_LIN_NGC, k = dollars) +
+  s(VISITS_5FY, k = engagement)
+  , data = lm_traindat
+  , family = 'gaussian'
+  , control = list(nthreads = 10)
+)
+```
+```{r}
+summary(gam_lm_trained)
+```
+
+## Comparison
+
+Comparing the stats on the holdout set:
+
+```{r}
+data.frame(
+  model = c('lm', 'lm_small', 'gam')
+  , adj.r.sq = c(
+    summary(lm_trained)$adj.r.sq
+    , summary(lm_trained_fewsplines)$adj.r.sq
+    , summary(gam_lm_trained)$r.sq
+  )
+  , insample_mse = c(
+    calc_mse(y = lm_trained$model$rv.amt, yhat = lm_trained$fitted)
+    , calc_mse(y = lm_trained_fewsplines$model$rv.amt, yhat = lm_trained_fewsplines$fitted)
+    , calc_mse(y = gam_lm_trained$y, yhat = gam_lm_trained$fitted)
+  )
+  , outsample_mse = c(
+    calc_mse(y = holdoutdat$rv.amt, yhat = predict(lm_trained, newdata = holdoutdat))
+    , calc_mse(y = holdoutdat$rv.amt, yhat = predict(lm_trained_fewsplines, newdata = holdoutdat))
+    , calc_mse(y = holdoutdat$rv.amt, yhat = predict(gam_lm_trained, newdata = holdoutdat))
+  )
+)
+```
+
+The model with collinearity is clearly overfit, while the other two models are essentially interchangeable.
+
+# Combined model
+
+Use the GAM probability model and small linear regression model.
+
+```{r}
+gam_final <- gam(
+  rv.gave ~
+  PROGRAM_GROUP +
+  PREF_ADDR_TYPE_CODE +
+  HOUSEHOLD_CONTINENT +
+  BUS_IS_EMPLOYED +
+  HAS_HOME_ADDR +
+  HAS_HOME_PHONE +
+  s(YEARS_SINCE_FIRST_GIFT, k = giving) +
+  s(GIVING_FIRST_YEAR_CASH_AMT, k = giving) +
+  s(GIVING_MAX_PLEDGE_AMT, k = giving) +
+  s(GIVING_CASH_TOTAL, k = giving) +
+  s(GIVING_PLEDGE_TOTAL, k = giving) +
+  s(GIVING_CRU_TOTAL, k = giving) +
+  s(GIFTS_ALLOCS_SUPPORTED, k = giving) +
+  s(GIFTS_FYS_SUPPORTED, k = giving) +
+  s(GIFTS_CASH, k = giving) +
+  s(GIFTS_PLEDGES, k = giving) +
+  s(CASH_PFY1, k = dollars) +
+  s(CASH_PFY2, k = dollars) +
+  s(CASH_PFY3, k = dollars) +
+  s(CASH_PFY4, k = dollars) +
+  s(CASH_PFY5, k = dollars) +
+  CRU_GIVING_SEGMENT +
+  s(EVALUATION_LOWER_BOUND, k = dollars) +
+  s(UOR_LOWER_BOUND, k = dollars) +
+  s(MONTHS_ASSIGNED, k = engagement) +
+  s(COMMITTEE_NU_DISTINCT, k = engagement) +
+  s(COMMITTEE_NU_YEARS, k = engagement) +
+  s(COMMITTEE_KSM_DISTINCT, k = engagement) +
+  s(EVENTS_PREV_3_FY, k = engagement) +
+  s(EVENTS_CFY, k = engagement) +
+  s(EVENTS_PFY1, k = engagement) +
+  s(ATHLETICS_TICKET_YEARS, k = engagement) +
+  s(YEARS_SINCE_ATHLETICS_TICKETS, k = engagement) +
+  s(RECORD_YR, k = recordyr) +
+  s(YEARS_SINCE_MAX_CASH_YR, k = giving) +
+  GIVING_MAX_CASH_MO +
+  KSM_PROSPECT +
+  s(VISITORS_5FY, k = engagement) +
+  LOYAL_5_PCT_CASH +
+  UPGRADE3_CASH +
+  VELOCITY3_LIN_CASH +
+  SPOUSE_ALUM
+  , data = modeling.data
+  , family = 'binomial'
+  , control = list(nthreads = 10)
+)
+```
+```{r}
+# Save output
+save(gam_final, file = 'data/06_gam_final.Rdata')
+```
+```{r}
+lm_final <- lm(
+  rv.amt ~
+  COMMITTEE_KSM_LDR +
+  ns(CRU_PFY1, df = 2) +
+  ns(CRU_PFY2, df = 1) +
+  ns(CRU_PFY3, df = 1) +
+  ns(CRU_PFY4, df = 1) +
+  ns(CRU_PFY5, df = 1) +
+  ns(EVALUATION_LOWER_BOUND, df = 1) +
+  GIFT_CLUB_NU_LDR_YRS +
+  ns(GIFTS_ALLOCS_SUPPORTED, df = 1) +
+  ns(GIFTS_OUTRIGHTS_PAYMENTS, df = 1) +
+  ns(GIVING_CRU_TOTAL, df = 1) +
+  ns(GIVING_MAX_CASH_YR, df = 1) +
+  ns(GIVING_MAX_PLEDGE_AMT, df = 1) +
+  ns(GIVING_MAX_PLEDGE_FY, df = 1) +
+  HOUSEHOLD_CONTINENT +
+  KSM_GOS_FLAG +
+  LOYAL_5_PCT_ANY +
+  ns(NGC_PFY1, df = 2) +
+  ns(NGC_PFY2, df = 1) +
+  ns(NGC_PFY3, df = 1) +
+  ns(NGC_PFY4, df = 1) +
+  ns(NGC_PFY5, df = 1) +
+  PREF_ADDR_TYPE_CODE +
+  PROGRAM_GROUP +
+  ns(RECORD_YR, df = 5) +
+  ns(UOR_LOWER_BOUND, df = 1) +
+  UPGRADE3_CASH +
+  ns(VELOCITY3_LIN_NGC, df = 7) +
+  ns(VISITS_5FY, df = 1)
+  , data = modeling.data %>% filter(rv.gave == TRUE)
+)
+```
+```{r}
+save(lm_final, file = 'data/06_lm_final.Rdata')
+```
+
+```{r}
+error_compare <- data.frame(
+  giving = log10plus1(modeling.data$rv.amt, inverse = TRUE)
+  , log.giving = modeling.data$rv.amt
+  , gave = modeling.data$rv.gave
+  , est.giving = predict(lm_final, newdata = modeling.data, type = 'response')
+  , est.gave = gam_final$fitted
+) %>% mutate(
+  ev = est.giving * est.gave
+  , error = log.giving - ev
+  , log.giving.bin = trunc(log.giving)
+  , pred.giving.bin = trunc(est.giving)
+  , ev.bin = trunc(ev)
+)
+```
+```{r}
+error_compare %>%
+  ggplot(aes(x = log.giving, y = est.giving, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'estimated versus actual giving')
+```
+```{r}
+paste('mse =', calc_mse(y = error_compare$log.giving, yhat = error_compare$est.giving))
+```
+
+```{r}
+error_compare %>%
+  ggplot(aes(x = log.giving, y = ev, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'expected value versus actual giving')
+```
+```{r}
+paste('mse =', calc_mse(y = error_compare$log.giving, yhat = error_compare$ev))
+```
+
+```{r}
+error_bin <- error_compare %>%
+  group_by(log.giving.bin, pred.giving.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+mingift <- -1
+maxgift <- 8
+error_bin %>%
+  ggplot(aes(x = log.giving.bin, y = pred.giving.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'Predicted giving')
+```
+
+  * Total giving during the out-of-sample time period was `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
+  * Those predicted to give at least `r tmpcutoff <- 3; scales::dollar(10^tmpcutoff) %>% I()` gave `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * A total of `r tmpd <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% nrow(); tmpd %>% I()` donors were predicted to give at the `r scales::dollar(10^tmpcutoff) %>% I()` level and `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & log.giving.bin >= tmpcutoff) %>% nrow(); tmpn %>% I()` actually did, for a hit rate of `r (tmpn/tmpd) %>% scales::percent() %>% I()`.
+  * Average giving in this group is `r ({error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum()}/tmpd) %>% scales::dollar() %>% I()` per person.
+* This method elimintates `r tmpd <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
+
+```{r}
+ev_bin <- error_compare %>%
+  group_by(log.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+mingift <- -1
+maxgift <- 8
+ev_bin %>%
+  ggplot(aes(x = log.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'Expected value')
+```
+
+  * Total giving during the out-of-sample time period was again `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
+  * Entities with a score of `r tmpc2 <- 1; tmpc2 %>% I()` or higher (`r error_compare %>% filter(ev.bin >= tmpc2) %>% nrow()` total) gave `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * Of these `r tmpd <- error_compare %>% filter(ev.bin >= tmpc2) %>% nrow(); tmpd` entities, `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2 & giving > 0) %>% nrow(); tmpn` were donors (`r (tmpn/tmpd) %>% scales::percent()`), and `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2 & giving >= 10^tmpcutoff) %>% nrow(); tmpn` gave at least `r scales::dollar(10^tmpcutoff)` (`r (tmpn/tmpd) %>% scales::percent()`).
+  * Average giving in this group is `r ({error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum()}/{error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% nrow()}) %>% scales::dollar() %>% I()` per person.
+  * This method elimintates `r tmpd <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
+
+```{r}
+both_bin <- error_compare %>%
+  group_by(pred.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+mingift <- -1
+maxgift <- 8
+both_bin %>%
+  ggplot(aes(x = pred.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Predicted giving', y = 'Expected value')
+```
+
+  * Of the `r tmpsubset <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & ev.bin < tmpc2); tmpsubset %>% nrow()` individuals with a relatively high predicted giving amount (`r scales::dollar(10^tmpcutoff)`) but a 0 expected value score, only `r tmpn <- tmpsubset %>% filter(giving > 0) %>% nrow(); tmpn` were actually donors (`r (tmpn/nrow(tmpsubset)) %>% scales::percent()`), giving a total of `r tmpsubset %>% filter(giving > 0) %>% select(giving) %>% sum() %>% scales::dollar()`.
+
+This is in line with (better than!) my [previous results](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/05%20KSM%20predictive%20model.nb.html#conclusions) on untuned models.
