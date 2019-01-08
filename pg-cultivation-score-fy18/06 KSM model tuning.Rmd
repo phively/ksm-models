@@ -26,12 +26,173 @@ library(wranglR)
 library(Boruta)
 library(foreach)
 library(doParallel)
-library(glmnet)
-library(glmnetUtils)
 # Functions adapted from previous analysis steps
 source('code/functions.R')
 # Visualization functions adapted fron previous analysis steps
 source('code/functions_viz.R')
 # Set number of available CPU cores
-registerDoParallel(detectCores() - 1)
+registerDoParallel(10)
+```
+```{r}
+# Parameters
+train_fy <- 2016
+filepath <- 'data/2018-11-30 point-in-time data.xlsx'
+sheetname <- 'Select point_in_time_model'
+
+# Import data
+source('code/generate-pit-data.R')
+
+# Run data generation functions
+modeling.data <- generate_pit_data(filepath, sheetname) %>%
+  generate_additional_predictors()
+```
+```{r}
+# Create cross-validation set
+folds = 10
+reps = 5
+
+# Withhold 10% of data as test set
+xv <- KFoldXVal(modeling.data, k = 2, prop = .1, seed = 6988432)
+holdoutdat <- modeling.data[xv[[1]], ]
+traindat <- modeling.data[xv[[2]], ]
+remove(xv)
+```
+
+# Probability model tuning
+
+I'll perform a grid search to select reasonable spline parameters. To cut down on the number of combinations, similar variables will have the same number of spline dfs.
+
+```{r}
+# Splines grid search parameters
+grid_params = list(
+  giving = 2:3
+  , dollars = 2:4
+  , engagement = 2:3
+  , recordyr = seq(3, 7, by = 2)
+)
+```
+```{r}
+print(grid_params)
+```
+
+
+This gives `r lapply(grid_params, length) %>% unlist() %>% prod() %>% I()` combinations.
+
+```{r}
+# Store timings
+glm_timestamps <- list()
+# Store model errors
+glm_errs <- list()
+# Seed for reproducibility
+set.seed(229786270)
+
+# Outer loop (repetitions)
+for (rep in 1:reps) {
+  # Status report 
+  timestamp <- paste('+ Iteration', rep, 'beginning at:', Sys.time())
+  print(timestamp)
+  glm_timestamps <- c(glm_timestamps, timestamp)
+  # Create cross-validation indices
+  xv <- KFoldXVal(traindat, k = folds)
+  # Middle loop (grid search)
+  errs_out <- foreach(
+    giving = grid_params$giving
+    , .combine = c
+  ) %:% foreach(
+    dollars = grid_params$dollars
+    , .combine = c
+  ) %:% foreach(
+    engagement = grid_params$engagement
+    , .combine = c
+  ) %:% foreach(
+    recordyr = grid_params$recordyr
+    , .combine = c
+  ) %:% foreach(
+  # Inner loop (parallel cross-validation)
+    fold = 1:length(xv)
+    , .combine = c
+    , .packages = c('dplyr', 'splines')
+  ) %dopar% {
+    # Fit temp model
+    tmpmodel <- glm(
+      rv.gave ~
+      PROGRAM_GROUP +
+      PREF_ADDR_TYPE_CODE +
+      HOUSEHOLD_CONTINENT +
+      BUS_IS_EMPLOYED +
+      HAS_HOME_ADDR +
+      HAS_HOME_PHONE +
+      ns(YEARS_SINCE_FIRST_GIFT, df = giving) +
+      ns(GIVING_FIRST_YEAR_CASH_AMT, df = giving) +
+      ns(GIVING_MAX_PLEDGE_AMT, df = giving) +
+      ns(GIVING_CASH_TOTAL, df = giving) +
+      ns(GIVING_PLEDGE_TOTAL, df = giving) +
+      ns(GIVING_CRU_TOTAL, df = giving) +
+      ns(GIFTS_ALLOCS_SUPPORTED, df = giving) +
+      ns(GIFTS_FYS_SUPPORTED, df = giving) +
+      ns(GIFTS_CASH, df = giving) +
+      ns(GIFTS_PLEDGES, df = giving) +
+      ns(CASH_PFY1, df = dollars) +
+      ns(CASH_PFY2, df = dollars) +
+      ns(CASH_PFY3, df = dollars) +
+      ns(CASH_PFY4, df = dollars) +
+      ns(CASH_PFY5, df = dollars) +
+      CRU_GIVING_SEGMENT +
+      ns(EVALUATION_LOWER_BOUND, df = dollars) +
+      ns(UOR_LOWER_BOUND, df = dollars) +
+      ns(MONTHS_ASSIGNED, df = engagement) +
+      ns(COMMITTEE_NU_DISTINCT, df = engagement) +
+      ns(COMMITTEE_NU_YEARS, df = engagement) +
+      ns(COMMITTEE_KSM_DISTINCT, df = engagement) +
+      ns(EVENTS_PREV_3_FY, df = engagement) +
+      ns(EVENTS_CFY, df = engagement) +
+      ns(EVENTS_PFY1, df = engagement) +
+      ns(ATHLETICS_TICKET_YEARS, df = engagement) +
+      ns(YEARS_SINCE_ATHLETICS_TICKETS, df = engagement) +
+      ns(RECORD_YR, df = recordyr) +
+      ns(YEARS_SINCE_MAX_CASH_YR, df = giving) +
+      GIVING_MAX_CASH_MO +
+      KSM_PROSPECT +
+      ns(VISITORS_5FY, df = engagement) +
+      LOYAL_5_PCT_CASH +
+      UPGRADE3_CASH +
+      VELOCITY3_LIN_CASH +
+      SPOUSE_ALUM
+      , data = traindat[-xv[[fold]], ]
+      , family = 'binomial'
+    )
+    # Prediction threshold
+    theta1 <- sum(traindat$rv.gave[-xv[[fold]]] == 1) / nrow(traindat[-xv[[fold]], ])
+    # Confusion matrix based on the withheld data
+    tmpconfus <- conf_matrix(tmpmodel, newdata = traindat[xv[[fold]], ], rv = 'rv.gave', threshold = theta1)
+    # Return results
+    return(
+      list(
+        conf_matrix = tmpconfus$conf_matrix
+        , conf_matrix_pct = tmpconfus$conf_matrix_pct
+        , errors = data.frame(
+          reps = rep
+          , folds = fold
+          , giving = giving
+          , dollars = dollars
+          , engagement = engagement
+          , recordyr = recordyr
+          , error = tmpconfus$error
+          , precision = tmpconfus$precision
+          , sensitivity = tmpconfus$sensitivity
+          , F1_score = tmpconfus$F1_score
+        )
+      )
+    )
+  }
+  # Write results to errors data frame
+  glm_errs <- c(glm_errs, errs_out)
+  # Status report
+  timestamp <- paste(' -Iteration', rep, 'ending at:   ', Sys.time())
+  print(timestamp)
+  glm_timestamps <- c(glm_timestamps, timestamp)
+}
+```
+```{r}
+save(glm_errs, glm_timestamps, file = 'data/06_glm_xval.Rdata')
 ```

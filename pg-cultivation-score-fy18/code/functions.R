@@ -20,12 +20,14 @@ neg_sqrt_trans <- function() scales::trans_new(
 )
 
 # glm confusion matrix
-conf_matrix <- function(model, newdata = NULL, threshold = .5) {
+conf_matrix <- function(model, newdata = NULL, rv = NULL, threshold = .5) {
   results <- data.frame(
     pred = predict(model, newdata = newdata, type = 'response') >= threshold
   )
   if (is.null(newdata)) {
     results$truth = model$y
+  } else if (!is.null(rv)) {
+    results$truth = newdata[, rv] %>% unlist()
   } else {
     results$truth = newdata[, 1] %>% unlist()
   }
