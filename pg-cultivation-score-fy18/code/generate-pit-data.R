@@ -345,8 +345,8 @@ generate_additional_predictors <- function(dataframe, future.data = FALSE) {
       }
       , log10plus1
     ) %>% mutate(
-      YEARS_SINCE_FIRST_GIFT = 2016 - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, 2017)
-      , YEARS_SINCE_ATHLETICS_TICKETS = 2016 - ifelse(ATHLETICS_TICKET_LAST > 0, ATHLETICS_TICKET_LAST, 2017)
-      , YEARS_SINCE_MAX_CASH_YR = 2016 - ifelse(GIVING_MAX_CASH_YR > 0, GIVING_MAX_CASH_YR, 2017)
+      YEARS_SINCE_FIRST_GIFT = train_fy - ifelse(GIVING_FIRST_YEAR > 0, GIVING_FIRST_YEAR, train_fy + 1)
+      , YEARS_SINCE_ATHLETICS_TICKETS = train_fy - ifelse(ATHLETICS_TICKET_LAST > 0, ATHLETICS_TICKET_LAST, train_fy + 1)
+      , YEARS_SINCE_MAX_CASH_YR = train_fy - ifelse(GIVING_MAX_CASH_YR > 0, GIVING_MAX_CASH_YR, train_fy + 1)
     )
 }
