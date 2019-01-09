@@ -305,11 +305,12 @@ generate_pit_data <- function(filepath, sheetname) {
   
 }
 
-generate_additional_predictors <- function(dataframe) {
+generate_additional_predictors <- function(dataframe, future.data = FALSE) {
   dataframe %>%
   mutate(
     # Create response variables
-    rv.amt = NGC_TARGET_FY2 + NGC_TARGET_FY1
+    # Set to 0 if they are in the future
+    rv.amt = ifelse(future.data == FALSE, NGC_TARGET_FY2 + NGC_TARGET_FY1, 0)
     , rv.gave = rv.amt > 0
   ) %>% select(
     # Drop future data

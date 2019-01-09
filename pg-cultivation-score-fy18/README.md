@@ -11,3 +11,4 @@ HTML rendering:
   * [05 KSM predictive model](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/05%20KSM%20predictive%20model.nb.html)
   * [05b GAM experimentation](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/05b%20GAM%20experimentation.nb.html)
   * [06 KSM model tuning](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/06%20KSM%20model%20tuning.nb.html)
+  * [07 KSM model refresh](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/07%20KSM%20model%20refresh.nb.html)

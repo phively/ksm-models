@@ -1,0 +1,169 @@
+---
+title: "07 KSM model refresh"
+output:
+  html_notebook:
+    code_folding: hide
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+Create final prospect rankings based on expected future giving.
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(reshape2)
+library(gridExtra)
+library(splines)
+library(lubridate)
+library(wranglR)
+library(Boruta)
+library(foreach)
+library(doParallel)
+library(mgcv)
+# Functions adapted from previous analysis steps
+source('code/functions.R')
+# Visualization functions adapted fron previous analysis steps
+source('code/functions_viz.R')
+# Set number of available CPU cores
+registerDoParallel(10)
+```
+```{r}
+# Load current data
+# Parameters
+train_fy <- 2018
+filepath <- 'data/2019-01-09 point-in-time data.xlsx'
+sheetname <- 'Select point_in_time_model_fy18'
+
+# Import data
+source('code/generate-pit-data.R')
+
+# Run data generation functions
+modeling.data <- generate_pit_data(filepath, sheetname) %>%
+  generate_additional_predictors(future.data = TRUE)
+```
+```{r}
+# Load historical data
+train_fy <- 2016
+historical.modeling <- generate_pit_data('data/2018-11-30 point-in-time data.xlsx', 'Select point_in_time_model') %>%
+  generate_additional_predictors()
+```
+```{r}
+# Load fitted models
+load('data/06_gam_final.Rdata')
+load('data/06_lm_final.Rdata')
+```
+
+# Generate new predictions
+
+```{r}
+preds_prb <- predict(gam_final, newdata = modeling.data, type = 'response') %>% as.numeric()
+preds_amt <- predict(lm_final, newdata = modeling.data, type = 'response')
+```
+
+# Diagnostics
+
+Compare the range of in-sample predictions to the new out-of-sample predictions.
+
+```{r}
+data.frame(
+  data = 'insample'
+  , prediction = gam_final$fitted.values
+) %>% rbind(
+  data.frame(
+    data = 'outsample'
+    , prediction = preds_prb
+  )
+) %>%
+  ggplot(aes(x = prediction, fill = data)) +
+  geom_histogram(bins = 20) +
+  facet_wrap(. ~ data) +
+  labs(title = 'Probability model fitted values')
+```
+
+```{r}
+data.frame(
+  data = 'insample'
+  , prediction = predict(lm_final, newdata = historical.modeling)
+) %>% rbind(
+  data.frame(
+    data = 'outsample'
+    , prediction = preds_amt
+  )
+) %>%
+  ggplot(aes(x = prediction, fill = data)) +
+  geom_histogram(bins = 20) +
+  facet_wrap(. ~ data) +
+  labs(title = 'Gift amount model fitted values')
+```
+
+Looks reasonable to me.
+
+Compare the FY16 predictions and FY18 results for individuals -- how much have individuals moved?
+
+```{r}
+data.frame(
+  id = historical.modeling$ID_NUMBER %>% as.numeric()
+  , p_insample = gam_final$fitted.values
+) %>% inner_join(
+  data.frame(
+    id = modeling.data$ID_NUMBER %>% as.numeric()
+    , p_outsample = preds_prb
+  )
+  , by = c('id')
+) %>% mutate(
+  change = p_insample - p_outsample
+) %>%
+  ggplot(aes(x = change)) + 
+  geom_histogram(bins = 20, alpha = .5) +
+  scale_x_continuous(breaks = seq(-1, 1, by = .2)) +
+  scale_y_log10(breaks = 10^(0:6), labels = format(10^(0:6), scientific = FALSE)) +
+  labs(title = 'Change in predicted probability of giving')
+```
+
+The near symmetry around 0 is reassuring.
+
+```{r}
+data.frame(
+  id = historical.modeling$ID_NUMBER %>% as.numeric()
+  , p_insample = predict(lm_final, newdata = historical.modeling)
+) %>% inner_join(
+  data.frame(
+    id = modeling.data$ID_NUMBER %>% as.numeric()
+    , p_outsample = preds_amt
+  )
+  , by = c('id')
+) %>% mutate(
+  change = p_insample - p_outsample
+) %>%
+  ggplot(aes(x = change)) + 
+  geom_histogram(bins = 16, alpha = .5) +
+  scale_y_log10(breaks = 10^(0:6), labels = format(10^(0:6), scientific = FALSE)) +
+  labs(title = 'Change in predicted giving amounts')
+```
+
+Interestingly, more people are expected to downgrade than upgrade.
+
+# Save results
+
+```{r}
+data.frame(
+  est.giving = preds_amt
+  , est.p = preds_prb
+) %>% mutate(
+  ev = est.giving * est.p
+  , est.giving.bin = trunc(est.giving)
+  , est.p.bin = trunc(est.p)
+  , ev.bin = trunc(ev)
+) %>% cbind(
+  modeling.data
+) %>% write.csv(
+  file = 'data/2019-01-09 predictions.csv'
+  , row.names = FALSE
+)
+```
+
