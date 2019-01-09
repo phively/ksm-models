@@ -832,7 +832,38 @@ data.frame(
 )
 ```
 
-The model with collinearity is clearly overfit, while the other two models are essentially interchangeable.
+The model with collinearity is clearly overfit, while the other two models are essentially interchangeable. In general, I prefer linear regression for its greater interpretability.
+
+```{r}
+data.frame(
+  actual = holdoutdat %>% filter(rv.gave == TRUE) %>% select(rv.amt) %>% unlist()
+  , preds = predict(lm_trained_fewsplines, newdata = holdoutdat %>% filter(rv.gave == TRUE))
+) %>% mutate(
+  resids = actual - preds
+) %>%
+  ggplot(aes(x = preds, y = resids)) +
+  geom_hline(yintercept = 0) +
+  geom_point(alpha = .25) +
+  geom_smooth(se = FALSE, method = 'gam', formula = y ~ s(x, bs = 'cs')) +
+  labs(title = 'Out-of-sample residuals versus fitted')
+```
+
+```{r}
+data.frame(
+  actual = holdoutdat %>% filter(rv.gave == TRUE) %>% select(rv.amt) %>% unlist()
+  , preds = predict(lm_trained_fewsplines, newdata = holdoutdat %>% filter(rv.gave == TRUE))
+) %>% mutate(
+  resids = actual - preds
+  , st.resid = resids/sd(resids)
+) %>%
+  ggplot(aes(sample = st.resid)) +
+  geom_qq(alpha = .25) +
+  geom_qq_line(color = 'blue') +
+  labs(title = 'Out-of-sample Q-Q plot with standardized residuals'
+       , color = 'cross-validation sample')
+```
+
+The out-of-sample diagnostic plots are in line with my previous results.
 
 # Combined model
 
