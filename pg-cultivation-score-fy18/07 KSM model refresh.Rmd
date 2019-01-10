@@ -43,7 +43,8 @@ sheetname <- 'Select point_in_time_model_fy18'
 source('code/generate-pit-data.R')
 
 # Run data generation functions
-modeling.data <- generate_pit_data(filepath, sheetname) %>%
+full.data <- generate_pit_data(filepath, sheetname)
+modeling.data <- full.data %>%
   generate_additional_predictors(future.data = TRUE)
 ```
 ```{r}
@@ -151,19 +152,52 @@ Interestingly, more people are expected to downgrade than upgrade.
 # Save results
 
 ```{r}
-data.frame(
+# Merged data frame
+output_data <- data.frame(
   est.giving = preds_amt
   , est.p = preds_prb
 ) %>% mutate(
   ev = est.giving * est.p
   , est.giving.bin = trunc(est.giving)
-  , est.p.bin = trunc(est.p)
+  , est.p.bin = trunc(est.p * 10)
   , ev.bin = trunc(ev)
 ) %>% cbind(
   modeling.data
-) %>% write.csv(
+)
+```
+```{r}
+# Master data file
+output_data %>% write.csv(
   file = 'data/2019-01-09 predictions.csv'
   , row.names = FALSE
 )
 ```
-
+```{r}
+# IDs and scores only
+full.data %>% filter(
+  # Exclude deceased
+  RECORD_STATUS_CODE != 'D'
+) %>% select(
+  HOUSEHOLD_ID
+  , ID_NUMBER
+) %>% mutate(
+  HOUSEHOLD_ID = HOUSEHOLD_ID %>% as.numeric()
+) %>% left_join(
+  output_data %>% mutate(
+      HOUSEHOLD_ID = ID_NUMBER %>% as.numeric()
+    ) %>%
+    select(
+      HOUSEHOLD_ID
+      , est.giving
+      , est.p
+      , ev
+      , est.giving.bin
+      , est.p.bin
+      , ev.bin
+    ) 
+  , by = c('HOUSEHOLD_ID')
+) %>% write.csv(
+  file = 'data/2019-01-09 export.csv'
+  , row.names = FALSE
+)
+```
