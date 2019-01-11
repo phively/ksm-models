@@ -1,0 +1,489 @@
+---
+title: "08 Dollars Under the Curve"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    code_folding: hide
+    toc: yes
+    toc_float:
+      collapsed: no
+---
+
+The other day, I was reflecting on modeling practices in fundraising. The most common application I've seen -- and the one this entire series covers -- is prioritizing prospects based on their expected giving.
+
+It's not immediately obvious how to go about comparing different techniques given that the usual accuracy metrics like classification error, RMSE, probability calibration, etc. are not directly comparable, not to mention hard classifiers and . However, since the difference in output between these different modeling techniques, heuristics, and algorithms ultimately comes down to sort order, why not compare that sort order directly?
+
+I propose a Dollars Under the Curve to Kellogg (DUCK) metric, analogous to ROC curves. Rather than plotting the true positive rate against the false positive rate, plot the proportion of dollars captured against the proportion of data examined.
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(reshape2)
+library(gridExtra)
+library(splines)
+library(lubridate)
+library(wranglR)
+library(Boruta)
+library(foreach)
+library(doParallel)
+library(glmnet)
+library(glmnetUtils)
+library(mgcv)
+
+# Functions adapted from previous analysis steps
+source('code/functions.R')
+
+# Visualization functions adapted fron previous analysis steps
+source('code/functions_viz.R')
+
+# Set number of available CPU cores
+registerDoParallel(detectCores() - 2)
+```
+```{r}
+# Parameters
+train_fy <- 2016
+filepath <- 'data/2018-11-30 point-in-time data.xlsx'
+sheetname <- 'Select point_in_time_model'
+
+# Import data
+source('code/generate-pit-data.R')
+
+# Run data generation functions
+modeling.data <- generate_pit_data(filepath, sheetname) %>%
+  generate_additional_predictors()
+```
+
+# Models
+
+I'll include the various models used when I was [tuning my models](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/06 KSM model tuning.nb.html), plus a couple more perennial favorites based on heuristics.
+
+## Linear regression fit to all data
+
+lm_all: Fit a linear regression model predicting dollars given to the entire dataset (including nondonors).
+
+```{r}
+lm_all <- lm(
+  rv.amt ~
+  COMMITTEE_KSM_LDR +
+  ns(CRU_PFY1, df = 1) +
+  ns(CRU_PFY2, df = 1) +
+  ns(CRU_PFY3, df = 1) +
+  ns(CRU_PFY4, df = 1) +
+  ns(CRU_PFY5, df = 1) +
+  ns(EVALUATION_LOWER_BOUND, df = 1) +
+  GIFT_CLUB_NU_LDR_YRS +
+  ns(GIFTS_ALLOCS_SUPPORTED, df = 1) +
+  ns(GIFTS_OUTRIGHTS_PAYMENTS, df = 1) +
+  ns(GIVING_CRU_TOTAL, df = 1) +
+  ns(GIVING_MAX_CASH_YR, df = 1) +
+  ns(GIVING_MAX_PLEDGE_AMT, df = 1) +
+  ns(GIVING_MAX_PLEDGE_FY, df = 1) +
+  HOUSEHOLD_CONTINENT +
+  KSM_GOS_FLAG +
+  LOYAL_5_PCT_ANY +
+  ns(NGC_PFY1, df = 1) +
+  ns(NGC_PFY2, df = 1) +
+  ns(NGC_PFY3, df = 1) +
+  ns(NGC_PFY4, df = 1) +
+  ns(NGC_PFY5, df = 1) +
+  PREF_ADDR_TYPE_CODE +
+  PROGRAM_GROUP +
+  ns(RECORD_YR, df = 5) +
+  ns(UOR_LOWER_BOUND, df = 1) +
+  UPGRADE3_CASH +
+  ns(VELOCITY3_LIN_NGC, df = 5) +
+  ns(VISITS_5FY, df = 1)
+  , data = modeling.data
+)
+```
+
+## GAM fit to all data
+
+gam_all: Fit a generalized additive model predicting dollars given to the entire dataset (including nondonors).
+
+```{r}
+gam_all <- gam(
+  rv.amt ~ COMMITTEE_KSM_LDR + s(CRU_PFY1) + s(CRU_PFY2) +
+    s(CRU_PFY3) + s(CRU_PFY4) + s(CRU_PFY5) + s(EVALUATION_LOWER_BOUND) +
+    GIFT_CLUB_NU_LDR_YRS + s(GIFTS_ALLOCS_SUPPORTED) + s(GIFTS_OUTRIGHTS_PAYMENTS) +
+    s(GIVING_CRU_TOTAL) + s(GIVING_MAX_CASH_YR) + s(GIVING_MAX_PLEDGE_AMT) +
+    s(GIVING_MAX_PLEDGE_FY) + HOUSEHOLD_CONTINENT + KSM_GOS_FLAG + LOYAL_5_PCT_ANY + s(NGC_PFY1) + 
+    s(NGC_PFY2) + s(NGC_PFY3) + s(NGC_PFY4) + s(NGC_PFY5) + PREF_ADDR_TYPE_CODE + 
+    PROGRAM_GROUP + s(RECORD_YR) + s(UOR_LOWER_BOUND) + UPGRADE3_CASH + s(VELOCITY3_LIN_NGC) + 
+    s(VISITS_5FY)
+  , data = modeling.data
+  , family = 'gaussian'
+  , control = list(nthreads = 3)
+)
+```
+
+## LM fit to donors
+
+lm_donors: Fit a linear regression model predicting dollars given by donors only.
+
+```{r}
+lm_donors <- lm(
+  rv.amt ~
+  COMMITTEE_KSM_LDR +
+  ns(CRU_PFY1, df = 2) +
+  ns(CRU_PFY2, df = 1) +
+  ns(CRU_PFY3, df = 1) +
+  ns(CRU_PFY4, df = 1) +
+  ns(CRU_PFY5, df = 1) +
+  ns(EVALUATION_LOWER_BOUND, df = 1) +
+  GIFT_CLUB_NU_LDR_YRS +
+  ns(GIFTS_ALLOCS_SUPPORTED, df = 1) +
+  ns(GIFTS_OUTRIGHTS_PAYMENTS, df = 1) +
+  ns(GIVING_CRU_TOTAL, df = 1) +
+  ns(GIVING_MAX_CASH_YR, df = 1) +
+  ns(GIVING_MAX_PLEDGE_AMT, df = 1) +
+  ns(GIVING_MAX_PLEDGE_FY, df = 1) +
+  HOUSEHOLD_CONTINENT +
+  KSM_GOS_FLAG +
+  LOYAL_5_PCT_ANY +
+  ns(NGC_PFY1, df = 2) +
+  ns(NGC_PFY2, df = 1) +
+  ns(NGC_PFY3, df = 1) +
+  ns(NGC_PFY4, df = 1) +
+  ns(NGC_PFY5, df = 1) +
+  PREF_ADDR_TYPE_CODE +
+  PROGRAM_GROUP +
+  ns(RECORD_YR, df = 5) +
+  ns(UOR_LOWER_BOUND, df = 1) +
+  UPGRADE3_CASH +
+  ns(VELOCITY3_LIN_NGC, df = 7) +
+  ns(VISITS_5FY, df = 1)
+  , data = modeling.data %>% filter(rv.gave == TRUE)
+)
+```
+
+## GAM fit to donors
+
+gam_donors: Fit a generalized additive model predicting dollars given by donors only.
+
+```{r}
+gam_donors <- gam(
+  rv.amt ~
+  COMMITTEE_KSM_LDR +
+  s(CRU_PFY1) +
+  s(CRU_PFY2) +
+  s(CRU_PFY3) +
+  s(CRU_PFY4) +
+  s(CRU_PFY5) +
+  s(EVALUATION_LOWER_BOUND) +
+  GIFT_CLUB_NU_LDR_YRS +
+  s(GIFTS_ALLOCS_SUPPORTED) +
+  s(GIFTS_OUTRIGHTS_PAYMENTS) +
+  s(GIVING_CRU_TOTAL) +
+  s(GIVING_MAX_CASH_YR) +
+  s(GIVING_MAX_PLEDGE_AMT) +
+  s(GIVING_MAX_PLEDGE_FY) +
+  HOUSEHOLD_CONTINENT +
+  KSM_GOS_FLAG +
+  LOYAL_5_PCT_ANY +
+  s(NGC_PFY1) +
+  s(NGC_PFY2) +
+  s(NGC_PFY3) +
+  s(NGC_PFY4) +
+  s(NGC_PFY5) +
+  PREF_ADDR_TYPE_CODE +
+  PROGRAM_GROUP +
+  s(RECORD_YR) +
+  s(UOR_LOWER_BOUND) +
+  UPGRADE3_CASH +
+  s(VELOCITY3_LIN_NGC) +
+  s(VISITS_5FY)
+  , data = modeling.data %>% filter(rv.gave)
+  , family = 'gaussian'
+  , control = list(nthreads = 10)
+)
+```
+
+## GLM probability model
+
+glm_p: Fit a binary logistic regression model to classify individuals as donors or nondonors.
+
+```{r}
+glm_p <- glm(
+  rv.gave ~
+  PROGRAM_GROUP +
+  PREF_ADDR_TYPE_CODE +
+  HOUSEHOLD_CONTINENT +
+  BUS_IS_EMPLOYED +
+  HAS_HOME_ADDR +
+  HAS_HOME_PHONE +
+  ns(YEARS_SINCE_FIRST_GIFT, df = 1) +
+  ns(GIVING_FIRST_YEAR_CASH_AMT, df = 1) +
+  ns(GIVING_MAX_PLEDGE_AMT, df = 1) +
+  ns(GIVING_CASH_TOTAL, df = 1) +
+  ns(GIVING_PLEDGE_TOTAL, df = 1) +
+  ns(GIVING_CRU_TOTAL, df = 1) +
+  ns(GIFTS_ALLOCS_SUPPORTED, df = 1) +
+  ns(GIFTS_FYS_SUPPORTED, df = 1) +
+  ns(GIFTS_CASH, df = 1) +
+  ns(GIFTS_PLEDGES, df = 1) +
+  ns(CASH_PFY1, df = 1) +
+  ns(CASH_PFY2, df = 1) +
+  ns(CASH_PFY3, df = 1) +
+  ns(CASH_PFY4, df = 1) +
+  ns(CASH_PFY5, df = 1) +
+  CRU_GIVING_SEGMENT +
+  ns(EVALUATION_LOWER_BOUND, df = 1) +
+  ns(UOR_LOWER_BOUND, df = 1) +
+  ns(MONTHS_ASSIGNED, df = 1) +
+  ns(COMMITTEE_NU_DISTINCT, df = 1) +
+  ns(COMMITTEE_NU_YEARS, df = 1) +
+  ns(COMMITTEE_KSM_DISTINCT, df = 1) +
+  ns(EVENTS_PREV_3_FY, df = 1) +
+  ns(EVENTS_CFY, df = 1) +
+  ns(EVENTS_PFY1, df = 1) +
+  ns(ATHLETICS_TICKET_YEARS, df = 1) +
+  ns(YEARS_SINCE_ATHLETICS_TICKETS, df = 1) +
+  ns(RECORD_YR, df = 5) +
+  ns(YEARS_SINCE_MAX_CASH_YR, df = 3) +
+  GIVING_MAX_CASH_MO +
+  KSM_PROSPECT +
+  ns(VISITORS_5FY, df = 1) +
+  LOYAL_5_PCT_CASH +
+  UPGRADE3_CASH +
+  VELOCITY3_LIN_CASH +
+  SPOUSE_ALUM
+  , data = modeling.data
+  , family = 'binomial'
+)
+```
+
+
+## GAM probability model
+
+gam_p: Fit a generalized additive model to classify individuals as donors or nondonors.
+
+```{r}
+gam_p <- gam(
+  rv.gave ~
+  PROGRAM_GROUP +
+  PREF_ADDR_TYPE_CODE +
+  HOUSEHOLD_CONTINENT +
+  BUS_IS_EMPLOYED +
+  HAS_HOME_ADDR +
+  HAS_HOME_PHONE +
+  s(YEARS_SINCE_FIRST_GIFT) +
+  s(GIVING_FIRST_YEAR_CASH_AMT) +
+  s(GIVING_MAX_PLEDGE_AMT) +
+  s(GIVING_CASH_TOTAL) +
+  s(GIVING_PLEDGE_TOTAL) +
+  s(GIVING_CRU_TOTAL) +
+  s(GIFTS_ALLOCS_SUPPORTED) +
+  s(GIFTS_FYS_SUPPORTED) +
+  s(GIFTS_CASH) +
+  s(GIFTS_PLEDGES, k = 4) +
+  s(CASH_PFY1) +
+  s(CASH_PFY2) +
+  s(CASH_PFY3) +
+  s(CASH_PFY4) +
+  s(CASH_PFY5) +
+  CRU_GIVING_SEGMENT +
+  s(EVALUATION_LOWER_BOUND) +
+  s(UOR_LOWER_BOUND) +
+  s(MONTHS_ASSIGNED) +
+  s(COMMITTEE_NU_DISTINCT) +
+  s(COMMITTEE_NU_YEARS) +
+  s(COMMITTEE_KSM_DISTINCT) +
+  s(EVENTS_PREV_3_FY) +
+  s(EVENTS_CFY) +
+  s(EVENTS_PFY1) +
+  s(ATHLETICS_TICKET_YEARS) +
+  s(YEARS_SINCE_ATHLETICS_TICKETS) +
+  s(RECORD_YR) +
+  s(YEARS_SINCE_MAX_CASH_YR) +
+  GIVING_MAX_CASH_MO +
+  KSM_PROSPECT +
+  s(VISITORS_5FY) +
+  LOYAL_5_PCT_CASH +
+  UPGRADE3_CASH +
+  VELOCITY3_LIN_CASH +
+  SPOUSE_ALUM
+  , data = modeling.data
+  , family = 'binomial'
+  , control = list(nthreads = 10)
+)
+```
+
+## Managed, evaluation, and past giving
+
+eval_giving: order entities by having a KSM manager, then by university overall rating, then by evaluation rating, then by total past giving (NGC), then by last year's giving (NGC), and finally by alpha ordering.
+
+```{r}
+eval_giving <- modeling.data %>%
+  arrange(
+    desc(KSM_GOS_FLAG)
+    , desc(UOR_LOWER_BOUND)
+    , desc(EVALUATION_LOWER_BOUND)
+    , desc(GIVING_NGC_TOTAL)
+    , desc(NGC_PFY1)
+    , REPORT_NAME
+  ) %>% select(
+    ID_NUMBER
+    , KSM_GOS_FLAG
+    , UOR_LOWER_BOUND
+    , EVALUATION_LOWER_BOUND
+    , GIVING_NGC_TOTAL
+    , NGC_PFY1
+    , REPORT_NAME
+    , rv.amt
+  ) %>% mutate(
+    fitted = nrow(modeling.data) - row_number()
+    , giving = log10plus1(rv.amt, inverse = TRUE)
+  )
+```
+
+# Dollars under the curve
+
+```{r}
+# DUC data generation function
+duc_data_gen <- function(fitted, actual) {
+  data.frame(
+    fitted = fitted %>% unlist()
+    , logdollars = actual %>% unlist()
+    , dollars = log10plus1(actual, inverse = TRUE) %>% unlist()
+  ) %>% arrange(desc(fitted)) %>%
+    mutate(
+      logdollars = cumsum(logdollars) / sum(logdollars)
+      , dollars = cumsum(dollars) / sum(dollars)
+      , pct = (row_number() %>% as.numeric()) / length(actual)
+     ) %>%
+    return()
+}
+```
+```{r}
+# Create predictions
+predictions <- data.frame(
+  truth = modeling.data$rv.amt
+  , lm_all = lm_all$fitted
+  , gam_all = gam_all$fitted
+  , lm_donors = predict(lm_donors, newdata = modeling.data)
+  , gam_donors = predict(gam_donors, newdata = modeling.data)
+  , glm_p = glm_p$fitted
+  , gam_p = gam_p$fitted
+) %>% mutate(
+  ev_glm_lm = glm_p * lm_donors
+  , ev_gam_lm = gam_p * lm_donors
+  , ev_gam_gam = gam_p * gam_donors
+)
+```
+```{r}
+# Create lines for plotting
+duc_data <- rbind(
+  data.frame(model = 'lm all', duc_data_gen(predictions$lm_all, predictions$truth))
+  , data.frame(model = 'gam all', duc_data_gen(predictions$gam_all, predictions$truth))
+  , data.frame(model = 'lm donors', duc_data_gen(predictions$lm_donors, predictions$truth))
+  , data.frame(model = 'gam donors', duc_data_gen(predictions$gam_donors, predictions$truth))
+  , data.frame(model = 'glm p', duc_data_gen(predictions$glm_p, predictions$truth))
+  , data.frame(model = 'gam p', duc_data_gen(predictions$gam_p, predictions$truth))
+  , data.frame(model = 'lm donors', duc_data_gen(predictions$lm_donors, predictions$truth))
+  , data.frame(model = 'gam donors', duc_data_gen(predictions$gam_donors, predictions$truth))
+  , data.frame(model = 'EV glm lm', duc_data_gen(predictions$ev_glm_lm, predictions$truth))
+  , data.frame(model = 'EV gam lm', duc_data_gen(predictions$ev_gam_lm, predictions$truth))
+  , data.frame(model = 'EV gam gam', duc_data_gen(predictions$ev_gam_gam, predictions$truth))
+  , data.frame(model = 'eval giving', duc_data_gen(eval_giving$fitted, eval_giving$rv.amt))
+)
+```
+```{r}
+duc_data %>%
+  ggplot(aes(x = pct, y = logdollars, color = model)) +
+  geom_line(size = 1, alpha = .8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed', col = 'black') +
+  scale_x_continuous(breaks = seq(0, 1, by = .1)
+                     , labels = seq(0, 1, by = .1) %>% scales::percent()
+                     , expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(0, 1, by = .1)
+                     , labels = seq(0, 1, by = .1) %>% scales::percent()
+                     , expand = c(0, 0)) +
+  coord_equal() +
+  labs(
+    title = 'Log dollars captured by % of data file examined'
+    , x = '% of data file'
+    , y = '% of log dollars'
+  )
+```
+
+Unsurprisingly, the "eval giving" heuristic performs poorly, and the donor-only models perform poorly when run on the full dataset after the top donors have been identified (around 5%).
+
+Calculating the area under the curve:
+
+```{r}
+# Function to calculate area under the curve
+calc_auc <- function(modelname, metric) {
+  data_subset <- duc_data %>% filter(model == modelname)
+  sum(1/nrow(data_subset) * {data_subset %>% select_(metric) %>% unlist()}) %>%
+    return()
+}
+```
+```{r}
+data.frame(
+  lm_all = calc_auc('lm all', 'logdollars')
+  , gam_all = calc_auc('gam all', 'logdollars')
+  , lm_donors = calc_auc('lm donors', 'logdollars')
+  , gam_donors = calc_auc('gam donors', 'logdollars')
+  , glm_p = calc_auc('gam all', 'logdollars')
+  , gam_p = calc_auc('gam p', 'logdollars')
+  , ev_glm_lm = calc_auc('EV glm lm', 'logdollars')
+  , ev_gam_lm = calc_auc('EV gam lm', 'logdollars')
+  , ev_gam_gam = calc_auc('EV gam gam', 'logdollars')
+  , eval_giving = calc_auc('eval giving', 'logdollars')
+) %>% gather('model', 'auc', lm_all:eval_giving) %>%
+  ggplot(aes(x = reorder(model, auc, FUN = mean), y = auc)) +
+  geom_bar(stat = 'identity') +
+  geom_text(aes(label = round(auc, 3), y = auc - .05), color = 'lightgray') +
+  scale_y_continuous(breaks = seq(0, 1.1, by = .1)) +
+  labs(x = 'model') +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5))
+```
+
+Interestingly, this validates my earlier conclusion that the lm donor model may outperform the gam donor model. The expected value product models (using a gam for the probability piece) do indeed perform slightly better than the others.
+
+Now repeat the exercise with raw (untransformed) dollars.
+
+```{r}
+duc_data %>%
+  ggplot(aes(x = pct, y = dollars, color = model)) +
+  geom_line(size = 1, alpha = .8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed', col = 'black') +
+  scale_x_continuous(breaks = seq(0, 1, by = .1)
+                     , labels = seq(0, 1, by = .1) %>% scales::percent()
+                     , expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(0, 1, by = .1)
+                     , labels = seq(0, 1, by = .1) %>% scales::percent()
+                     , expand = c(0, 0)) +
+  coord_equal() +
+  labs(
+    title = 'Total dollars captured by % of data file examined'
+    , x = '% of data file'
+    , y = '% of dollars'
+  )
+```
+```{r}
+data.frame(
+  lm_all = calc_auc('lm all', 'dollars')
+  , gam_all = calc_auc('gam all', 'dollars')
+  , lm_donors = calc_auc('lm donors', 'dollars')
+  , gam_donors = calc_auc('gam donors', 'dollars')
+  , glm_p = calc_auc('gam all', 'dollars')
+  , gam_p = calc_auc('gam p', 'dollars')
+  , ev_glm_lm = calc_auc('EV glm lm', 'dollars')
+  , ev_gam_lm = calc_auc('EV gam lm', 'dollars')
+  , ev_gam_gam = calc_auc('EV gam gam', 'dollars')
+  , eval_giving = calc_auc('eval giving', 'dollars')
+) %>% gather('model', 'auc', lm_all:eval_giving) %>%
+  ggplot(aes(x = reorder(model, auc, FUN = mean), y = auc)) +
+  geom_bar(stat = 'identity') +
+  geom_text(aes(label = round(auc, 3), y = auc - .05), color = 'lightgray') +
+  scale_y_continuous(breaks = seq(0, 1.1, by = .1)) +
+  labs(x = 'model') +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5))
+```
+
+Now the heuristic performs very well, but interestingly it is still outperformed by the models fit on donor giving amounts. These results support my earlier conclusions that both expected value and expected giving should be considered when prioritizing prospects.

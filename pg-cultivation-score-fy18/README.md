@@ -12,3 +12,4 @@ HTML rendering:
   * [05b GAM experimentation](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/05b%20GAM%20experimentation.nb.html)
   * [06 KSM model tuning](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/06%20KSM%20model%20tuning.nb.html)
   * [07 KSM model refresh](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/07%20KSM%20model%20refresh.nb.html)
+  * [08 Dollars Under the Curve](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/08%20Dollars%20Under%20the%20Curve.nb.html) - my half-baked attempt to develop a standardized metric comparing models using very different techniques
