@@ -13,7 +13,7 @@ output:
 
 The other day, I was reflecting on modeling practices in fundraising. The most common application I've seen -- and the one this entire series covers -- is prioritizing prospects based on their expected giving.
 
-It's not immediately obvious how to go about comparing different techniques given that the usual accuracy metrics like classification error, RMSE, probability calibration, etc. are not directly comparable, not to mention hard classifiers and . However, since the difference in output between these different modeling techniques, heuristics, and algorithms ultimately comes down to sort order, why not compare that sort order directly?
+It's not immediately obvious how to go about comparing different techniques given that the usual accuracy metrics like classification error, RMSE, probability calibration, etc. are not directly comparable, not to mention hard classifiers and various machine learning-inspired methods. However, since the difference in output between these different modeling techniques, heuristics, and algorithms ultimately comes down to sort order, why not compare that sort order directly?
 
 I propose a Dollars Under the Curve to Kellogg (DUCK) metric, analogous to ROC curves. Rather than plotting the true positive rate against the false positive rate, plot the proportion of dollars captured against the proportion of data examined.
 
