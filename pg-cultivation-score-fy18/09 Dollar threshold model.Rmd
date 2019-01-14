@@ -1,0 +1,203 @@
+---
+title: "09 Dollar threshold model"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    code_folding: hide
+    toc: yes
+    toc_float:
+      collapsed: no
+---
+
+# Goal
+
+Explore whether using a $\text{giving} \geq \$g$ threshold improves donor identification compared to no threshold, i.e.
+
+$$ E \left( \text{giving, g level donor | covariates} \right) = E \left(\text{giving | g level donor, covariates} \right) P \left(\text{g level donor | covariates} \right) $$
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(reshape2)
+library(gridExtra)
+library(splines)
+library(lubridate)
+library(wranglR)
+library(Boruta)
+library(foreach)
+library(doParallel)
+library(glmnet)
+library(glmnetUtils)
+library(mgcv)
+
+# Functions adapted from previous analysis steps
+source('code/functions.R')
+
+# Visualization functions adapted fron previous analysis steps
+source('code/functions_viz.R')
+
+# Set number of available CPU cores
+registerDoParallel(detectCores() - 2)
+```
+```{r}
+# Parameters
+train_fy <- 2016
+filepath <- 'data/2018-11-30 point-in-time data.xlsx'
+sheetname <- 'Select point_in_time_model'
+
+# Import data
+source('code/generate-pit-data.R')
+
+# Run data generation functions
+giving.threshold = 1E4
+modeling.data <- generate_pit_data(filepath, sheetname) %>%
+  generate_additional_predictors(giving.threshold = giving.threshold)
+```
+
+Setting $g =$ `r giving.threshold %>% scales::dollar() %>% I()` yields `r modeling.data %>% filter(rv.gave == TRUE) %>% nrow()` donors.
+
+# Classification model
+
+## Variable selection
+
+```{r}
+samp <- modeling.data %>% filter(rv.gave == TRUE)
+# Sample rows
+prop = 1/50 # Proportion of nondonors to sample
+set.seed(378055)
+samp <- rbind(
+  samp
+  , sample_n(modeling.data %>% filter(rv.gave == FALSE)
+             , size = nrow(modeling.data %>% filter(rv.gave == FALSE)) * prop)
+)
+# Run Boruta algorithm
+rf.vars <- Boruta(
+  y = as.numeric(samp$rv.gave)
+  , x = samp %>% select(-rv.amt, -rv.gave, -ID_NUMBER, -HOUSEHOLD_ID, -INSTITUTIONAL_SUFFIX, -DEGREES_CONCAT)
+  , seed = 8906
+)
+```
+```{r, fig.width = 8, fig.height = 20}
+rf.vars %>% Borutadata() %>% Borutaplotter()
+```
+
+```{r}
+glm.recommended.vars <- rf.vars %>% TentativeRoughFix()
+print(glm.recommended.vars)
+```
+
+## Model tuning
+
+```{r}
+gam_p <- gam(
+  rv.gave ~
+  PREF_ADDR_TYPE_CODE +
+  BUS_IS_EMPLOYED
+  , data = modeling.data
+  , family = 'binomial'
+  , control = list(nthreads = 10)
+)
+```
+
+# Regression model
+
+## Variable selection
+
+```{r}
+mg.donors <- modeling.data %>%
+  filter(rv.gave == TRUE) %>%
+  select(-rv.gave, -ID_NUMBER, -HOUSEHOLD_ID, -INSTITUTIONAL_SUFFIX, -DEGREES_CONCAT)
+
+# Run Boruta algorithm
+rf.vars.lm <- Boruta(
+    y = log10(mg.donors$rv.amt)
+    , x = mg.donors %>% select(-rv.amt)
+    , seed = 3137965
+  )
+```
+```{r, fig.width = 8, fig.height = 20}
+rf.vars.lm %>% Borutadata() %>% Borutaplotter()
+```
+
+```{r}
+lm.recommended.vars <- rf.vars.100k.lm %>% TentativeRoughFix()
+print(lm.recommended.vars)
+```
+```{r}
+lm.recommended.vars$finalDecision[which(lm.recommended.vars$finalDecision == 'Confirmed')] %>% names()
+```
+
+Again, many of these are collinear.
+
+## Model tuning
+
+```{r}
+gam_donors <- gam(
+  rv.amt ~
+    GIFT_CLUB_BEQUEST_YRS +
+    s(GIVING_MAX_CASH_AMT) +
+    s(UOR_LOWER_BOUND) +
+    GIFT_CLUB_KLC_YRS +
+    s(CASH_PFY1) +
+    s(CASH_PFY3) +
+    s(NGC_PFY1) +
+    s(NGC_PFY3) +
+    s(NGC_PFY5) +
+    s(VELOCITY3_LIN_CASH) +
+    s(VISITS_5FY) +
+    s(EVENTS_PFY1) +
+    KSM_PROSPECT +
+    s(MONTHS_ASSIGNED) +
+    s(COMMITTEE_NU_DISTINCT) +
+    s(PLEDGE_BALANCE)
+  , data = mg.donors
+  , family = 'gaussian'
+)
+```
+```{r}
+summary(gam_donors)
+```
+
+The $R^2_\text{adj}$ isn't bad. Looks like the cash variables can be dropped as well as months assigned.
+
+```{r}
+gam_donors <- gam(
+  rv.amt ~
+    GIFT_CLUB_BEQUEST_YRS +
+    s(UOR_LOWER_BOUND) +
+    s(EVALUATION_LOWER_BOUND) +
+    GIFT_CLUB_KLC_YRS +
+    s(NGC_PFY1) +
+    s(NGC_PFY2) +
+    s(NGC_PFY3) +
+    s(NGC_PFY4) +
+    s(NGC_PFY5) +
+    s(VELOCITY3_LIN_CASH) +
+    s(VISITS_5FY) +
+    s(EVENTS_PFY1) +
+    KSM_PROSPECT +
+    s(COMMITTEE_NU_DISTINCT) +
+    s(PLEDGE_BALANCE)
+  , data = mg.donors
+  , family = 'gaussian'
+)
+```
+```{r}
+summary(gam_donors)
+```
+
+```{r}
+data.frame(
+  model = 'gam'
+  , adj.r.sq = summary(gam_donors)$r.sq
+  , insample_mse = calc_mse(y = gam_donors$model$rv.amt, yhat = gam_donors$fitted)
+  , overall_mse = calc_mse(y = modeling.data$rv.amt, yhat = predict(gam_donors, newdata = modeling.data))
+)
+```
+
+In this case, the intercept leads to a huge MSE.
+
+# 

@@ -305,7 +305,7 @@ generate_pit_data <- function(filepath, sheetname) {
   
 }
 
-generate_additional_predictors <- function(dataframe, future.data = FALSE) {
+generate_additional_predictors <- function(dataframe, future.data = FALSE, giving.threshold = 0) {
   dataframe %>%
   mutate(
     # Create response variables
@@ -314,7 +314,7 @@ generate_additional_predictors <- function(dataframe, future.data = FALSE) {
       future.data == FALSE ~ NGC_TARGET_FY2 + NGC_TARGET_FY1
       , future.data == TRUE ~ 0
     )
-    , rv.gave = rv.amt > 0
+    , rv.gave = rv.amt > giving.threshold
   ) %>% select(
     # Drop future data
     -NGC_TARGET_FY2
