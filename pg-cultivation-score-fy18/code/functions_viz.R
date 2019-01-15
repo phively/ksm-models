@@ -354,3 +354,18 @@ plot_corrs <- function(numeric.data, textsize = 3) {
   # Return results
   return()
 }
+
+# Dollars under the curve data generation function
+duc_data_gen <- function(fitted, actual) {
+  data.frame(
+    fitted = fitted %>% unlist()
+    , logdollars = actual %>% unlist()
+    , dollars = log10plus1(actual, inverse = TRUE) %>% unlist()
+  ) %>% arrange(desc(fitted)) %>%
+    mutate(
+      logdollars = cumsum(logdollars) / sum(logdollars)
+      , dollars = cumsum(dollars) / sum(dollars)
+      , pct = (row_number() %>% as.numeric()) / length(actual)
+    ) %>%
+    return()
+}
