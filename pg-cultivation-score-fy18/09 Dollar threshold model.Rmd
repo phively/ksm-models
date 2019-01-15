@@ -13,7 +13,7 @@ output:
 
 # Goal
 
-Explore whether using a $\text{giving} \geq \g$ dollar threshold improves donor identification compared to no threshold, i.e.
+Explore whether using a $\text{giving} \geq g$ dollar threshold improves donor identification compared to no threshold, i.e.
 
 $$ E \left( \text{giving, g level donor | covariates} \right) = E \left(\text{giving | g level donor, covariates} \right) P \left(\text{g level donor | covariates} \right) $$
 
@@ -232,20 +232,62 @@ summary(gam_donors)
 
 The $R^2_\text{adj}$ isn't bad.
 
+## All data model
+
+Additionally, fit a regression model on the entire dataset, not just high-end `r giving.threshold %>% scales::dollar()` donors.
+
 ```{r}
-data.frame(
-  model = 'gam'
-  , adj.r.sq = summary(gam_donors)$r.sq
-  , insample_mse = calc_mse(y = gam_donors$model$rv.amt, yhat = gam_donors$fitted)
-  , outsample_mse = calc_mse(
-    y = holdoutdat %>% filter(rv.gave == TRUE) %>% select(rv.amt) %>% unlist()
-    , yhat = predict(gam_donors, newdata = holdoutdat %>% filter(rv.gave == TRUE))
-  )
-  , overall_mse = calc_mse(y = modeling.data$rv.amt, yhat = predict(gam_donors, newdata = modeling.data))
+gam_all <- gam(
+  rv.amt ~
+    GIFT_CLUB_BEQUEST_YRS +
+    s(GIVING_MAX_CASH_AMT) +
+    s(UOR_LOWER_BOUND) +
+    GIFT_CLUB_KLC_YRS +
+    s(CASH_PFY1) +
+    s(CASH_PFY3) +
+    s(NGC_PFY1) +
+    s(NGC_PFY3) +
+    s(NGC_PFY5) +
+    s(VELOCITY3_LIN_CASH) +
+    s(VISITS_5FY) +
+    s(EVENTS_PFY1) +
+    KSM_PROSPECT +
+    s(MONTHS_ASSIGNED) +
+    s(COMMITTEE_NU_DISTINCT) +
+    s(PLEDGE_BALANCE)
+  , data = traindat
+  , family = 'gaussian'
 )
 ```
 
-In this case, the intercept leads to a huge overall MSE. However, in the final model this will be reduced because most entities have a very low $P \left(\text{g level donor | covariates} \right)$
+## Comparison
+
+```{r}
+data.frame(
+  model = c('gam threshold', 'gam all')
+  , adj.r.sq = c(summary(gam_donors)$r.sq, summary(gam_all)$r.sq)
+  , insample_mse = c(
+    calc_mse(y = gam_donors$model$rv.amt, yhat = gam_donors$fitted)
+    , calc_mse(y = gam_all$model$rv.amt, yhat = gam_all$fitted)
+  )
+  , outsample_mse = c(
+    calc_mse(
+      y = holdoutdat %>% filter(rv.gave == TRUE) %>% select(rv.amt) %>% unlist()
+      , yhat = predict(gam_donors, newdata = holdoutdat %>% filter(rv.gave == TRUE))
+    )
+    , calc_mse(
+      y = holdoutdat %>% select(rv.amt) %>% unlist()
+      , yhat = predict(gam_all, newdata = holdoutdat)
+    )
+  )
+  , overall_mse = c(
+    calc_mse(y = modeling.data$rv.amt, yhat = predict(gam_donors, newdata = modeling.data))
+    , calc_mse(y = modeling.data$rv.amt, yhat = predict(gam_all, newdata = modeling.data))
+  )
+)
+```
+
+In this case, the intercept for the `r giving.threshold %>% scales::dollar()` threshold model leads to a huge overall MSE. However, in the final model this will be reduced because most entities have a very low $P \left(\text{g level donor | covariates} \right)$
 
 # Sorted list
 
@@ -283,16 +325,20 @@ predictions <- data.frame(
   truth = modeling.data$rv.amt
   , prob.mod = predict(gam_p, newdata = modeling.data, type = 'response')
   , reg.mod = predict(gam_donors, newdata = modeling.data)
+  , allreg.mod = predict(gam_all, newdata = modeling.data)
 ) %>% mutate(
-  ev = prob.mod * reg.mod
+  ev.thresh = prob.mod * reg.mod
+  , ev.all = prob.mod * allreg.mod
 )
 ```
 ```{r}
 # Create lines for plotting
 duc_data <- rbind(
   data.frame(model = 'probability', duc_data_gen(predictions$prob.mod, predictions$truth))
-  , data.frame(model = 'regression', duc_data_gen(predictions$reg.mod, predictions$truth))
-  , data.frame(model = 'ev', duc_data_gen(predictions$ev, predictions$truth))
+  , data.frame(model = 'reg thresh', duc_data_gen(predictions$reg.mod, predictions$truth))
+  , data.frame(model = 'reg all', duc_data_gen(predictions$allreg.mod, predictions$truth))
+  , data.frame(model = 'ev thresh', duc_data_gen(predictions$ev.thresh, predictions$truth))
+  , data.frame(model = 'ev all', duc_data_gen(predictions$ev.all, predictions$truth))
   , data.frame(model = 'eval giving', duc_data_gen(eval_giving$fitted, eval_giving$rv.amt))
 )
 ```
@@ -335,4 +381,4 @@ duc_data %>%
   )
 ```
 
-The probability model greatly outperforms the regression model. Furthermore, compare this plot to [previous results](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/08%20Dollars%20Under%20the%20Curve.nb.html#dollars_under_the_curve). Fitting a model to just high-end donors results in greatly degraded performance compared to looking at all donors and gifts at any dollar level.
+The thresholded probability model greatly outperforms the thresholded regression model. However, the regression model fit to the entire dataset outperforms everything else handily. Apparently, fitting a model to just high-end donors results in greatly degraded performance compared to looking at all donors and gifts at any dollar level.
