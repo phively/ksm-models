@@ -317,7 +317,6 @@ eval_giving <- modeling.data %>%
   )
 ```
 
-
 # Dollars under the curve
 
 ```{r}
@@ -382,3 +381,54 @@ duc_data %>%
 ```
 
 The thresholded probability model greatly outperforms the thresholded regression model. However, the regression model fit to the entire dataset outperforms everything else handily. Apparently, fitting a model to just high-end donors results in greatly degraded performance compared to looking at all donors and gifts at any dollar level.
+
+Finally, consider the best-case scenario for the thresholded model: where giving below the `r giving.threshold %>% scales::dollar()` level is set to 0.
+
+```{r}
+thresholder <- function(x) {
+  ifelse(x < log10plus1(giving.threshold), 0, x)
+}
+rbind(
+  data.frame(model = 'probability', duc_data_gen(
+    predictions$prob.mod
+    , thresholder(predictions$truth)
+  ))
+  , data.frame(model = 'reg thresh', duc_data_gen(
+    predictions$reg.mod
+    , thresholder(predictions$truth)
+  ))
+  , data.frame(model = 'reg all', duc_data_gen(
+    predictions$allreg.mod
+    , thresholder(predictions$truth)
+  ))
+  , data.frame(model = 'ev thresh', duc_data_gen(
+    predictions$ev.thresh
+    , thresholder(predictions$truth)
+  ))
+  , data.frame(model = 'ev all', duc_data_gen(
+    predictions$ev.all
+    , thresholder(predictions$truth)
+  ))
+  , data.frame(model = 'eval giving', duc_data_gen(
+    eval_giving$fitted
+    , thresholder(eval_giving$rv.amt)
+  ))
+) %>%
+  ggplot(aes(x = pct, y = logdollars, color = model)) +
+  geom_line(size = 1, alpha = .8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed', col = 'black') +
+  scale_x_continuous(breaks = seq(0, 1, by = .1)
+                     , labels = seq(0, 1, by = .1) %>% scales::percent()
+                     , expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(0, 1, by = .1)
+                     , labels = seq(0, 1, by = .1) %>% scales::percent()
+                     , expand = c(0, 0)) +
+  coord_equal() +
+  labs(
+    title = 'Thresholded log dollars captured by % of data file examined'
+    , x = '% of data file'
+    , y = '% of dollars'
+  )
+```
+
+Thresholded EV has finally caught up to the all data EV, at the cost of disregarding lower-dollar giving.
