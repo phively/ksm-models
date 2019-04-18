@@ -45,7 +45,7 @@ conf_matrix <- function(model, newdata = NULL, rv = NULL, threshold = .5) {
       , error = error
       , precision = precision
       , sensitivity = sensitivity
-      , F1_score = (precision * sensitivity) / (precision + sensitivity)
+      , F1_score = 2 * (precision * sensitivity) / (precision + sensitivity)
     )
   )
 }
@@ -75,7 +75,7 @@ conf_matrix_glmnet <- function(model, newdata = NULL, rv = NULL, threshold = .5)
       , error = error
       , precision = precision
       , sensitivity = sensitivity
-      , F1_score = (precision * sensitivity) / (precision + sensitivity)
+      , F1_score = 2 * (precision * sensitivity) / (precision + sensitivity)
     )
   )
 }
