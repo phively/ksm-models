@@ -1,0 +1,43 @@
+---
+title: "01 Investigating data sources"
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+The overall goal of this project is to predict alumni interests and connect them to the university's giving and volunteering initiatives by analyzing unstructured data associated with their records. To that end, I need to begin by determining what, precisely, is the *scope* of the data I'm interested in and which modeling techniques are appropriate.
+
+# Possible data sources
+
+There are thousands of free text fields in the CRM that contain data, and these fields might be clean/updated to a greater or lesser degree depending on the field and the record it's attached to. Beyond that, there are external work products like proposals and bios, and vendor-provided information including work history, philanthropy, etc.
+
+(What is my scope?)
+
+# Possible approaches
+
+NLP - probably not
+Text mining - probably yes
+
+Vectors (e.g. word2vec) versus topics (e.g. LDA) - different strengths
+
+# Data exploration
+
+Known demographics
+  * Academics: degree, majors, etc.
+  * Employment: employers, job titles, career interests
+
+Known engagement
+  * Contact reports (data quality issues...visits only?)
+  * Giving (allocation names and/or fund descriptions?)
+  * Committee names (or descriptions?)
+  * Student activities (or descriptions?)
+  * Events?  (are descriptions available?)
+
+Pie in the sky
+  * LiveAlumni data?
+  * Proposals? (language around campaign priorities)
+  * Articles they read??
