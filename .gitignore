@@ -27,6 +27,7 @@ $RECYCLE.BIN/
 # Tabular data, Excel, etc.
 *.csv
 *.xls*
+*.xml
 
 # Saved Rdata
 */environment/*.Rdata
