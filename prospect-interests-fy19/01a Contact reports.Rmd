@@ -23,9 +23,12 @@ library(lubridate) # date formatting
 
 Apparently the xml file contains lots of invalid entries, so reading it directly is a no-go:
 
-```{r}
+```{r, eval = FALSE}
 xml <- read_xml('data/2019-04-25 CAT contact reports.xml')
 ```
+
+$\color{red}{\text{Error in doc_parse_file(con, encoding = encoding, as_html = as_html, options = options) :}}$
+$\color{red}{\text{PCDATA invalid Char value 18 [9]}}$
 
 But reading it in as a string works just fine.
 
@@ -33,7 +36,7 @@ But reading it in as a string works just fine.
 data <- read_file('data/2019-04-25 CAT contact reports.xml')
 ```
 
-```{r, include = FALSE}
+```{r, include = FALSE, eval = FALSE}
 # Running some tests
 a <- str_sub(data, start = 1, end = 10000)
 
@@ -57,7 +60,7 @@ clean_data <- data %>%
 
 Now that that's done, I can manually write each tag into a data frame.
 
-```{r, include = FALSE}
+```{r, include = FALSE, eval = FALSE}
 # More tests
 c <- data.frame(
     ID_NUMBER = b %>% str_extract_all(pattern = '(?<=<ID_NUMBER>).*(?=</ID_NUMBER>)') %>%
@@ -115,6 +118,15 @@ visits <- data.frame(
   , DESCRIPTION = clean_data %>% xmler('DESCRIPTION')
   , SUMMARY = clean_data %>% xmler('SUMMARY')
   , stringsAsFactors = FALSE
+)
+```
+
+Finally, update the data with suitable datatypes.
+
+```{r}
+visits <- visits %>% mutate(
+  CONTACT_FY = CONTACT_FY %>% as.numeric()
+  , CONTACT_DATE = CONTACT_DATE %>% mdy()
 )
 ```
 
