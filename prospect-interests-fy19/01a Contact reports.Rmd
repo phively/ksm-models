@@ -1,0 +1,120 @@
+---
+title: "01a Contact reports"
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+Examine contact report data and assess suitability for text modeling. Specifically, 92,480 visit reports were pulled into an xml file on 2019-04-25. 
+
+# Libraries
+
+```{r setup, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(xml2) # .xml file parsing
+library(lubridate) # date formatting
+```
+
+# Load data
+
+Apparently the xml file contains lots of invalid entries, so reading it directly is a no-go:
+
+```{r}
+xml <- read_xml('data/2019-04-25 CAT contact reports.xml')
+```
+
+But reading it in as a string works just fine.
+
+```{r}
+data <- read_file('data/2019-04-25 CAT contact reports.xml')
+```
+
+```{r, include = FALSE}
+# Running some tests
+a <- str_sub(data, start = 1, end = 10000)
+
+b <- a %>%
+  str_replace_all(pattern = '( |  |\\r|\\n)', replacement = ' ') %>%
+  str_extract_all(pattern = '<ROW>.*?</ROW>') %>%
+  unlist()
+```
+
+Pull each <ROW> </ROW> tag into its own element of a vector of strings.
+
+```{r}
+clean_data <- data %>%
+  # Remove newline, return, etc.
+  str_replace_all(pattern = '( |  |\\r|\\n)', replacement = ' ') %>%
+  # Extract each <ROW> from the data
+  str_extract_all(pattern = '<ROW>.*?</ROW>') %>%
+  # Store as a character vector, not a list
+  unlist()
+```
+
+Now that that's done, I can manually write each tag into a data frame.
+
+```{r, include = FALSE}
+# More tests
+c <- data.frame(
+    ID_NUMBER = b %>% str_extract_all(pattern = '(?<=<ID_NUMBER>).*(?=</ID_NUMBER>)') %>%
+    unlist()
+  , ID_NUMBER_2 = b %>% str_extract_all(pattern = '(?<=<ID_NUMBER_2>).*(?=</ID_NUMBER_2>)') %>%
+    unlist()
+  , CONTACT_DATE = b %>% str_extract_all(pattern = '(?<=<CONTACT_DATE>).*(?=</CONTACT_DATE>)') %>%
+    unlist()
+  , CONTACT_FY = b %>% str_extract_all(pattern = '(?<=<CONTACT_FY>).*(?=</CONTACT_FY>)') %>%
+    unlist()
+  , DESCRIPTION = b %>% str_extract_all(pattern = '(?<=<DESCRIPTION>).*(?=</DESCRIPTION>)') %>%
+    unlist()
+  , SUMMARY = b %>% str_extract_all(pattern = '(?<=<SUMMARY>).*(?=</SUMMARY>)') %>%
+    unlist()
+  , stringsAsFactors = FALSE
+)
+
+# Try a function
+xmler <- function(data, colname) {
+  pattern <- paste0('(?<=<', colname, '>).*(?=</', colname, '>)')
+  return(
+    str_extract_all(data, pattern = pattern) %>% unlist()
+  )
+}
+
+# More tests
+d <- data.frame(
+    ID_NUMBER = xmler(b, 'ID_NUMBER')
+  , ID_NUMBER_2 = xmler(b, 'ID_NUMBER_2')
+  , CONTACT_DATE = xmler(b, 'CONTACT_DATE')
+  , CONTACT_FY = xmler(b, 'CONTACT_FY')
+  , DESCRIPTION = xmler(b, 'DESCRIPTION')
+  , SUMMARY = xmler(b, 'SUMMARY')
+  , stringsAsFactors = FALSE
+)
+
+# Clean up
+remove(a, b, c, d, xmler)
+```
+
+```{r}
+# Function to pull out specific elements between <TAG></TAG>
+xmler <- function(data, tagname) {
+  tag_pattern <- paste0('(?<=<', tagname, '>).*(?=</', tagname, '>)')
+  return(
+    str_extract_all(data, pattern = tag_pattern) %>% unlist()
+  )
+}
+
+visits <- data.frame(
+  ID_NUMBER = clean_data %>% xmler('ID_NUMBER')
+  , ID_NUMBER_2 = clean_data %>% xmler('ID_NUMBER_2')
+  , CONTACT_DATE = clean_data %>% xmler('CONTACT_DATE')
+  , CONTACT_FY = clean_data %>% xmler('CONTACT_FY')
+  , DESCRIPTION = clean_data %>% xmler('DESCRIPTION')
+  , SUMMARY = clean_data %>% xmler('SUMMARY')
+  , stringsAsFactors = FALSE
+)
+```
+
