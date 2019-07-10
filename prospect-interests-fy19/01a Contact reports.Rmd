@@ -46,18 +46,6 @@ b <- a %>%
   unlist()
 ```
 
-Pull each <ROW> </ROW> tag into its own element of a vector of strings.
-
-```{r}
-clean_data <- data %>%
-  # Remove newline, return, etc.
-  str_replace_all(pattern = '( |  |\\r|\\n)', replacement = ' ') %>%
-  # Extract each <ROW> from the data
-  str_extract_all(pattern = '<ROW>.*?</ROW>') %>%
-  # Store as a character vector, not a list
-  unlist()
-```
-
 Now that that's done, I can manually write each tag into a data frame.
 
 ```{r, include = FALSE, eval = FALSE}
@@ -82,7 +70,7 @@ c <- data.frame(
 xmler <- function(data, colname) {
   pattern <- paste0('(?<=<', colname, '>).*(?=</', colname, '>)')
   return(
-    str_extract_all(data, pattern = pattern) %>% unlist()
+    str_extract_all(data, pattern = pattern)
   )
 }
 
@@ -97,28 +85,40 @@ d <- data.frame(
   , stringsAsFactors = FALSE
 )
 
+# Advanced function
+xmler <- function(data, colnames) {
+  pattern <- paste0('(?<=<', colnames, '>).*(?=</', colnames, '>)')
+  return(
+    str_extract_all(data, pattern = pattern, simplify = TRUE) %>% t()
+  )
+}
+
+# Another test
+headers <- c('ID_NUMBER', 'ID_NUMBER_2', 'CONTACT_DATE', 'CONTACT_FY', 'DESCRIPTION', 'SUMMARY')
+e <- xmler(a, headers) %>%
+  data.frame(stringsAsFactors = FALSE)
+names(e) <- headers
+
 # Clean up
-remove(a, b, c, d, xmler)
+remove(a, b, c, d, e, xmler, headers)
 ```
 
 ```{r}
 # Function to pull out specific elements between <TAG></TAG>
-xmler <- function(data, tagname) {
-  tag_pattern <- paste0('(?<=<', tagname, '>).*(?=</', tagname, '>)')
+xmler <- function(data, tagnames) {
+  tag_pattern <- paste0('(?<=<', tagnames, '>).*(?=</', tagnames, '>)')
   return(
-    str_extract_all(data, pattern = tag_pattern) %>% unlist()
+    str_extract_all(data, pattern = tag_pattern, simplify = TRUE) %>% t()
   )
 }
 
-visits <- data.frame(
-  ID_NUMBER = clean_data %>% xmler('ID_NUMBER')
-  , ID_NUMBER_2 = clean_data %>% xmler('ID_NUMBER_2')
-  , CONTACT_DATE = clean_data %>% xmler('CONTACT_DATE')
-  , CONTACT_FY = clean_data %>% xmler('CONTACT_FY')
-  , DESCRIPTION = clean_data %>% xmler('DESCRIPTION')
-  , SUMMARY = clean_data %>% xmler('SUMMARY')
-  , stringsAsFactors = FALSE
-)
+# Column names from xml export
+headers <- c('ID_NUMBER', 'ID_NUMBER_2', 'CONTACT_DATE', 'CONTACT_FY', 'DESCRIPTION', 'SUMMARY')
+
+# Parse xml into a dataframe
+visits <- data %>% xmler(headers) %>%
+  data.frame(stringsAsFactors = FALSE)
+names(visits) <- headers
 ```
 
 Finally, update the data with suitable datatypes.
@@ -130,3 +130,44 @@ visits <- visits %>% mutate(
 )
 ```
 
+# Text corpus creation
+
+Goal: combine all text associated with each ID_NUMBER into a format that can be modeled.
+
+  1) Separate ID_NUMBER and ID_NUMBER_2
+  2) Look at exploratory statistics for the raw data
+      * e.g. word counts, duplicate description/summary, by year, etc.
+  3) Create a merged dataset combining all text for each ID_NUMBER
+  4) Consider stopword removal
+  5) Look at exploratory statistics for the merged data
+      * e.g. word counts, total observations, etc.
+
+Based on the total size of the final dataset it's possible that some methods will not be suitable (topic models if too few documents, word2vec if too few tokens, etc.)
+
+Begin by appending ID_NUMBER_2 entries as their own rows.
+
+```{r}
+visits <- rbind(
+  # All existing rows
+  visits %>% select(-ID_NUMBER_2)
+  # All rows with an ID_NUMBER_2
+  , visits %>% filter(ID_NUMBER_2 != '') %>% select(-ID_NUMBER) %>% rename(ID_NUMBER = ID_NUMBER_2)
+)
+```
+
+## Raw data exploration
+
+## Merged data
+
+```{r, echo = FALSE, include = FALSE}
+# Example of merging data by ID
+# # Merged dataset; for each answer, paste Body into the Body of the question with matching Id
+# merged <- bind_rows(
+#   posts %>% filter(Name == "Question") %>% select(Id, Body), # Questions
+#   posts %>% filter(Name == "Answer") %>% select(Id = ParentId, Body) # Answers
+# ) %>% group_by(Id) %>% summarise_each(funs(paste(., collapse = " ")))
+```
+
+## Stopwords
+
+## Merged data exploration
