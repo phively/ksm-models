@@ -1,0 +1,70 @@
+---
+title: "10 Model effectiveness"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    code_folding: hide
+    toc: yes
+    toc_float:
+      collapsed: no
+---
+
+# Goal
+
+Now that we have about a year's worth of additional data I'd like to investigate the effectiveness or ROI of the model by looking at different metrics associated with outcomes during the out-of-sample period. Some ideas:
+
+  * Giving (direct measure)
+  * Visits (indirect measure)
+  * Qualifications/disqualifications (indirect measure)
+  
+# Libraries
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(ggplot2)
+```
+
+# Visit data
+
+I created a SQL query ([roi-visit-outcomes.sql](https://github.com/phively/ksm-models/blob/master/pg-cultivation-score-fy18/code/roi-visit-outcomes.sql)) to look at people who were reached out to specifically for qualification purposes in the last two years.
+
+```{r}
+visits <- readxl::read_xlsx(
+  path = 'data/2019-07-11 qualifications data.xlsx'
+  , sheet = 'With'
+)
+
+# Add some helpful indicators
+visits <- visits %>% mutate(
+  qual = CFY_QUALIFICATION + PFY1_QUALIFICATION > 0
+  , outreach = CFY_OUTREACH + PFY1_OUTREACH > 0
+  , visit = CFY_VISITS + PFY1_VISITS > 0
+  , scored = !is.na(PR_SCORE)
+)
+```
+
+```{r}
+rbind(
+  Total.contacted = visits %>% nrow()
+  , With.PR.score = visits %>% filter(scored) %>% nrow()
+  , Never.visited = visits %>% filter(is.na(FIRST_VISIT_FY)) %>% nrow()
+  , FY19.first.visit = visits %>% filter(FIRST_VISIT_FY == 2019) %>% nrow()
+)
+```
+
+```{r}
+visits_score <- visits %>% filter(scored)
+
+rbind(
+  With.outreach = visits_score %>% filter(scored & outreach) %>% nrow()
+  , With.qual = visits_score %>% filter(scored & qual) %>% nrow()
+  , With.outreach.visit = visits_score %>% filter(scored & outreach & visit) %>% nrow()
+  , With.qual.visit = visits_score %>% filter(scored & qual & visit) %>% nrow()
+)
+```
+
+This is more than enough first-time visits for an analysis. Begin by looking at qualification counts and visit outcomes by PR score.
+
+
