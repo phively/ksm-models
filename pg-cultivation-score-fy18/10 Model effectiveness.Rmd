@@ -32,16 +32,20 @@ I created a SQL query ([roi-visit-outcomes.sql](https://github.com/phively/ksm-m
 
 ```{r}
 visits <- readxl::read_xlsx(
-  path = 'data/2019-07-11 qualifications data.xlsx'
+  path = 'data/2019-07-23 qualifications data.xlsx'
   , sheet = 'With'
 )
 
 # Add some helpful indicators
 visits <- visits %>% mutate(
+  # Only outreach since the model data year
   qual = CFY_QUALIFICATION + PFY1_QUALIFICATION > 0
+  , qual_EXCL_VISIT = CFY_QUALIFICATION_EXCL_VISIT + PFY1_QUALIFICATION_EXCL_VISIT > 0
   , outreach = CFY_OUTREACH + PFY1_OUTREACH > 0
-  , visit = CFY_VISITS + PFY1_VISITS > 0
+  , visit = CFY_VISITS + PFY1_VISITS + PFY2_VISITS > 0
   , scored = !is.na(PR_SCORE)
+  , never_visited = is.na(FIRST_VISIT_FY)
+  , fy19_first_visit = !never_visited & FIRST_VISIT_FY == 2019
 )
 ```
 
@@ -49,22 +53,205 @@ visits <- visits %>% mutate(
 rbind(
   Total.contacted = visits %>% nrow()
   , With.PR.score = visits %>% filter(scored) %>% nrow()
-  , Never.visited = visits %>% filter(is.na(FIRST_VISIT_FY)) %>% nrow()
-  , FY19.first.visit = visits %>% filter(FIRST_VISIT_FY == 2019) %>% nrow()
+  , Never.visited = visits %>% filter(never_visited) %>% nrow()
+  , FY19.first.visit = visits %>% filter(fy19_first_visit) %>% nrow()
 )
 ```
 
 ```{r}
-visits_score <- visits %>% filter(scored)
+rbind(
+  With.outreach = visits %>% filter(scored & outreach) %>% nrow()
+  , With.qual = visits %>% filter(scored & outreach) %>% filter(qual_EXCL_VISIT) %>% nrow()
+  , With.outreach.visit = visits %>% filter(scored & outreach & visit) %>% nrow()
+  , With.qual.visit = visits %>% filter(scored & qual_EXCL_VISIT & visit) %>% nrow()
+)
+```
+
+```{r}
+visits_first_potential <- visits %>% filter(scored) %>% filter(fy19_first_visit | never_visited)
 
 rbind(
-  With.outreach = visits_score %>% filter(scored & outreach) %>% nrow()
-  , With.qual = visits_score %>% filter(scored & qual) %>% nrow()
-  , With.outreach.visit = visits_score %>% filter(scored & outreach & visit) %>% nrow()
-  , With.qual.visit = visits_score %>% filter(scored & qual & visit) %>% nrow()
+  With.outreach = visits_first_potential %>% filter(outreach) %>% nrow()
+  , With.qual = visits_first_potential %>% filter(qual_EXCL_VISIT) %>% nrow()
+  , With.outreach.visit = visits_first_potential %>% filter(outreach & visit) %>% nrow()
+  , With.qual.visit = visits_first_potential %>% filter(qual_EXCL_VISIT & visit) %>% nrow()
 )
 ```
 
 This is more than enough first-time visits for an analysis. Begin by looking at qualification counts and visit outcomes by PR score.
 
+```{r}
+visits %>%
+  # Only people with qualification attempts
+  filter(scored & qual_EXCL_VISIT) %>%
+  # Must have had non-visit qualification attempts last year
+  filter(PFY1_QUALIFICATION_EXCL_VISIT > 0) %>%
+  ggplot(aes(x = PR_SCORE)) +
+  geom_point(aes(color = visit, y = as.numeric(visit))) +
+  geom_density(color = 'darkgray') +
+  geom_smooth(aes(y = as.numeric(visit)), method = 'loess') +
+  labs(y = 'Visit proportion', title = 'FY18-19 qualification attempts leading to visits')
+```
 
+
+```{r}
+visits_first_potential %>%
+  # Only people with qualification attempts in the last couple years
+  filter(qual_EXCL_VISIT | outreach) %>%
+  ggplot(aes(x = PR_SCORE)) +
+  geom_point(aes(color = fy19_first_visit, y = as.numeric(visit))) +
+  geom_density(color = 'darkgray') +
+  geom_smooth(aes(y = as.numeric(visit)), method = 'loess') +
+  labs(y = 'First visit proportion', title = 'FY18-19 qualification attempts leading to FY19 first visit')
+```
+
+So that's somewhat promising.
+
+# FY19 visit status predictions
+
+Start by looking at people who took first visits this year based on last year's outreach.
+
+```{r}
+model <- visits_first_potential %>% glm(
+  fy19_first_visit ~
+    PR_SCORE +
+    ID_SCORE +
+    log10(EVALUATION_LOWER_BOUND + 1) +
+    sqrt(PFY1_QUALIFICATION_EXCL_VISIT) +
+    sqrt(PFY2_QUALIFICATION_EXCL_VISIT) +
+    sqrt(PFY3_QUALIFICATION_EXCL_VISIT) +
+    sqrt(PFY1_OUTREACH) + 
+    sqrt(PFY2_OUTREACH) + 
+    sqrt(PFY3_OUTREACH) +
+    sqrt(PFY1_EMAIL) +
+    sqrt(PFY2_EMAIL) +
+    sqrt(PFY3_EMAIL) +
+    sqrt(PFY1_PHONE) + 
+    sqrt(PFY2_PHONE) +
+    sqrt(PFY3_PHONE) +
+    PROGRAM_GROUP
+  , data = .
+)
+
+summary(model)
+```
+
+Or combining years:
+
+```{r}
+model_b <- visits_first_potential %>% mutate(
+  ALLPFY_QUAL_EXCL_VISIT = PFY1_QUALIFICATION_EXCL_VISIT + PFY2_QUALIFICATION_EXCL_VISIT + PFY3_QUALIFICATION_EXCL_VISIT
+) %>% glm(
+  fy19_first_visit ~
+    PR_SCORE +
+    ID_SCORE +
+    log10(EVALUATION_LOWER_BOUND + 1) +
+    sqrt(ALLPFY_QUAL_EXCL_VISIT) +
+    sqrt(PFY1_OUTREACH + PFY2_OUTREACH + PFY3_OUTREACH) +
+    sqrt(PFY1_EMAIL + PFY2_EMAIL + PFY3_EMAIL) +
+    sqrt(PFY1_PHONE + PFY2_PHONE + PFY3_PHONE) +
+    PROGRAM_GROUP
+  , data = .
+)
+
+summary(model_b)
+```
+
+Compare this to just using PR score.
+
+```{r}
+update(model_b, formula = . ~ . - ID_SCORE, data = visits_first_potential %>% mutate(
+  ALLPFY_QUAL_EXCL_VISIT = PFY1_QUALIFICATION_EXCL_VISIT + PFY2_QUALIFICATION_EXCL_VISIT + PFY3_QUALIFICATION_EXCL_VISIT
+)) %>% summary()
+```
+
+Interesting; ID_SCORE is far and away the best predictor of visits. Presumably PR score turns out to be too similar. let's look at visit proportion by ID score instead of PR score.
+
+```{r}
+visits_first_potential %>%
+  # Only people with qualification attempts in the last couple years
+  filter(qual_EXCL_VISIT | outreach) %>%
+  ggplot(aes(x = ID_SCORE)) +
+  geom_point(aes(y = as.numeric(fy19_first_visit), color = fy19_first_visit)) +
+  geom_density(color = 'darkgray') +
+  geom_smooth(aes(y = as.numeric(fy19_first_visit)), method = 'loess') +
+  labs(y = 'First visit proportion', title = 'FY18-19 qualification attempts leading to FY19 first visit (ID score)')
+```
+
+Or looking at only the ID_score below 4.5:
+
+```{r}
+visits_first_potential %>%
+  # Remove ID_SCORE above 4.5
+  filter(ID_SCORE < 4.5) %>%
+  # Only people with qualification attempts in the last couple years
+  filter(qual_EXCL_VISIT | outreach) %>%
+  ggplot(aes(x = ID_SCORE)) +
+  geom_point(aes(color = fy19_first_visit, y = as.numeric(fy19_first_visit))) +
+  geom_density(color = 'darkgray') +
+  geom_smooth(aes(y = as.numeric(fy19_first_visit)), method = 'loess') +
+  labs(y = 'First visit proportion', title = 'FY18-19 qualification attempts leading to FY19 first visit (ID score)')
+```
+
+That's a pretty compelling demonstration. Past 2.5 a higher ID_SCORE is pretty much linearly associated with a higher proportion of successful visits.
+
+# PR and ID score metrics
+
+Some summary statistics for each score.
+
+```{r}
+visits_first_potential %>%
+  filter(qual_EXCL_VISIT | outreach) %>%
+  select(PR_SCORE, ID_SCORE) %>%
+  summary()
+```
+
+```{r}
+binned_scores <- visits_first_potential %>% mutate(
+  # Truncate in .5 increments
+  PR_bin = trunc(PR_SCORE / .5) * .5
+    , ID_bin = trunc(ID_SCORE / .5) * .5
+)
+```
+
+
+Looking at the same population of potential first-time visits:
+
+```{r}
+binned_scores %>%
+  filter(qual_EXCL_VISIT | outreach) %>%
+  ggplot(aes(x = ID_SCORE, y = PR_SCORE)) +
+  geom_point(aes(color = fy19_first_visit)) +
+  geom_smooth(method = 'loess') +
+  geom_smooth(method = 'lm') +
+  geom_abline(slope = 1, intercept = 0, color = 'darkgray')
+```
+
+```{r}
+binned_scores %>%
+  filter(qual_EXCL_VISIT | outreach) %>%
+  ggplot(aes(x = ID_SCORE, y = PR_SCORE)) +
+  geom_point(aes(color = fy19_first_visit)) +
+  geom_smooth(method = 'loess') +
+  geom_smooth(method = 'lm') +
+  geom_abline(slope = 1, intercept = 0, color = 'darkgray') +
+  facet_grid(. ~ fy19_first_visit)
+```
+
+Binned:
+
+```{r}
+binned_scores %>%
+  filter(qual_EXCL_VISIT | outreach) %>%
+  group_by(PR_bin, ID_bin) %>%
+  summarise(n = length(ID_NUMBER)) %>%
+  ggplot(aes(x = ID_bin, y = PR_bin, fill = n)) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  coord_equal() +
+  xlim(c(-.5, 5)) +
+  ylim(c(-.5, 5)) +
+  scale_fill_gradient(name = 'count', trans = 'log10')
+```
+
+My basic takeaway is that the ID score is by far the best predictor of whether someone will take a visit, doing a much better job than any other variable in isolation (the "Excel sort" standard practice). ID scores above 2.5 or so start looking promising. However, we still need to think about whether taking a visit or expected gift value is the right metric.
