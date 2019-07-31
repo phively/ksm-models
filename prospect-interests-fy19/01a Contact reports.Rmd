@@ -70,7 +70,7 @@ c <- data.frame(
 xmler <- function(data, colname) {
   pattern <- paste0('(?<=<', colname, '>).*(?=</', colname, '>)')
   return(
-    str_extract_all(data, pattern = pattern)
+    data %>% str_extract_all(pattern = pattern) %>% unlist()
   )
 }
 
@@ -100,25 +100,36 @@ e <- xmler(a, headers) %>%
 names(e) <- headers
 
 # Clean up
-remove(a, b, c, d, e, xmler, headers)
+remove(a, b, c, d, e, xmler, headers, baddata)
+```
+
+```{r}
+# Convert raw data into row data
+rowdata <- data %>%
+  str_replace_all(pattern = '( |  |\\r|\\n)', replacement = ' ') %>%
+  str_extract_all(pattern = '<ROW>.*?</ROW>') %>%
+  unlist()
 ```
 
 ```{r}
 # Function to pull out specific elements between <TAG></TAG>
-xmler <- function(data, tagnames) {
-  tag_pattern <- paste0('(?<=<', tagnames, '>).*(?=</', tagnames, '>)')
+xmler <- function(data, tagname) {
+  tag_pattern <- paste0('(?<=<', tagname, '>).*(?=</', tagname, '>)')
   return(
-    str_extract_all(data, pattern = tag_pattern, simplify = TRUE) %>% t()
+    str_extract_all(data, pattern = tag_pattern) %>% unlist()
   )
 }
 
-# Column names from xml export
-headers <- c('ID_NUMBER', 'ID_NUMBER_2', 'CONTACT_DATE', 'CONTACT_FY', 'DESCRIPTION', 'SUMMARY')
-
-# Parse xml into a dataframe
-visits <- data %>% xmler(headers) %>%
-  data.frame(stringsAsFactors = FALSE)
-names(visits) <- headers
+# Create visit data frame
+visits <- data.frame(
+    ID_NUMBER = xmler(rowdata, 'ID_NUMBER')
+  , ID_NUMBER_2 = xmler(rowdata, 'ID_NUMBER_2')
+  , CONTACT_DATE = xmler(rowdata, 'CONTACT_DATE')
+  , CONTACT_FY = xmler(rowdata, 'CONTACT_FY')
+  , DESCRIPTION = xmler(rowdata, 'DESCRIPTION')
+  , SUMMARY = xmler(rowdata, 'SUMMARY')
+  , stringsAsFactors = FALSE
+)
 ```
 
 Finally, update the data with suitable datatypes.
@@ -211,7 +222,69 @@ vdat %>%
   scale_x_continuous(breaks = 1:12, minor_breaks = NULL, labels = month.name[c(9:12, 1:8)] %>% str_sub(1, 3))
 ```
 
-Historically, the count of contact reports has increased over time (almost certainly a combination of more outreach plus better data collection), and most activity has occurred in September through November and February through April.
+Historically, the count of contact reports has increased over time (almost certainly a combination of more outreach plus better data collection), and most activity has occurred in September through November and February through May
+
+### Word counts
+
+Word count distribution (log?)
+
+```{r}
+visits <- visits %>%
+  mutate(
+    # Count of words in SUMMARY
+    words = str_count(SUMMARY, '\\w+')
+    , source = 'summary'
+    # If summary was invalid, count words in DESCRIPTION instead
+    , source = ifelse(words >= 1, source, 'description') %>% factor()
+    , words = ifelse(words >= 1, words, str_count(DESCRIPTION, '\\w+'))
+  )
+```
+
+```{r}
+visits %>%
+  ggplot(aes(x = words)) +
+  geom_histogram(binwidth = .1) +
+  geom_vline(xintercept = mean(visits$words), color = 'blue', linetype = 'dotted', alpha = .5) +
+  scale_x_log10() +
+  facet_grid(source ~ .)
+```
+
+It turns out there are actually a number of observations that only have a description, with no valid visit summary filled in.
+
+```{r, rows.print = 1E3}
+vdat <- visits %>%
+  group_by(CONTACT_FY, source) %>%
+  summarise(n = length(ID_NUMBER)) %>%
+  spread(source, n) %>%
+  wranglR::ReplaceValues(old.val = NA, new.val = 0) %>%
+  mutate(summary_pct = {summary / (description + summary)})
+
+vdat %>%
+  ggplot(aes(x = 1:nrow(vdat), y = summary_pct)) +
+  geom_point() +
+  geom_line() +
+  scale_x_continuous(breaks = 1:nrow(vdat), labels = vdat$CONTACT_FY) +
+  labs(title = 'Percent of contact reports with summary text by year'
+       , x = 'fiscal year', y = '% of CRs') +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = .1), labels = scales::percent) +
+  theme(axis.text.x = element_text(angle = 90, vjust = .5))
+```
+
+I wonder what happened in FY 2000? There was a drop in entered summaries.
+
+```{r}
+# Word counts by year
+visits %>%
+  ggplot(aes(x = factor(CONTACT_FY), y = words + 1)) +
+  geom_boxplot() +
+  scale_y_log10(breaks = 10^(0:10), minor_breaks = NULL) +
+  theme(axis.text.x = element_text(angle = 90, vjust = .5)) +
+  labs(title = 'Contact report word counts over time'
+       , y = 'word count', x = 'fiscal year'
+       )
+```
+
+Apparently 2000 was also the year people were asked to do more than paste the DESCRIPTION into the SUMMARY.
 
 ## Merged data
 
