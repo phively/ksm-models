@@ -157,6 +157,62 @@ visits <- rbind(
 
 ## Raw data exploration
 
+```{r}
+visits %>% select(CONTACT_DATE, CONTACT_FY) %>% summary()
+```
+
+
+### Contact reports by date
+
+```{r}
+visits %>%
+  filter(CONTACT_FY > 1800) %>%
+  ggplot(aes(x = CONTACT_FY)) +
+  annotate('rect', xmin = 2007, xmax = 2020, ymin = 0, ymax = Inf, fill = 'lightblue', alpha = .5) +
+  annotate('text', x = 2007, y = -200, label = 'Campaign', hjust = 0, color = 'lightblue') +
+  geom_histogram(binwidth = 1, alpha = .75) +
+  labs(title = 'Contact reports by fiscal year', x = 'fiscal year', y = 'contact reports')
+```
+
+```{r}
+visits %>%
+  filter(CONTACT_FY >= 2007) %>%
+  group_by(mo_yr = round_date(CONTACT_DATE, unit = 'month')) %>%
+  summarise(n = length(ID_NUMBER)) %>%
+  ggplot(aes(x = mo_yr, y = n)) +
+  annotate('rect', xmin = ymd('20070101'), xmax = ymd('20201231')
+           , ymin = 0, ymax = Inf, fill = 'lightblue', alpha = .5) +
+  annotate('text', x = ymd('20070101'), y = -50, label = 'Campaign', hjust = 0, color = 'lightblue') +
+  geom_line(alpha = .75) +
+  labs(title = 'Contact reports by month detail', x = 'calendar year', y = 'contact reports') +
+  scale_x_date(date_breaks = '1 year', date_labels = '%Y', date_minor_breaks = '1 month') +
+  theme(panel.grid.major.x = element_line(color = 'darkgrey'))
+```
+
+```{r}
+# Fiscal month function
+fiscal_mo <- function(mo, start_mo = 9) {
+  (mo - start_mo) %% 12 + 1
+}
+```
+
+
+```{r}
+vdat <- visits %>%
+  filter(CONTACT_FY >= 2007) %>%
+  group_by(mo = fiscal_mo(month(CONTACT_DATE)), CONTACT_FY) %>%
+  summarise(n = length(ID_NUMBER))
+
+vdat %>%
+  ggplot(aes(x = mo, y = n)) +
+  geom_line(aes(color = factor(CONTACT_FY), group = CONTACT_FY), alpha = .75) +
+  geom_line(data = vdat %>% group_by(mo) %>% summarise(n = mean(n)), size = 1, alpha = .25, linetype = 'dotted') +
+  labs(title = 'Contact reports by month and fiscal year', x = 'month', y = 'contact reports', color = 'fiscal year') +
+  scale_x_continuous(breaks = 1:12, minor_breaks = NULL, labels = month.name[c(9:12, 1:8)] %>% str_sub(1, 3))
+```
+
+Historically, the count of contact reports has increased over time (almost certainly a combination of more outreach plus better data collection), and most activity has occurred in September through November and February through April.
+
 ## Merged data
 
 ```{r, echo = FALSE, include = FALSE}
