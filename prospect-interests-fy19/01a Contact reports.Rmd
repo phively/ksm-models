@@ -179,8 +179,8 @@ visits %>% select(CONTACT_DATE, CONTACT_FY) %>% summary()
 visits %>%
   filter(CONTACT_FY > 1800) %>%
   ggplot(aes(x = CONTACT_FY)) +
-  annotate('rect', xmin = 2007, xmax = 2020, ymin = 0, ymax = Inf, fill = 'lightblue', alpha = .5) +
-  annotate('text', x = 2007, y = -200, label = 'Campaign', hjust = 0, color = 'lightblue') +
+  annotate('rect', xmin = 2011, xmax = 2020, ymin = 0, ymax = Inf, fill = 'lightblue', alpha = .5) +
+  annotate('text', x = 2011, y = -200, label = 'Campaign', hjust = 0, color = 'lightblue') +
   geom_histogram(binwidth = 1, alpha = .75) +
   labs(title = 'Contact reports by fiscal year', x = 'fiscal year', y = 'contact reports')
 ```
@@ -191,9 +191,9 @@ visits %>%
   group_by(mo_yr = round_date(CONTACT_DATE, unit = 'month')) %>%
   summarise(n = length(ID_NUMBER)) %>%
   ggplot(aes(x = mo_yr, y = n)) +
-  annotate('rect', xmin = ymd('20070101'), xmax = ymd('20201231')
+  annotate('rect', xmin = ymd('20110901'), xmax = ymd('20201231')
            , ymin = 0, ymax = Inf, fill = 'lightblue', alpha = .5) +
-  annotate('text', x = ymd('20070101'), y = -50, label = 'Campaign', hjust = 0, color = 'lightblue') +
+  annotate('text', x = ymd('20110901'), y = -50, label = 'Campaign', hjust = 0, color = 'lightblue') +
   geom_line(alpha = .75) +
   labs(title = 'Contact reports by month detail', x = 'calendar year', y = 'contact reports') +
   scale_x_date(date_breaks = '1 year', date_labels = '%Y', date_minor_breaks = '1 month') +
@@ -235,12 +235,13 @@ visits <- visits %>%
     words = str_count(SUMMARY, '\\w+')
     , source = 'summary'
     # If summary was invalid, count words in DESCRIPTION instead
+    , text = ifelse(words >= 1, SUMMARY, DESCRIPTION)
     , source = ifelse(words >= 1, source, 'description') %>% factor()
     , words = ifelse(words >= 1, words, str_count(DESCRIPTION, '\\w+'))
   )
 ```
 
-```{r}
+```{r, warning = FALSE}
 visits %>%
   ggplot(aes(x = words)) +
   geom_histogram(binwidth = .1) +
@@ -263,6 +264,7 @@ vdat %>%
   ggplot(aes(x = 1:nrow(vdat), y = summary_pct)) +
   geom_point() +
   geom_line() +
+  geom_hline(yintercept = .9, color = 'blue', linetype = 'dashed') +
   scale_x_continuous(breaks = 1:nrow(vdat), labels = vdat$CONTACT_FY) +
   labs(title = 'Percent of contact reports with summary text by year'
        , x = 'fiscal year', y = '% of CRs') +
@@ -280,23 +282,69 @@ visits %>%
   scale_y_log10(breaks = 10^(0:10), minor_breaks = NULL) +
   theme(axis.text.x = element_text(angle = 90, vjust = .5)) +
   labs(title = 'Contact report word counts over time'
-       , y = 'word count', x = 'fiscal year'
-       )
+       , y = 'word count', x = 'fiscal year')
 ```
 
 Apparently 2000 was also the year people were asked to do more than paste the DESCRIPTION into the SUMMARY.
 
-## Merged data
+```{r}
+vdat <- visits %>% filter(CONTACT_FY == 2018)
+quants <- vdat %>% select(words) %>% unlist() %>%
+  quantile(probs = seq(0, 1, by = .1))
 
-```{r, echo = FALSE, include = FALSE}
-# Example of merging data by ID
-# # Merged dataset; for each answer, paste Body into the Body of the question with matching Id
-# merged <- bind_rows(
-#   posts %>% filter(Name == "Question") %>% select(Id, Body), # Questions
-#   posts %>% filter(Name == "Answer") %>% select(Id = ParentId, Body) # Answers
-# ) %>% group_by(Id) %>% summarise_each(funs(paste(., collapse = " ")))
+vdat %>%
+  ggplot(aes(x = words, color = source)) +
+  geom_density(aes(y = ..count..)) +
+  scale_x_log10() +
+  geom_vline(xintercept = quants, linetype = 'dotted') +
+  annotate(geom = 'text', x = quants, y = -.05, label = quants, size = 2) +
+  labs(title = 'FY18 contact report length in words (with deciles)') +
+  scale_y_continuous(breaks = seq(0, 1E4, by = 2E3))
 ```
 
+Last year, the overwhelming majority of description-only contact reports were under 18 words. 10% of all contact reports still had fewer than 18 words. The median contact report had 210 words, which seems quite reasonable, and the middle 60% were 61 to 419 words. This suggests I'll have a fair bit of text to work with.
+
+## Merged data
+
+Combine all text associated with a given entity into one large report.
+
+```{r}
+merged <- visits %>%
+  # Drop any with a blank ID
+  filter(trimws(ID_NUMBER) != '') %>%
+  select(ID_NUMBER, text) %>%
+  group_by(ID_NUMBER) %>%
+  summarise_all(funs(paste(., collapse = ' '))) %>%
+  mutate(
+    words = str_count(text, '\\w+')
+  )
+```
+
+```{r}
+merged %>%
+  ggplot(aes(x = words)) +
+  geom_histogram(binwidth = .1, alpha = .5) +
+  geom_vline(xintercept = mean(merged$words), color = 'blue', linetype = 'dotted', alpha = .5) +
+  geom_vline(xintercept = median(merged$words), color = 'blue', linetype = 'dashed', alpha = .5) +
+  scale_x_log10() +
+  labs(title = 'Merged contact report word counts per entity')
+```
+
+```{r}
+summary(merged$words)
+```
+
+Unsurprisingly this is quite a right-skewed distribution.
+
+```{r}
+quantile(merged$words, probs = seq(0, 1, by = .1))
+```
+
+It might make sense discarding the 10% of records with less than 24 words; this will look even worse after I experiment with stopword removal.
+
 ## Stopwords
+
+
+
 
 ## Merged data exploration
