@@ -17,6 +17,7 @@ Examine contact report data and assess suitability for text modeling. Specifical
 library(tidyverse)
 library(xml2) # .xml file parsing
 library(lubridate) # date formatting
+library(tm) # topic modeling data cleanup
 ```
 
 # Load data
@@ -342,9 +343,48 @@ quantile(merged$words, probs = seq(0, 1, by = .1))
 
 It might make sense discarding the 10% of records with less than 24 words; this will look even worse after I experiment with stopword removal.
 
-## Stopwords
+## Cleanup and stopwords
 
+```{r}
+# Helper functions for tm
+# Replace punctuation with a space
+# (http://stackoverflow.com/questions/25105702/how-to-give-space-between-2-words-after-removing-punctuation-and-numbers-text-mi)
+replacePunctuation <- content_transformer(function(x) {gsub("[[:punct:]]", " ", x)})
+# Replace arbitrary characters with a space
+replaceAsSpace <- content_transformer(function(x, pattern) {gsub(pattern, " ", x)})
+```
 
+```{r}
+corpus <- VCorpus(VectorSource(merged$text)) %>% # Read in the merged contact reports
+  tm_map(content_transformer(tolower)) %>% # Lower case
+  tm_map(removeNumbers) %>% # Strip numbers
+  tm_map(replaceAsSpace, '(“|”|‘|’|`)') %>% # Remove assorted symbols
+  tm_map(replacePunctuation) %>% # Strip punctuation
+  tm_map(stripWhitespace) # Remove extra whitespace
+```
 
+```{r}
+# Version without stopwords
+corpus_ns <- corpus %>%
+  tm_map(removeWords, stopwords('english')) %>% # Strip standard stopwords
+  tm_map(stripWhitespace) # Remove extra whitespace
+```
 
-## Merged data exploration
+## Cleaned data exploration
+
+```{r}
+cleaned_docs <- wranglR::ListExtract(corpus, 'content') %>% data.frame(stringsAsFactors = FALSE)
+cleaned_docs_ns <- wranglR::ListExtract(corpus_ns, 'content') %>% data.frame(stringsAsFactors = FALSE)
+```
+
+```{r}
+cleaned_docs %>%
+  mutate(words = str_count(content, '\\w+')) %>%
+  ggplot(aes(x = words)) +
+  geom_histogram(binwidth = .1, alpha = .5) +
+  geom_vline(xintercept = mean(cleaned_docs$words), color = 'blue', linetype = 'dotted', alpha = .5) +
+  geom_vline(xintercept = median(cleaned_docs$words), color = 'blue', linetype = 'dashed', alpha = .5) +
+  scale_x_log10() +
+  labs(title = 'Cleaned contact report word counts per entity')
+```
+
