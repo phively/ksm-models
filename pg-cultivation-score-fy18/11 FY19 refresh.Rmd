@@ -1,0 +1,304 @@
+---
+title: "11 FY19 refresh"
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+# Document parameters
+threads <- 10
+
+# Packages
+library(tidyverse)
+library(reshape2)
+library(gridExtra)
+library(splines)
+library(lubridate)
+library(wranglR)
+library(Boruta)
+library(foreach)
+library(doParallel)
+library(mgcv)
+
+# Functions adapted from previous analysis steps
+source('code/functions.R')
+
+# Visualization functions adapted fron previous analysis steps
+source('code/functions_viz.R')
+
+# Set number of available CPU cores
+registerDoParallel(threads)
+```
+
+```{r}
+# Load current data
+# Import data
+train_fy <- 2017
+source('code/generate-pit-data.R')
+
+# Run data generation functions
+# Ensure that the file pointed to has the correct train_fy (2 FY ago)
+full.data <- generate_pit_data(
+  filepath = 'data/2019-10-04 point-in-time data.xlsx'
+  , sheetname = 'Select point_in_time_model_2019'
+)
+```
+
+```{r}
+# Updated dataset
+modeling.data <- full.data %>%
+  generate_additional_predictors()
+```
+
+# Updated models
+
+I'm reusing the model parameters from FY18-19; see [06 KSM model tuning](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/06%20KSM%20model%20tuning.nb.html#probability_model_tuning)
+
+```{r}
+# Model parameters
+giving <- 3
+dollars <- 2
+engagement <- 3
+recordyr <- 5
+```
+
+Updating the GAM (unconditional probability).
+
+```{r}
+gam_final <- gam(
+  rv.gave ~
+  PROGRAM_GROUP +
+  PREF_ADDR_TYPE_CODE +
+  HOUSEHOLD_CONTINENT +
+  BUS_IS_EMPLOYED +
+  HAS_HOME_ADDR +
+  HAS_HOME_PHONE +
+  s(YEARS_SINCE_FIRST_GIFT, k = giving) +
+  s(GIVING_FIRST_YEAR_CASH_AMT, k = giving) +
+  s(GIVING_MAX_PLEDGE_AMT, k = giving) +
+  s(GIVING_CASH_TOTAL, k = giving) +
+  s(GIVING_PLEDGE_TOTAL, k = giving) +
+  s(GIVING_CRU_TOTAL, k = giving) +
+  s(GIFTS_ALLOCS_SUPPORTED, k = giving) +
+  s(GIFTS_FYS_SUPPORTED, k = giving) +
+  s(GIFTS_CASH, k = giving) +
+  s(GIFTS_PLEDGES, k = giving) +
+  s(CASH_PFY1, k = dollars) +
+  s(CASH_PFY2, k = dollars) +
+  s(CASH_PFY3, k = dollars) +
+  s(CASH_PFY4, k = dollars) +
+  s(CASH_PFY5, k = dollars) +
+  CRU_GIVING_SEGMENT +
+  s(EVALUATION_LOWER_BOUND, k = dollars) +
+  s(UOR_LOWER_BOUND, k = dollars) +
+  s(MONTHS_ASSIGNED, k = engagement) +
+  s(COMMITTEE_NU_DISTINCT, k = engagement) +
+  s(COMMITTEE_NU_YEARS, k = engagement) +
+  s(COMMITTEE_KSM_DISTINCT, k = engagement) +
+  s(EVENTS_PREV_3_FY, k = engagement) +
+  s(EVENTS_CFY, k = engagement) +
+  s(EVENTS_PFY1, k = engagement) +
+  s(ATHLETICS_TICKET_YEARS, k = engagement) +
+  s(YEARS_SINCE_ATHLETICS_TICKETS, k = engagement) +
+  s(RECORD_YR, k = recordyr) +
+  s(YEARS_SINCE_MAX_CASH_YR, k = giving) +
+  GIVING_MAX_CASH_MO +
+  KSM_PROSPECT +
+  s(VISITORS_5FY, k = engagement) +
+  LOYAL_5_PCT_CASH +
+  UPGRADE3_CASH +
+  VELOCITY3_LIN_CASH +
+  SPOUSE_ALUM
+  , data = modeling.data
+  , family = 'binomial'
+  , control = list(nthreads = threads)
+)
+```
+
+Updating the LM (conditional expectation).
+
+```{r}
+lm_final <- lm(
+  rv.amt ~
+  COMMITTEE_KSM_LDR +
+  ns(CRU_PFY1, df = 2) +
+  ns(CRU_PFY2, df = 1) +
+  ns(CRU_PFY3, df = 1) +
+  ns(CRU_PFY4, df = 1) +
+  ns(CRU_PFY5, df = 1) +
+  ns(EVALUATION_LOWER_BOUND, df = 1) +
+  GIFT_CLUB_NU_LDR_YRS +
+  ns(GIFTS_ALLOCS_SUPPORTED, df = 1) +
+  ns(GIFTS_OUTRIGHTS_PAYMENTS, df = 1) +
+  ns(GIVING_CRU_TOTAL, df = 1) +
+  ns(GIVING_MAX_CASH_YR, df = 1) +
+  ns(GIVING_MAX_PLEDGE_AMT, df = 1) +
+  ns(GIVING_MAX_PLEDGE_FY, df = 1) +
+  HOUSEHOLD_CONTINENT +
+  KSM_GOS_FLAG +
+  LOYAL_5_PCT_ANY +
+  ns(NGC_PFY1, df = 2) +
+  ns(NGC_PFY2, df = 1) +
+  ns(NGC_PFY3, df = 1) +
+  ns(NGC_PFY4, df = 1) +
+  ns(NGC_PFY5, df = 1) +
+  PREF_ADDR_TYPE_CODE +
+  PROGRAM_GROUP +
+  ns(RECORD_YR, df = 5) +
+  ns(UOR_LOWER_BOUND, df = 1) +
+  UPGRADE3_CASH +
+  ns(VELOCITY3_LIN_NGC, df = 7) +
+  ns(VISITS_5FY, df = 1)
+  , data = modeling.data %>% filter(rv.gave == TRUE)
+)
+```
+
+# Diagnostics
+
+```{r}
+# Diagnostic data
+error_compare <- data.frame(
+  giving = log10plus1(modeling.data$rv.amt, inverse = TRUE)
+  , log.giving = modeling.data$rv.amt
+  , gave = modeling.data$rv.gave
+  , est.giving = predict(lm_final, newdata = modeling.data, type = 'response')
+  , est.gave = gam_final$fitted
+) %>% mutate(
+  ev = est.giving * est.gave
+  , error = log.giving - ev
+  , log.giving.bin = trunc(log.giving)
+  , pred.giving.bin = trunc(est.giving)
+  , ev.bin = trunc(ev)
+)
+```
+
+```{r}
+error_compare %>%
+  ggplot(aes(x = log.giving, y = est.giving, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'estimated versus actual giving')
+```
+
+```{r}
+paste('mse =', calc_mse(y = error_compare$log.giving, yhat = error_compare$est.giving))
+```
+
+```{r}
+error_compare %>%
+  ggplot(aes(x = log.giving, y = ev, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'expected value versus actual giving')
+```
+
+```{r}
+paste('mse =', calc_mse(y = error_compare$log.giving, yhat = error_compare$ev))
+```
+
+```{r}
+error_bin <- error_compare %>%
+  group_by(log.giving.bin, pred.giving.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+mingift <- -1
+maxgift <- 8
+error_bin %>%
+  ggplot(aes(x = log.giving.bin, y = pred.giving.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'Predicted giving')
+```
+
+```{r}
+ev_bin <- error_compare %>%
+  group_by(log.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+mingift <- -1
+maxgift <- 8
+ev_bin %>%
+  ggplot(aes(x = log.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'Expected value')
+```
+
+```{r}
+both_bin <- error_compare %>%
+  group_by(pred.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+mingift <- -1
+maxgift <- 8
+both_bin %>%
+  ggplot(aes(x = pred.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Predicted giving', y = 'Expected value')
+```
+
+# Generate new predictions
+
+```{r}
+# Load current data
+# Parameters
+train_fy <- train_fy + 2
+filepath <- ''
+sheetname <- 'Select point_in_time_model_fy18'
+
+# Run data generation functions
+# Ensure that the file pointed to has the correct train_fy (current FY)
+new.full.data <- generate_pit_data(filepath, sheetname)
+new.modeling.data <- new.full.data %>% generate_additional_predictors(future.data = TRUE)
+```
+
+
+```{r}
+preds_prb <- predict(gam_final, newdata = new.modeling.data, type = 'response') %>% as.numeric()
+preds_amt <- predict(lm_final, newdata = new.modeling.data, type = 'response')
+```
+
+# Save results
+
+```{r}
+# Merged data frame
+output_data <- data.frame(
+  est.giving = preds_amt
+  , est.p = preds_prb
+) %>% mutate(
+  ev = est.giving * est.p
+  , est.giving.bin = trunc(est.giving)
+  , est.p.bin = trunc(est.p * 10)
+  , ev.bin = trunc(ev)
+) %>% cbind(
+  new.modeling.data
+)
+```
+
