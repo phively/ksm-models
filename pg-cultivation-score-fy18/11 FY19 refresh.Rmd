@@ -11,7 +11,8 @@ output:
 
 ```{r setup, message = FALSE, warning = FALSE}
 # Document parameters
-threads <- 10
+# Look for # <UPDATE> tags
+threads <- 3 # <UPDATE>
 
 # Packages
 library(tidyverse)
@@ -38,14 +39,14 @@ registerDoParallel(threads)
 ```{r}
 # Load current data
 # Import data
-train_fy <- 2017
+train_fy <- 2017 # <UPDATE>
 source('code/generate-pit-data.R')
 
 # Run data generation functions
 # Ensure that the file pointed to has the correct train_fy (2 FY ago)
 full.data <- generate_pit_data(
-  filepath = 'data/2019-10-04 point-in-time data.xlsx'
-  , sheetname = 'Select point_in_time_model_2019'
+  filepath = 'data/2019-10-04 point-in-time data.xlsx' # <UPDATE>
+  , sheetname = 'Select point_in_time_model_2019' # <UPDATE>
 )
 ```
 
@@ -224,6 +225,12 @@ error_bin %>%
   labs(x = 'Actual giving', y = 'Predicted giving')
 ```
 
+* Total giving during the out-of-sample time period was `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
+  * Those predicted to give at least `r tmpcutoff <- 3; scales::dollar(10^tmpcutoff) %>% I()` gave `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * A total of `r tmpd <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% nrow(); tmpd %>% I()` donors were predicted to give at the `r scales::dollar(10^tmpcutoff) %>% I()` level and `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & log.giving.bin >= tmpcutoff) %>% nrow(); tmpn %>% I()` actually did, for a hit rate of `r (tmpn/tmpd) %>% scales::percent() %>% I()`.
+  * Average giving in this group is `r ({error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum()}/tmpd) %>% scales::dollar() %>% I()` per person.
+* This method elimintates `r tmpd <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
+
 ```{r}
 ev_bin <- error_compare %>%
   group_by(log.giving.bin, ev.bin) %>%
@@ -243,6 +250,12 @@ ev_bin %>%
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
   labs(x = 'Actual giving', y = 'Expected value')
 ```
+
+  * Total giving during the out-of-sample time period was again `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
+  * Entities with a score of `r tmpc2 <- 1; tmpc2 %>% I()` or higher (`r error_compare %>% filter(ev.bin >= tmpc2) %>% nrow()` total) gave `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * Of these `r tmpd <- error_compare %>% filter(ev.bin >= tmpc2) %>% nrow(); tmpd` entities, `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2 & giving > 0) %>% nrow(); tmpn` were donors (`r (tmpn/tmpd) %>% scales::percent()`), and `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2 & giving >= 10^tmpcutoff) %>% nrow(); tmpn` gave at least `r scales::dollar(10^tmpcutoff)` (`r (tmpn/tmpd) %>% scales::percent()`).
+  * Average giving in this group is `r ({error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum()}/{error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% nrow()}) %>% scales::dollar() %>% I()` per person.
+  * This method elimintates `r tmpd <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
 
 ```{r}
 both_bin <- error_compare %>%
@@ -264,14 +277,18 @@ both_bin %>%
   labs(x = 'Predicted giving', y = 'Expected value')
 ```
 
+ * Of the `r tmpsubset <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & ev.bin < tmpc2); tmpsubset %>% nrow()` individuals with a relatively high predicted giving amount (`r scales::dollar(10^tmpcutoff)`) but a 0 expected value score, only `r tmpn <- tmpsubset %>% filter(giving > 0) %>% nrow(); tmpn` were actually donors (`r (tmpn/nrow(tmpsubset)) %>% scales::percent()`), giving a total of `r tmpsubset %>% filter(giving > 0) %>% select(giving) %>% sum() %>% scales::dollar()`.
+
+This compares favorably with [last year's results](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/06%20KSM%20model%20tuning.nb.html#combined_model).
+
 # Generate new predictions
 
 ```{r}
 # Load current data
 # Parameters
-train_fy <- train_fy + 2
-filepath <- ''
-sheetname <- 'Select point_in_time_model_fy18'
+train_fy <- 2019 # <UPDATE>
+filepath <- '' # <UPDATE>
+sheetname <- 'Select point_in_time_model_fy18' # <UPDATE>
 
 # Run data generation functions
 # Ensure that the file pointed to has the correct train_fy (current FY)

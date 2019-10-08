@@ -1,7 +1,7 @@
-Drop Table point_in_time_model_2019
+Drop Table point_in_time_model_19future
 ;
 
-Create Table point_in_time_model_2019 As
+Create Table point_in_time_model_19future As
 
 With
 
@@ -12,9 +12,9 @@ Parameters
 *************************/
 pre_params As (
   Select
-    2017 As training_fy
-    , 2018 As target_fy1
-    , 2019 As target_fy2
+    2019 As training_fy
+    , 2020 As target_fy1
+    , 2021 As target_fy2
     , cal.yesterday As data_as_of
   From DUAL
   Cross Join v_current_calendar cal
