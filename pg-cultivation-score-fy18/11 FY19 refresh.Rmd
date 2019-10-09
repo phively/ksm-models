@@ -287,8 +287,8 @@ This compares favorably with [last year's results](https://phively.github.io/ksm
 # Load current data
 # Parameters
 train_fy <- 2019 # <UPDATE>
-filepath <- '' # <UPDATE>
-sheetname <- 'Select point_in_time_model_fy18' # <UPDATE>
+filepath <- 'data/2019-10-08 point-in-time fy19 future data.xlsx' # <UPDATE>
+sheetname <- 'Select point_in_time_model_19fu' # <UPDATE>
 
 # Run data generation functions
 # Ensure that the file pointed to has the correct train_fy (current FY)
@@ -301,6 +301,88 @@ new.modeling.data <- new.full.data %>% generate_additional_predictors(future.dat
 preds_prb <- predict(gam_final, newdata = new.modeling.data, type = 'response') %>% as.numeric()
 preds_amt <- predict(lm_final, newdata = new.modeling.data, type = 'response')
 ```
+
+# New prediction diagnostics
+
+```{r}
+data.frame(
+  data = 'insample'
+  , prediction = gam_final$fitted.values
+) %>% rbind(
+  data.frame(
+    data = 'outsample'
+    , prediction = preds_prb
+  )
+) %>%
+  ggplot(aes(x = prediction, fill = data)) +
+  geom_histogram(bins = 20) +
+  facet_wrap(. ~ data) +
+  labs(title = 'Probability model fitted values')
+```
+
+Looks fine.
+
+```{r}
+data.frame(
+  data = 'insample'
+  , prediction = predict(lm_final, newdata = modeling.data)
+) %>% rbind(
+  data.frame(
+    data = 'outsample'
+    , prediction = preds_amt
+  )
+) %>%
+  ggplot(aes(x = prediction, fill = data)) +
+  geom_histogram(bins = 20) +
+  facet_wrap(. ~ data) +
+  labs(title = 'Gift amount model fitted values')
+```
+
+Looks fine.
+
+```{r}
+data.frame(
+  id = modeling.data$ID_NUMBER %>% as.numeric()
+  , p_insample = gam_final$fitted.values
+) %>% inner_join(
+  data.frame(
+    id = new.modeling.data$ID_NUMBER %>% as.numeric()
+    , p_outsample = preds_prb
+  )
+  , by = c('id')
+) %>% mutate(
+  change = p_insample - p_outsample
+) %>%
+  ggplot(aes(x = change)) + 
+  geom_histogram(bins = 20, alpha = .5) +
+  scale_x_continuous(breaks = seq(-1, 1, by = .2)) +
+  scale_y_log10(breaks = 10^(0:6), labels = format(10^(0:6), scientific = FALSE)) +
+  labs(title = 'Change in predicted probability of giving')
+```
+
+Some pretty large swings but very few over $\pm .5$ (log scale) and the near-symmetry is reassuring.
+
+
+```{r}
+data.frame(
+  id = modeling.data$ID_NUMBER %>% as.numeric()
+  , p_insample = predict(lm_final, newdata = modeling.data)
+) %>% inner_join(
+  data.frame(
+    id = new.modeling.data$ID_NUMBER %>% as.numeric()
+    , p_outsample = preds_amt
+  )
+  , by = c('id')
+) %>% mutate(
+  change = p_insample - p_outsample
+) %>%
+  ggplot(aes(x = change)) + 
+  geom_histogram(bins = 16, alpha = .5) +
+  scale_y_log10(breaks = 10^(0:6), labels = format(10^(0:6), scientific = FALSE)) +
+  labs(title = 'Change in predicted giving amounts')
+```
+
+Looks fine, and the near-symmetry is reassuring.
 
 # Save results
 
@@ -316,6 +398,44 @@ output_data <- data.frame(
   , ev.bin = trunc(ev)
 ) %>% cbind(
   new.modeling.data
+)
+```
+
+```{r}
+# Master data file
+output_data %>% write.csv(
+  file = 'data/2019-10-09 predictions.csv'
+  , row.names = FALSE
+)
+```
+
+```{r}
+# IDs and scores only
+full.data %>% filter(
+  # Exclude deceased
+  RECORD_STATUS_CODE != 'D'
+) %>% select(
+  HOUSEHOLD_ID
+  , ID_NUMBER
+) %>% mutate(
+  HOUSEHOLD_ID = HOUSEHOLD_ID %>% as.numeric()
+) %>% left_join(
+  output_data %>% mutate(
+      HOUSEHOLD_ID = ID_NUMBER %>% as.numeric()
+    ) %>%
+    select(
+      HOUSEHOLD_ID
+      , est.giving
+      , est.p
+      , ev
+      , est.giving.bin
+      , est.p.bin
+      , ev.bin
+    ) 
+  , by = c('HOUSEHOLD_ID')
+) %>% write.csv(
+  file = 'data/2019-10-09 export.csv'
+  , row.names = FALSE
 )
 ```
 
