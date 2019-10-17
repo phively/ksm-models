@@ -591,6 +591,33 @@ This compares favorably with [last year's results](https://phively.github.io/ksm
 
 Conclusion: using the coef1 model results in "missing" fewer donors.
 
+# Score correlations
+
+```{r}
+# EOFY18 scores
+fy18_ev_export <- read.csv(file = 'data/2019-01-09 export.csv')
+
+yoy_comparison <- fy18_ev_export %>%
+  select(ID_NUMBER, ev) %>%
+  inner_join(
+    output_data %>% select(ID_NUMBER, ev.coef1) %>% mutate(ID_NUMBER = as.numeric(ID_NUMBER))
+    , by = 'ID_NUMBER'
+  )  
+```
+```{r}
+# EOFY18 versus EOFY19 pairwise scores by donor
+yoy_comparison %>%
+  ggplot(aes(x = ev, y = ev.coef1)) +
+  geom_point() +
+  geom_smooth(method = 'lm') +
+  labs(title = 'EOFY18 versus EOFY19 pairwise scores by donor', x = 'FY18', y = 'FY19')
+```
+```{r}
+lm(ev.coef1 ~ ev, data = yoy_comparison) %>% summary()
+```
+
+That's a very high correlation between PFY and CFY scores, as expected.
+
 # Save results
 
 ```{r}
