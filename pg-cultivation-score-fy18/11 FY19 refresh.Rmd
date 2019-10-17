@@ -539,7 +539,7 @@ __coef2__
   * Average giving in this group is `r ({error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum()}/{error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% nrow()}) %>% scales::dollar() %>% I()` per person.
   * This method elimintates `r tmpd <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
 
-```{r}
+```{r, fig.width = 6, fig.height = 8}
 both_bin_2018 <- error_compare_18%>%
   group_by(pred.giving.bin, ev.bin) %>%
   summarise(n = length(gave), g = sum(gave))
