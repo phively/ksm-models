@@ -159,128 +159,6 @@ lm_final <- lm(
 )
 ```
 
-# Diagnostics
-
-```{r}
-# Diagnostic data
-error_compare <- data.frame(
-  giving = log10plus1(modeling.data$rv.amt, inverse = TRUE)
-  , log.giving = modeling.data$rv.amt
-  , gave = modeling.data$rv.gave
-  , est.giving = predict(lm_final, newdata = modeling.data, type = 'response')
-  , est.gave = gam_final$fitted
-) %>% mutate(
-  ev = est.giving * est.gave
-  , error = log.giving - ev
-  , log.giving.bin = trunc(log.giving)
-  , pred.giving.bin = trunc(est.giving)
-  , ev.bin = trunc(ev)
-)
-```
-
-```{r}
-error_compare %>%
-  ggplot(aes(x = log.giving, y = est.giving, color = gave)) +
-  geom_point() +
-  geom_abline(aes(slope = 1, intercept = 0)) +
-  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
-  labs(title = 'estimated versus actual giving')
-```
-
-```{r}
-paste('mse =', calc_mse(y = error_compare$log.giving, yhat = error_compare$est.giving))
-```
-
-```{r}
-error_compare %>%
-  ggplot(aes(x = log.giving, y = ev, color = gave)) +
-  geom_point() +
-  geom_abline(aes(slope = 1, intercept = 0)) +
-  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
-  labs(title = 'expected value versus actual giving')
-```
-
-```{r}
-paste('mse =', calc_mse(y = error_compare$log.giving, yhat = error_compare$ev))
-```
-
-```{r}
-error_bin <- error_compare %>%
-  group_by(log.giving.bin, pred.giving.bin) %>%
-  summarise(n = length(gave), g = sum(gave))
-mingift <- -1
-maxgift <- 8
-error_bin %>%
-  ggplot(aes(x = log.giving.bin, y = pred.giving.bin, fill = n)) +
-  geom_abline(color = 'purple', size = 2, alpha = .5) +
-  geom_tile(alpha = .75) +
-  geom_text(aes(label = n), color = 'white', size = 3) +
-  scale_fill_gradient(name = 'count', trans = 'log10') +
-  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
-                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
-  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
-                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
-  coord_equal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
-  labs(x = 'Actual giving', y = 'Predicted giving')
-```
-
-* Total giving during the out-of-sample time period was `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
-  * Those predicted to give at least `r tmpcutoff <- 3; scales::dollar(10^tmpcutoff) %>% I()` gave `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
-  * A total of `r tmpd <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% nrow(); tmpd %>% I()` donors were predicted to give at the `r scales::dollar(10^tmpcutoff) %>% I()` level and `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & log.giving.bin >= tmpcutoff) %>% nrow(); tmpn %>% I()` actually did, for a hit rate of `r (tmpn/tmpd) %>% scales::percent() %>% I()`.
-  * Average giving in this group is `r ({error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum()}/tmpd) %>% scales::dollar() %>% I()` per person.
-* This method elimintates `r tmpd <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
-
-```{r}
-ev_bin <- error_compare %>%
-  group_by(log.giving.bin, ev.bin) %>%
-  summarise(n = length(gave), g = sum(gave))
-mingift <- -1
-maxgift <- 8
-ev_bin %>%
-  ggplot(aes(x = log.giving.bin, y = ev.bin, fill = n)) +
-  geom_abline(color = 'purple', size = 2, alpha = .5) +
-  geom_tile(alpha = .75) +
-  geom_text(aes(label = n), color = 'white', size = 3) +
-  scale_fill_gradient(name = 'count', trans = 'log10') +
-  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
-                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
-  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
-  coord_equal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
-  labs(x = 'Actual giving', y = 'Expected value')
-```
-
-  * Total giving during the out-of-sample time period was again `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
-  * Entities with a score of `r tmpc2 <- 1; tmpc2 %>% I()` or higher (`r error_compare %>% filter(ev.bin >= tmpc2) %>% nrow()` total) gave `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
-  * Of these `r tmpd <- error_compare %>% filter(ev.bin >= tmpc2) %>% nrow(); tmpd` entities, `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2 & giving > 0) %>% nrow(); tmpn` were donors (`r (tmpn/tmpd) %>% scales::percent()`), and `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2 & giving >= 10^tmpcutoff) %>% nrow(); tmpn` gave at least `r scales::dollar(10^tmpcutoff)` (`r (tmpn/tmpd) %>% scales::percent()`).
-  * Average giving in this group is `r ({error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum()}/{error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% nrow()}) %>% scales::dollar() %>% I()` per person.
-  * This method elimintates `r tmpd <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
-
-```{r}
-both_bin <- error_compare %>%
-  group_by(pred.giving.bin, ev.bin) %>%
-  summarise(n = length(gave), g = sum(gave))
-mingift <- -1
-maxgift <- 8
-both_bin %>%
-  ggplot(aes(x = pred.giving.bin, y = ev.bin, fill = n)) +
-  geom_abline(color = 'purple', size = 2, alpha = .5) +
-  geom_tile(alpha = .75) +
-  geom_text(aes(label = n), color = 'white', size = 3) +
-  scale_fill_gradient(name = 'count', trans = 'log10') +
-  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
-                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
-  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
-  coord_equal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
-  labs(x = 'Predicted giving', y = 'Expected value')
-```
-
- * Of the `r tmpsubset <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & ev.bin < tmpc2); tmpsubset %>% nrow()` individuals with a relatively high predicted giving amount (`r scales::dollar(10^tmpcutoff)`) but a 0 expected value score, only `r tmpn <- tmpsubset %>% filter(giving > 0) %>% nrow(); tmpn` were actually donors (`r (tmpn/nrow(tmpsubset)) %>% scales::percent()`), giving a total of `r tmpsubset %>% filter(giving > 0) %>% select(giving) %>% sum() %>% scales::dollar()`.
-
-This compares favorably with [last year's results](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/06%20KSM%20model%20tuning.nb.html#combined_model).
-
 # Generate new predictions
 
 ```{r}
@@ -384,18 +262,353 @@ data.frame(
 
 Looks fine, and the near-symmetry is reassuring.
 
+# Previous model comparison
+
+```{r}
+fy18_prb <- predict(gam_final_18, newdata = new.modeling.data, type = 'response') %>% as.numeric()
+fy18_amt <- predict(lm_final_18, newdata = new.modeling.data, type = 'response')
+```
+
+```{r}
+# FY18 data max EV score (PR)
+idx <- which(new.modeling.data$ID_NUMBER == '0000372980')
+data.frame(
+  p18 = fy18_prb[idx]
+  , p19 = preds_prb[idx]
+  , g18 = fy18_amt[idx]
+  , g19 = preds_amt[idx]
+) %>% mutate(
+  ev18 = p18 * g18
+  , ev19 = p19 * g19
+)
+```
+
+Interestingly, the amount models are pretty close but the probabilities are very different.
+
+## LM comparison
+
+```{r, rows.print = 100}
+coef18_lm <- summary(lm_final_18)$coef %>% data.frame() %>%
+  select(Estimate18 = Estimate, SE18 = Std..Error, Pr.t18 = Pr...t..)
+coef19_lm <- summary(lm_final)$coef %>% data.frame() %>%
+  select(Estimate19 = Estimate, SE19 = Std..Error, Pr.t19 = Pr...t..)
+
+cbind(
+  coef18_lm
+  , coef19_lm
+) %>% mutate(
+  varname = rownames(coef18_lm)
+  , delta = Estimate19 - Estimate18
+  , delta_pct = {delta / abs(Estimate18)} %>% scales::percent()
+) %>% select(
+  varname
+  , Estimate18
+  , Estimate19
+  , delta
+  , delta_pct
+  , SE18
+  , SE19
+  , Pr.t18
+  , Pr.t19
+) %>% mutate_if(
+  is.numeric, signif, 3
+)
+```
+
+## GAM comparison
+
+```{r, rows.print = 50}
+coef18_gam <- summary(gam_final_18)
+coef19_gam <- summary(gam_final)
+
+data.frame(
+  names = coef18_gam$p.coeff %>% names()
+  , coef18 = coef18_gam$p.coeff
+  , coef19 = coef19_gam$p.coeff
+) %>% mutate(
+  delta = coef19 - coef18
+  , delta_pct = {delta / abs(coef18)} %>% scales::percent()
+  , t18 = coef18_gam$p.t
+  , t19 = coef19_gam$p.t
+)
+```
+
+There are some very wide swings in how certain variables, such as upgrade amounts, are treated. I'm thinking these should be handled differently in the future when I refit a new model.
+
+# Diagnostics
+
+```{r}
+# Diagnostic data
+error_compare <- data.frame(
+  giving = log10plus1(modeling.data$rv.amt, inverse = TRUE)
+  , log.giving = modeling.data$rv.amt
+  , gave = modeling.data$rv.gave
+  , est.giving = predict(lm_final, newdata = modeling.data, type = 'response')
+  , est.gave = gam_final$fitted
+) %>% mutate(
+  ev = est.giving * est.gave
+  , error = log.giving - ev
+  , log.giving.bin = trunc(log.giving)
+  , pred.giving.bin = trunc(est.giving)
+  , ev.bin = trunc(ev)
+)
+
+error_compare_18 <- data.frame(
+  giving = log10plus1(modeling.data$rv.amt, inverse = TRUE)
+  , log.giving = modeling.data$rv.amt
+  , gave = modeling.data$rv.gave
+  , est.giving = predict(lm_final_18, newdata = modeling.data, type = 'response')
+  , est.gave = predict(gam_final_18, newdata = modeling.data, type = 'response') %>% as.numeric()
+) %>% mutate(
+  ev = est.giving * est.gave
+  , error = log.giving - ev
+  , log.giving.bin = trunc(log.giving)
+  , pred.giving.bin = trunc(est.giving)
+  , ev.bin = trunc(ev)
+)
+```
+
+```{r, fig.width = 8}
+grid.arrange(
+error_compare_18 %>%
+  ggplot(aes(x = log.giving, y = est.giving, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'coef1 estimated versus actual giving')
+, error_compare %>%
+  ggplot(aes(x = log.giving, y = est.giving, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'coef2 estimated versus actual giving')
+, ncol = 2
+)
+```
+
+```{r}
+data.frame(
+  model = c('coef1', 'coef2')
+  , mse = c(
+    calc_mse(y = error_compare$log.giving, yhat = error_compare$est.giving)
+    , calc_mse(y = error_compare_18$log.giving, yhat = error_compare_18$est.giving)
+  )
+)
+```
+
+```{r, fig.width = 8}
+grid.arrange(
+error_compare_18 %>%
+  ggplot(aes(x = log.giving, y = ev, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'coef1 expected value versus actual giving')
+, error_compare %>%
+  ggplot(aes(x = log.giving, y = ev, color = gave)) +
+  geom_point() +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = 'cs'), color = 'blue') +
+  labs(title = 'coef2 expected value versus actual giving')
+, ncol = 2
+)
+```
+
+```{r}
+data.frame(
+  model = c('coef1', 'coef2')
+  , mse = c(
+    calc_mse(y = error_compare_18$log.giving, yhat = error_compare_18$ev)
+    , calc_mse(y = error_compare$log.giving, yhat = error_compare$ev)
+  )
+)
+```
+
+The coef2 model trend line is non-monotonic which is pretty odd.
+
+```{r, fig.width = 6, fig.height = 8}
+error_bin <- error_compare %>%
+  group_by(log.giving.bin, pred.giving.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+
+error_bin_18 <- error_compare_18 %>%
+  group_by(log.giving.bin, pred.giving.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+
+mingift <- -1
+maxgift <- 8
+
+grid.arrange(
+error_bin_18 %>%
+  ggplot(aes(x = log.giving.bin, y = pred.giving.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'coef1 Predicted giving')
+, error_bin %>%
+  ggplot(aes(x = log.giving.bin, y = pred.giving.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'coef2 Predicted giving')
+)
+```
+
+__coef1 model__
+
+  * Total giving during the out-of-sample time period was `r tmpd <- error_compare_18%>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
+  * Those predicted to give at least `r tmpcutoff <- 3; scales::dollar(10^tmpcutoff) %>% I()` gave `r tmpn <- error_compare_18%>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * A total of `r tmpd <- error_compare_18%>% filter(pred.giving.bin >= tmpcutoff) %>% nrow(); tmpd %>% I()` donors were predicted to give at the `r scales::dollar(10^tmpcutoff) %>% I()` level and `r tmpn <- error_compare_18%>% filter(pred.giving.bin >= tmpcutoff & log.giving.bin >= tmpcutoff) %>% nrow(); tmpn %>% I()` actually did, for a hit rate of `r (tmpn/tmpd) %>% scales::percent() %>% I()`.
+  * Average giving in this group is `r ({error_compare_18%>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum()}/tmpd) %>% scales::dollar() %>% I()` per person.
+  * This method elimintates `r tmpd <- error_compare_18%>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare_18%>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
+
+__coef2 model__
+
+  * Total giving during the out-of-sample time period was `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
+  * Those predicted to give at least `r tmpcutoff <- 3; scales::dollar(10^tmpcutoff) %>% I()` gave `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * A total of `r tmpd <- error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% nrow(); tmpd %>% I()` donors were predicted to give at the `r scales::dollar(10^tmpcutoff) %>% I()` level and `r tmpn <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & log.giving.bin >= tmpcutoff) %>% nrow(); tmpn %>% I()` actually did, for a hit rate of `r (tmpn/tmpd) %>% scales::percent() %>% I()`.
+  * Average giving in this group is `r ({error_compare %>% filter(pred.giving.bin >= tmpcutoff) %>% select(giving) %>% sum()}/tmpd) %>% scales::dollar() %>% I()` per person.
+  * This method elimintates `r tmpd <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(pred.giving.bin < tmpcutoff) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
+
+```{r, fig.width = 6, fig.height = 8}
+ev_bin_18 <- error_compare_18 %>%
+  group_by(log.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+
+ev_bin <- error_compare %>%
+  group_by(log.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+
+mingift <- -1
+maxgift <- 8
+grid.arrange(
+ev_bin_18 %>%
+  ggplot(aes(x = log.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'coef1 Expected value')
+, ev_bin %>%
+  ggplot(aes(x = log.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Actual giving', y = 'coef2 Expected value')
+)
+```
+
+__coef1__
+
+  * Total giving during the out-of-sample time period was again `r tmpd <- error_compare_18%>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
+  * Entities with a score of `r tmpc2 <- 1; tmpc2 %>% I()` or higher (`r error_compare_18%>% filter(ev.bin >= tmpc2) %>% nrow()` total) gave `r tmpn <- error_compare_18%>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * Of these `r tmpd <- error_compare_18%>% filter(ev.bin >= tmpc2) %>% nrow(); tmpd` entities, `r tmpn <- error_compare_18%>% filter(ev.bin >= tmpc2 & giving > 0) %>% nrow(); tmpn` were donors (`r (tmpn/tmpd) %>% scales::percent()`), and `r tmpn <- error_compare_18%>% filter(ev.bin >= tmpc2 & giving >= 10^tmpcutoff) %>% nrow(); tmpn` gave at least `r scales::dollar(10^tmpcutoff)` (`r (tmpn/tmpd) %>% scales::percent()`).
+  * Average giving in this group is `r ({error_compare_18%>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum()}/{error_compare_18%>% filter(ev.bin >= tmpc2) %>% select(giving) %>% nrow()}) %>% scales::dollar() %>% I()` per person.
+  * This method elimintates `r tmpd <- error_compare_18%>% filter(ev.bin < tmpc2) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare_18%>% filter(ev.bin < tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
+
+__coef2__
+
+  * Total giving during the out-of-sample time period was again `r tmpd <- error_compare %>% select(giving) %>% sum(); tmpd %>% scales::dollar() %>% I()`.
+  * Entities with a score of `r tmpc2 <- 1; tmpc2 %>% I()` or higher (`r error_compare %>% filter(ev.bin >= tmpc2) %>% nrow()` total) gave `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or `r (tmpn/tmpd) %>% scales::percent() %>% I()` of the total.
+  * Of these `r tmpd <- error_compare %>% filter(ev.bin >= tmpc2) %>% nrow(); tmpd` entities, `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2 & giving > 0) %>% nrow(); tmpn` were donors (`r (tmpn/tmpd) %>% scales::percent()`), and `r tmpn <- error_compare %>% filter(ev.bin >= tmpc2 & giving >= 10^tmpcutoff) %>% nrow(); tmpn` gave at least `r scales::dollar(10^tmpcutoff)` (`r (tmpn/tmpd) %>% scales::percent()`).
+  * Average giving in this group is `r ({error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% sum()}/{error_compare %>% filter(ev.bin >= tmpc2) %>% select(giving) %>% nrow()}) %>% scales::dollar() %>% I()` per person.
+  * This method elimintates `r tmpd <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% nrow(); tmpd %>% I()` entities, who gave a total of `r tmpn <- error_compare %>% filter(ev.bin < tmpc2) %>% select(giving) %>% sum(); tmpn %>% scales::dollar() %>% I()`, or an average of `r (tmpn/tmpd) %>% scales::dollar() %>% I()` per person.
+
+```{r}
+both_bin_2018 <- error_compare_18%>%
+  group_by(pred.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+
+both_bin <- error_compare %>%
+  group_by(pred.giving.bin, ev.bin) %>%
+  summarise(n = length(gave), g = sum(gave))
+
+mingift <- -1
+maxgift <- 8
+
+grid.arrange(
+both_bin_2018 %>%
+  ggplot(aes(x = pred.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Predicted giving', y = 'coef1 Expected value')
+, both_bin %>%
+  ggplot(aes(x = pred.giving.bin, y = ev.bin, fill = n)) +
+  geom_abline(color = 'purple', size = 2, alpha = .5) +
+  geom_tile(alpha = .75) +
+  geom_text(aes(label = n), color = 'white', size = 3) +
+  scale_fill_gradient(name = 'count', trans = 'log10') +
+  scale_x_continuous(breaks = mingift:maxgift, minor_breaks = NULL
+                     , labels = 10^(mingift:maxgift) %>% scales::dollar(), limits = c(mingift, maxgift)) +
+  scale_y_continuous(breaks = 0:maxgift, minor_breaks = NULL, limits = c(mingift, maxgift)) +
+  coord_equal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5), axis.title.y = element_text(angle = 0, vjust = .5)) +
+  labs(x = 'Predicted giving', y = 'coef2 Expected value')
+)
+```
+
+__coef1__
+
+ * Of the `r tmpsubset <- error_compare_18%>% filter(pred.giving.bin >= tmpcutoff & ev.bin < tmpc2); tmpsubset %>% nrow()` individuals with a relatively high predicted giving amount (`r scales::dollar(10^tmpcutoff)`) but a 0 expected value score, only `r tmpn <- tmpsubset %>% filter(giving > 0) %>% nrow(); tmpn` were actually donors (`r (tmpn/nrow(tmpsubset)) %>% scales::percent()`), giving a total of `r tmpsubset %>% filter(giving > 0) %>% select(giving) %>% sum() %>% scales::dollar()`.
+
+__coef2__
+
+ * Of the `r tmpsubset <- error_compare %>% filter(pred.giving.bin >= tmpcutoff & ev.bin < tmpc2); tmpsubset %>% nrow()` individuals with a relatively high predicted giving amount (`r scales::dollar(10^tmpcutoff)`) but a 0 expected value score, only `r tmpn <- tmpsubset %>% filter(giving > 0) %>% nrow(); tmpn` were actually donors (`r (tmpn/nrow(tmpsubset)) %>% scales::percent()`), giving a total of `r tmpsubset %>% filter(giving > 0) %>% select(giving) %>% sum() %>% scales::dollar()`.
+
+This compares favorably with [last year's results](https://phively.github.io/ksm-models/pg-cultivation-score-fy18/06%20KSM%20model%20tuning.nb.html#combined_model).
+
+Conclusion: using the coef1 model results in "missing" fewer donors.
+
 # Save results
 
 ```{r}
 # Merged data frame
 output_data <- data.frame(
-  est.giving = preds_amt
-  , est.p = preds_prb
+  est.giving.coef1 = fy18_amt
+  , est.p.coef1 = fy18_prb
 ) %>% mutate(
-  ev = est.giving * est.p
-  , est.giving.bin = trunc(est.giving)
-  , est.p.bin = trunc(est.p * 10)
-  , ev.bin = trunc(ev)
+  ev.coef1 = est.giving.coef1 * est.p.coef1
+  , est.giving.bin.coef1 = trunc(est.giving.coef1)
+  , est.p.bin.coef1 = trunc(est.p.coef1 * 10)
+  , ev.bin.coef1 = trunc(ev.coef1)
+  , est.giving.coef2 = preds_amt
+  , est.p.coef2 = preds_prb
+  , ev.coef2 = est.giving.coef2 * est.p.coef2
+  , est.giving.bin.coef2 = trunc(est.giving.coef2)
+  , est.p.bin.coef2 = trunc(est.p.coef2 * 10)
+  , ev.bin.coef2 = trunc(ev.coef2)
 ) %>% cbind(
   new.modeling.data
 )
@@ -404,7 +617,7 @@ output_data <- data.frame(
 ```{r}
 # Master data file
 output_data %>% write.csv(
-  file = 'data/2019-10-09 predictions.csv'
+  file = 'data/2019-10-17 predictions.csv'
   , row.names = FALSE
 )
 ```
@@ -425,16 +638,16 @@ full.data %>% filter(
     ) %>%
     select(
       HOUSEHOLD_ID
-      , est.giving
-      , est.p
-      , ev
-      , est.giving.bin
-      , est.p.bin
-      , ev.bin
+      , est.giving.coef1
+      , est.p.coef1
+      , ev.coef1
+      , est.giving.bin.coef1
+      , est.p.bin.coef1
+      , ev.bin.coef1
     ) 
   , by = c('HOUSEHOLD_ID')
 ) %>% write.csv(
-  file = 'data/2019-10-09 export.csv'
+  file = 'data/2019-10-17 export.csv'
   , row.names = FALSE
 )
 ```
