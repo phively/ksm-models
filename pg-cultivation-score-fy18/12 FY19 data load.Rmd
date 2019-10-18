@@ -1,0 +1,148 @@
+---
+title: "CATracks data format"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    toc: yes
+    toc_float:
+      collapsed: no
+---
+
+# Goal
+
+Format an exported KSM MG modeled data file into one that can be mass uploaded into the segments table.
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+# Libraries
+library(tidyverse)
+```
+
+```{r}
+# Import data
+predictions <- read.csv(file = 'data/2019-10-17 export.csv', stringsAsFactors = FALSE) %>%
+  mutate(
+    ID_NUMBER = str_pad(ID_NUMBER, width = 10, side = 'left', pad = '0')
+    , n = 1
+  )
+```
+
+# Thresholding
+
+```{r}
+predictions %>%
+  group_by(est.giving.bin.coef1) %>%
+  summarise(
+    total = sum(n)
+  ) %>%
+  arrange(desc(est.giving.bin.coef1)) %>%
+  mutate(
+    cumsum = cumsum(total)
+  )
+```
+
+`est.giving.bin` becomes the Kellogg Major Gift Identification Model (KMID1, KMID2, KMID3). 4+ = high, 3 = middle, 2- = low.
+
+```{r}
+predictions %>%
+  group_by(ev.bin.coef1) %>%
+  summarise(
+    total = sum(n)
+  ) %>%
+  arrange(desc(ev.bin.coef1)) %>%
+  mutate(
+    cumsum = cumsum(total)
+  )
+```
+
+`ev.bin` becomes the Kellogg Major Gift Prioritization Model (KMPR1, KMPR2, KMPR3). 3+ = high, 1-2 = medium, 0 = low.
+
+# Segments
+
+```{r}
+output <- predictions %>% mutate(
+  model1 = 'ID'
+  , model2 = 'PR'
+  , IDseg = case_when(
+    est.giving.bin.coef1 >= 4 ~ 'KMID1'
+    , est.giving.bin.coef1 == 3 ~ 'KMID2'
+    , est.giving.bin.coef1 <= 2 ~ 'KMID3'
+  )
+  , PRseg = case_when(
+    ev.bin.coef1 >= 3 ~ 'KMPR1'
+    , ev.bin.coef1 %in% 1:2 ~ 'KMPR2'
+    , ev.bin.coef1 == 0 ~ 'KMPR3'
+  )
+  , SEGMENT_YEAR = '2019'
+  , SEGMENT_MONTH = '10'
+  , IDxc = est.giving.coef1
+  , PRxc = ev.coef1
+  , DATA_SOURCE_CODE = 'KSM'
+)
+
+# write.csv(output, file = 'test.csv', row.names = FALSE)
+```
+
+# Segments to rows
+
+```{r}
+transformed <- output %>%
+  gather('model', 'name', model1:model2) %>%
+  mutate(
+    SEGMENT_CODE = case_when(
+      name == 'ID' ~ IDseg
+      , name == 'PR' ~ PRseg
+    )
+    , XCOMMENT = case_when(
+      name == 'ID' ~ IDxc
+      , name == 'PR' ~ PRxc
+    )
+  ) %>% select(
+    est.giving.coef1
+    , est.p.coef1
+    , ev.coef1
+    , est.giving.bin.coef1
+    , ev.bin.coef1
+    , n
+    , ID_NUMBER
+    , SEGMENT_CODE
+    , SEGMENT_YEAR
+    , SEGMENT_MONTH
+    , XCOMMENT
+    , DATA_SOURCE_CODE
+  ) %>% na.omit()
+```
+
+Verify results.
+
+```{r}
+transformed %>%
+  filter(SEGMENT_CODE %in% c('KMPR1', 'KMPR2', 'KMPR3')) %>%
+  group_by(ev.bin.coef1, SEGMENT_CODE) %>%
+  summarise(
+    total = sum(n)
+  ) %>%
+  arrange(desc(ev.bin.coef1))
+```
+
+```{r}
+transformed %>%
+  filter(SEGMENT_CODE %in% c('KMID1', 'KMID2', 'KMID3')) %>%
+  group_by(est.giving.bin.coef1, SEGMENT_CODE) %>%
+  summarise(
+    total = sum(n)
+  ) %>%
+  arrange(desc(est.giving.bin.coef1))
+```
+
+# Export
+
+```{r}
+transformed %>%
+  select(-est.giving.coef1, -est.p.coef1, -ev.coef1, -est.giving.bin.coef1, -ev.bin.coef1, -n) %>%
+  write.csv(file = 'data/2019-10-18 KSM segments.csv', row.names = FALSE)
+```
+
