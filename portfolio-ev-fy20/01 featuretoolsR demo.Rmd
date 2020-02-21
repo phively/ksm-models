@@ -1,0 +1,78 @@
+---
+title: "00 featuretoolsR demo"
+output: html_notebook
+---
+
+# Goal
+
+Understand how featuretoolsR, the R implementation of Featuretools [Python documentation](https://docs.featuretools.com/) can be used with relational data to reproducibly create derived features. I expect the package can create more features and do it with greater efficiency compared to subquerying/aggregating in SQL.
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(readxl)
+library(featuretoolsR)
+```
+
+# Data
+
+Raw alumni and committee data for testing.
+
+```{r}
+degree <- read_xlsx(
+  path = 'data/2020-02-21 entity committee test data.xlsx'
+  , sheet = 1
+  , guess_max = 1E6
+)
+committee <- read_xlsx(
+  path = 'data/2020-02-21 entity committee test data.xlsx'
+  , sheet = 2
+  , guess_max = 1E6
+)
+```
+
+Some data cleanup.
+
+```{r}
+committee <- committee %>%
+  mutate(
+    uid = paste(ID_NUMBER, XSEQUENCE) # unique identifier
+  )
+```
+
+
+Create an entity set, i.e. list of related tables.
+
+```{r}
+es <- as_entityset(
+  degree # data frame
+  , entity_id = 'degree' # name of set
+  , index = 'ID_NUMBER' # unique identifier
+  , id = 'CATracks' # name of entity set
+) %>% add_entity(
+  committee
+  , entity_id = 'committee'
+  , index = 'uid'
+  , time_index = 'START_DT_CALC' # when the record was created
+)
+```
+
+Define relationships between the entities.
+
+```{r}
+es <- es %>% add_relationship(
+  parent_set = 'degree'
+  , child_set = 'committee'
+  , parent_idx = 'ID_NUMBER'
+  , child_idx = 'ID_NUMBER'
+)
+```
+
+Examine the results.
+
+```{r}
+print(es)
+```
+
+# Primitives
+
+# Deep feature synthesis
