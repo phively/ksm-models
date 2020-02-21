@@ -1,11 +1,11 @@
 ---
-title: "00 featuretoolsR demo"
+title: "featuretoolsR demo"
 output: html_notebook
 ---
 
 # Goal
 
-Understand how featuretoolsR, the R implementation of Featuretools [Python documentation](https://docs.featuretools.com/) can be used with relational data to reproducibly create derived features. I expect the package can create more features and do it with greater efficiency compared to subquerying/aggregating in SQL.
+Understand how featuretoolsR, the R implementation of Featuretools ([Python documentation](https://docs.featuretools.com/)) can be used with relational data to reproducibly create derived features. I expect the package can create more features and do it with greater efficiency compared to subquerying/aggregating in SQL.
 
 ```{r setup, message = FALSE, warning = FALSE}
 library(tidyverse)
@@ -45,14 +45,14 @@ Create an entity set, i.e. list of related tables.
 ```{r}
 es <- as_entityset(
   degree # data frame
-  , entity_id = 'degree' # name of set
+  , entity_id = 'degree' # name of entity
   , index = 'ID_NUMBER' # unique identifier
   , id = 'CATracks' # name of entity set
 ) %>% add_entity(
   committee
   , entity_id = 'committee'
   , index = 'uid'
-  , time_index = 'START_DT_CALC' # when the record was created
+  , time_index = 'START_DT_CALC' # when the record can first be used
 )
 ```
 
@@ -73,6 +73,30 @@ Examine the results.
 print(es)
 ```
 
-# Primitives
-
 # Deep feature synthesis
+
+Deep feature synthesis (DFS) 
+
+```{r}
+features <- es %>% dfs(
+  target_entity = 'degree'
+  , agg_primitives = c('count', 'sum', 'std')
+  , trans_primitives = c('month', 'year')
+  , max_depth = 2
+)
+```
+
+```{r}
+features[[2]]
+```
+
+```{r}
+features[[1]] %>% summary()
+```
+
+Most of these are pretty silly. The xsequence is essentially arbitrary and should be removed from the data frame in any case. Also, it would be useful to calculate things like count of months between start and stop date, distinct roles, most common role, etc.
+
+# Creating primitives
+
+# Deep feature synthesis round 2
+
