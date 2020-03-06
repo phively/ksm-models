@@ -1,0 +1,23 @@
+---
+title: "02 Data file generation"
+output: html_notebook
+---
+
+# Goal
+
+Use featuretoolsR to create a large data frame for use in modeling.
+
+```{r setup}
+library(tidyverse)
+library(lubridate)
+library(readxl)
+library(foreach)
+library(featuretoolsR)
+```
+
+# Data import
+
+```{r}
+
+```
+
