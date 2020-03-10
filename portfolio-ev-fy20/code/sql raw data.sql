@@ -9,6 +9,11 @@ Select
   , cal.yesterday As data_as_of
 From v_entity_ksm_households hh
 Cross Join v_current_calendar cal
+Where
+  -- Primary only
+  hh.household_primary = 'Y'
+  -- Alumni only
+  And hh.household_program_group Is Not Null
 ;
 */
 
@@ -30,11 +35,6 @@ Select
   , hh.household_program_group
   , hh.data_as_of
 From tmp_mv_hh hh
-Where
-  -- Primary only
-  hh.household_primary = 'Y'
-  -- Alumni only
-  And hh.household_program_group Is Not Null
 ;
 
 --------------------
@@ -85,8 +85,38 @@ Where c.committee_status_code In ('C', 'F', 'A', 'U') -- Current, Former, Active
 ;
 
 -- Events
+Select
+  hh.household_id
+  , e.id_number
+  , e.event_id
+  , e.event_name
+  , e.ksm_event
+  , e.event_type
+  , e.start_dt
+  , e.stop_dt
+  , e.start_fy_calc
+  , e.stop_fy_calc
+From v_nu_event_participants_fast e
+Inner Join tmp_mv_hh hh
+  On hh.id_number = e.id_number
+;
 
 -- Activities
+Select
+  hh.household_id
+  , a.activity_desc
+  , a.ksm_activity
+  , a.activity_participation_code
+  , a.start_dt
+  , a.stop_dt
+  , a.date_added
+  , a.date_modified
+  , a.start_fy_calc
+  , a.stop_fy_calc
+From v_nu_activities_fast a
+Inner Join tmp_mv_hh hh
+  On hh.id_number = a.id_number
+;
 
 --------------------
 ------ Giving ------
