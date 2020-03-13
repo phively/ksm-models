@@ -11,7 +11,7 @@ From v_entity_ksm_households hh
 Cross Join v_current_calendar cal
 Where
   -- Alumni only
-  And hh.household_program_group Is Not Null
+  hh.household_program_group Is Not Null
 ;
 
 Drop Materialized View tmp_mv_gt
@@ -34,6 +34,12 @@ Where gth.hh_recognition_credit > 0
 -- Alumni
 Select
   hh.household_id
+  , Case
+      When household_spouse_rpt_name Is Not Null
+        Then 2
+      Else 1
+      End
+    As hh_count
   , hh.household_rpt_name
   , hh.household_spouse_id
   , hh.household_spouse_rpt_name
@@ -162,12 +168,6 @@ Inner Join tmp_mv_hh hh
 ;
 
 -- Pledge payment schedule
-With plg As (
-  Select Distinct
-    pledge_number
-  From tmp_mv_gt
-)
-
 Select
   pay.payment_schedule_pledge_nbr
     As pledge_number
@@ -183,7 +183,7 @@ Select
 From payment_schedule pay
 Inner Join primary_pledge pp
   On pp.prim_pledge_number = pay.payment_schedule_pledge_nbr
-Inner Join plg
+Inner Join (Select Distinct pledge_number From tmp_mv_gt) plg
   On plg.pledge_number = pay.payment_schedule_pledge_nbr
 ;
 
@@ -344,9 +344,168 @@ Where
 --------------------
 
 -- Employment
+Select
+  hh.household_id
+  , e.start_dt
+  , e.stop_dt
+  , trunc(e.date_added)
+    As date_added
+  , trunc(e.date_modified)
+    As date_modified
+  , Case
+      When e.start_dt Is Not Null
+        And substr(e.start_dt, 1, 4) <> '0000'
+        And substr(e.start_dt, 5, 2) <> '00'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(e.start_dt, 1, 6) || '01', 'yyyymmdd'))
+      Else rpt_pbh634.ksm_pkg.get_fiscal_year(e.date_added)
+      End
+    As start_fy_calc
+  , Case
+      When e.stop_dt Is Not Null
+        And e.job_status_code Not In ('C', 'D')
+        And substr(e.stop_dt, 1, 4) <> '0000'
+        And substr(e.stop_dt, 5, 2) <> '00'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(e.stop_dt, 1, 6) || '01', 'yyyymmdd'))
+      When e.job_status_code Not In ('C', 'D')
+        Then rpt_pbh634.ksm_pkg.get_fiscal_year(e.date_modified)
+      Else NULL
+      End
+    As stop_fy_calc
+  , e.job_status_code
+  , e.job_title
+  , trim(e.employer_name1 || ' ' || e.employer_name2)
+    As employer_name
+  , e.self_employ_ind
+  , e.matching_status_ind
+From employment e
+Inner Join tmp_mv_hh hh
+  On hh.id_number = e.id_number
+Where e.employ_relat_code In ('PE', 'PF', 'SE') -- Primary, previous, secondary employer
+;
 
 -- Have email
+Select
+  hh.household_id
+  , e.email_type_code
+  , te.short_desc
+    As email_type
+  , e.email_status_code
+  , trunc(e.status_change_date)
+    As status_change_date
+  , e.start_dt
+  , e.stop_dt
+  , trunc(e.date_added)
+    As date_added
+  , trunc(e.date_modified)
+    As date_modified
+  , Case
+      When start_dt Is Not Null
+        And substr(e.start_dt, 1, 4) <> '0000'
+        And substr(e.start_dt, 5, 2) <> '00'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(e.start_dt, 1, 6) || '01', 'yyyymmdd'))
+      Else rpt_pbh634.ksm_pkg.get_fiscal_year(e.date_added)
+      End
+    As start_fy_calc
+  , Case
+      When e.stop_dt Is Not Null
+        And e.email_status_code <> 'A'
+        And substr(e.stop_dt, 1, 4) <> '0000'
+        And substr(e.stop_dt, 5, 2) <> '00'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(e.stop_dt, 1, 6) || '01', 'yyyymmdd'))
+      When e.email_status_code <> 'A'
+        Then rpt_pbh634.ksm_pkg.get_fiscal_year(e.date_modified)
+      Else NULL
+      End
+    As stop_fy_calc
+From email e
+Inner Join tmp_mv_hh hh
+  On hh.id_number = e.id_number
+Inner Join tms_email_type te
+  On te.email_type_code = e.email_type_code
+Where e.email_type_code <> 'M' -- mismatch
+;
 
 -- Have phone
+Select
+  hh.household_id
+  , t.telephone_type_code
+  , tt.short_desc
+    As telephone_type
+  , tt.business_ind
+  , tt.current_ind
+  , t.telephone_status_code
+  , t.start_dt
+  , t.stop_dt
+  , t.status_change_date
+  , trunc(t.date_added)
+    As date_added
+  , trunc(t.date_modified)
+    As date_modified
+  , Case
+      When t.start_dt Is Not Null
+        And substr(t.start_dt, 1, 4) <> '0000'
+        And substr(t.start_dt, 5, 2) <> '00'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(t.start_dt, 1, 6) || '01', 'yyyymmdd'))
+      Else rpt_pbh634.ksm_pkg.get_fiscal_year(t.date_added)
+      End
+    As start_fy_calc
+  , Case
+      When t.stop_dt Is Not Null
+        And t.telephone_status_code <> 'A'
+        And substr(t.stop_dt, 1, 4) <> '0000'
+        And substr(t.stop_dt, 5, 2) <> '00'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(t.stop_dt, 1, 6) || '01', 'yyyymmdd'))
+      When t.telephone_status_code <> 'A'
+        Then rpt_pbh634.ksm_pkg.get_fiscal_year(t.date_modified)
+      Else NULL
+      End
+    As stop_fy_calc
+From telephone t
+Inner Join tmp_mv_hh hh
+  On hh.id_number = t.id_number
+Inner Join tms_telephone_type tt
+  On tt.telephone_type_code = t.telephone_type_code
+Where t.telephone_type_code In ('H', 'B', 'M') -- Home, Business, Mobile
+;
 
 -- Have address
+Select
+  hh.household_id
+  , a.start_dt
+  , a.stop_dt
+  , trunc(a.date_added)
+    As date_added
+  , trunc(a.date_modified)
+    As date_modified
+  , a.addr_type_code
+  , ta.short_desc
+    As addr_type
+  , ta.business_ind
+  , ta.hbs_code
+  , a.addr_status_code
+  , Case
+      When a.start_dt Is Not Null
+        And substr(a.start_dt, 1, 4) <> '0000'
+        And substr(a.start_dt, 5, 2) <> '00'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(a.start_dt, 1, 6) || '01', 'yyyymmdd'))
+      Else rpt_pbh634.ksm_pkg.get_fiscal_year(a.date_added)
+      End
+    As start_fy_calc
+  , Case
+      When a.stop_dt Is Not Null
+        And a.addr_status_code <> 'A'
+        And substr(a.stop_dt, 1, 4) <> '0000'
+        And substr(a.stop_dt, 5, 2) <> '00'
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(a.stop_dt, 1, 6) || '01', 'yyyymmdd'))
+      When a.addr_status_code <> 'A'
+        Then rpt_pbh634.ksm_pkg.get_fiscal_year(a.date_modified)
+      Else NULL
+      End
+    As stop_fy_calc
+From address a
+Inner Join tmp_mv_hh hh
+  On hh.id_number = a.id_number
+Inner Join tms_address_type ta
+  On ta.addr_type_code = a.addr_type_code
+Where a.addr_type_code In ('AB', 'AH', 'B', 'H', 'P', 'Q', 'R', 'S', 'T') -- Home, Bus, Alt Home, Alt Bus, Seasonal
+;
