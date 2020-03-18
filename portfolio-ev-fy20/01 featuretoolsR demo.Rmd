@@ -16,6 +16,7 @@ library(tidyverse)
 library(lubridate)
 library(readxl)
 library(foreach)
+library(reticulate)
 library(featuretoolsR)
 ```
 
@@ -111,6 +112,7 @@ features <- es %>%
     , agg_primitives = c('mean', 'max', 'count', 'percent_true', 'last')
     , trans_primitives = c('year', 'month', 'is_weekend', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
     , max_depth = 2 # Include up to n levels of feature stacking (2 here)
+    , verbose = TRUE
   )
 ```
 
@@ -241,6 +243,7 @@ features <- es %>% dfs(
   , agg_primitives = c('count', 'sum', 'std', 'last')
   , trans_primitives = c('month', 'year')
   , max_depth = 2
+  , verbose = TRUE
 )
 t1 <- Sys.time()
 ```
@@ -256,3 +259,69 @@ t1 - t0
 `r as.numeric(t1 - t0) %>% round() %>% I()` seconds for `r {nrow(committee) + nrow(degree)} %>% I()` rows of data isn't bad. Certainly beats trying to do everything by hand.
 
 Obviously cleanup is needed, as most of these features are pretty silly. The xsequence is essentially arbitrary and should be removed from the data frame in any case. Additionally, it would be useful to calculate things like count of months between start and stop date, distinct roles, most common role (mode), etc.
+
+# Python environment
+
+Try the above but with native Python code instead of R.
+
+```{python}
+# Test features
+import matplotlib.pyplot as plt
+import numpy as np
+t = np.arange(start = 0.0, stop = 2.0, step = 0.01)
+s = 1 + np.sin(2 * np.pi * t)
+plt.plot(t, s)
+plt.xlabel("time (s)")
+plt.ylabel("voltage (mV)")
+plt.grid(True)
+```
+
+```{python}
+# Test parallel feature processing
+import featuretools as ft
+import time
+
+# Initialize entity set
+py_es = ft.EntitySet(id = 'catracks')
+
+# Add degree
+py_es = py_es.entity_from_dataframe(
+  entity_id = 'degree'
+  , dataframe = r.degree
+  , index = 'ID_NUMBER'
+)
+
+# Add committee
+py_es.entity_from_dataframe(
+  entity_id = 'committee'
+  # r.committee references committee in the R session; pretty cool!
+  , dataframe = r.committee
+  , make_index = True
+  , index = 'committee_idx'
+)
+
+# Add relationships
+py_es = py_es.add_relationship(
+  ft.Relationship(
+    py_es['degree']['ID_NUMBER']
+    , py_es['committee']['ID_NUMBER']
+  )
+)
+
+# Check results
+print(py_es)
+```
+
+```{python}
+# DFS re-run
+feature_matrix, feature_defs = ft.dfs(
+  entityset = py_es
+  , target_entity = 'degree'
+  , agg_primitives = ['count', 'sum', 'std', 'last']
+  , trans_primitives = ['month', 'year']
+  , max_depth = 2
+  , verbose = True
+)
+```
+
+Looks like the same results in the same amount of time. Not bad!
