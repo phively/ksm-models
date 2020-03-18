@@ -14,6 +14,7 @@ Understand how featuretoolsR, the R implementation of Featuretools ([Python docu
 ```{r setup, message = FALSE, warning = FALSE}
 library(tidyverse)
 library(lubridate)
+library(wranglR)
 library(readxl)
 library(foreach)
 library(reticulate)
@@ -325,3 +326,36 @@ feature_matrix, feature_defs = ft.dfs(
 ```
 
 Looks like the same results in the same amount of time. Not bad!
+
+# Python core scaling
+
+What kind of scaling can be expected from multicore processing?
+
+Data from a simple (Python script)[https://github.com/phively/ksm-models/tree/master/portfolio-ev-fy20/01b%20parallel%20featuretools.py].
+
+```{r}
+scaling <- data.frame(
+  workers = c(1, 2, 3, 4, 6, 8)
+  , data = c(NA, 64, 63, 90, 91, 105)
+  , compute = c(14, 11, 9, 8, 6, 6)
+) %>% mutate(
+  total = ReplaceValues(data) + compute
+) %>% pivot_longer(
+  cols = data:total
+  , names_to = 'time'
+  , values_to = 'seconds'
+) %>% filter(
+  !is.na(seconds)
+)
+```
+
+```{r}
+scaling %>%
+  ggplot(aes(x = workers, y = seconds, color = time)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(breaks = seq(0, 100, by = 10)) +
+  scale_x_continuous(breaks = 1:100, minor_breaks = NULL)
+```
+
+The data processing time increases approximately linearly and the compute time decreases logarithmically with the number of cores. The fixed overhead doesn't look worth it for a smaller dataset like mine.
