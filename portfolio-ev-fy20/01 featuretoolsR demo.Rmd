@@ -331,7 +331,7 @@ Looks like the same results in the same amount of time. Not bad!
 
 What kind of scaling can be expected from multicore processing?
 
-Data from a simple (Python script)[https://github.com/phively/ksm-models/tree/master/portfolio-ev-fy20/01b%20parallel%20featuretools.py].
+Data from a simple [Python script](https://github.com/phively/ksm-models/tree/master/portfolio-ev-fy20/01b%20parallel%20featuretools.py).
 
 ```{r}
 scaling <- data.frame(

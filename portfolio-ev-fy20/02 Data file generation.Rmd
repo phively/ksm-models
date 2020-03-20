@@ -7,9 +7,10 @@ output: html_notebook
 
 Use featuretoolsR to create a large data frame for use in modeling.
 
-```{r setup}
+```{r setup, message = FALSE, warning = FALSE}
 library(tidyverse)
 library(lubridate)
+library(wranglR)
 library(readxl)
 library(foreach)
 library(featuretoolsR)
@@ -18,6 +19,229 @@ library(featuretoolsR)
 # Data import
 
 ```{r}
+fileloader <- function(filename, sheetnum) {
+  read_xlsx(
+    path = paste0('data/', filename)
+    , sheet = sheetnum
+    , guess_max = 1E7
+  )
+}
 
+# Base table
+households <- fileloader('2020-03-16 Engagement data.xlsx', 1)
+# Biodata tables
+bio_phone <- fileloader('2020-03-16 Addr phone.xlsx', 1)
+bio_address <- fileloader('2020-03-16 Addr phone.xlsx', 2)
+bio_employment <- fileloader('2020-03-16 employment email.xlsx', 1)
+bio_email <- fileloader('2020-03-16 employment email.xlsx', 2)
+# Engagement tables
+eng_committee <- fileloader('2020-03-16 Engagement data.xlsx', 2)
+eng_event <- fileloader('2020-03-16 Engagement data.xlsx', 3)
+eng_activity <- fileloader('2020-03-16 Engagement data.xlsx', 4)
+# Giving tables
+giv_transactions <- fileloader('2020-03-16 Gift transactions.xlsx', 1)
+giv_payments <- fileloader('2020-03-16 Gift data.xlsx', 1)
+giv_giftclub <- fileloader('2020-03-16 Gift data.xlsx', 2)
+# Prospect tables
+prs_evaluation <- fileloader('2020-03-16 Prospect data.xlsx', 1)
+prs_contact <- fileloader('2020-03-16 Prospect data.xlsx', 2)
+prs_program <- fileloader('2020-03-16 Prospect data.xlsx', 3)
+prs_assignment <- fileloader('2020-03-16 Prospect data.xlsx', 4)
 ```
+
+# Data cleanup
+
+```{r}
+households <- households %>%
+  # Factors
+  mutate(
+    RECORD_STATUS_CODE = factor(RECORD_STATUS_CODE)
+    , HOUSEHOLD_PROGRAM = factor(HOUSEHOLD_PROGRAM)
+    , HOUSEHOLD_PROGRAM_GROUP = factor(HOUSEHOLD_PROGRAM_GROUP)
+  ) %>%
+  # Numeric
+  mutate_at(
+    vars(ends_with('_YEAR'))
+    , list(as.numeric)
+  )
+
+summary(households)
+```
+
+```{r}
+bio_address <- bio_address %>%
+  mutate(
+    ADDR_TYPE_CODE = factor(ADDR_TYPE_CODE)
+    , ADDR_TYPE = factor(ADDR_TYPE)
+    , BUSINESS_IND = BUSINESS_IND == 'Y'
+    , HBS_CODE = factor(HBS_CODE)
+    , ADDR_STATUS_CODE = factor(ADDR_STATUS_CODE)
+  )
+
+summary(bio_address)
+```
+
+Note that any start year past 2020 is suspect.
+
+```{r}
+bio_email <- bio_email %>%
+  mutate(
+    EMAIL_TYPE_CODE = factor(EMAIL_TYPE_CODE)
+    , EMAIL_TYPE = factor(EMAIL_TYPE)
+    , EMAIL_STATUS_CODE = factor(EMAIL_STATUS_CODE)
+  )
+
+summary(bio_email)
+```
+
+```{r}
+bio_employment <- bio_employment %>%
+  mutate(
+    JOB_STATUS_CODE = factor(JOB_STATUS_CODE)
+    , SELF_EMPLOY_IND = SELF_EMPLOY_IND == 'Y'
+    , MATCHING_STATUS_IND = MATCHING_STATUS_IND == 'Y'
+  )
+
+summary(bio_employment)
+```
+
+```{r}
+bio_phone <- bio_phone %>%
+  mutate(
+    TELEPHONE_TYPE_CODE = factor(TELEPHONE_TYPE_CODE)
+    , TELEPHONE_TYPE = factor(TELEPHONE_TYPE)
+    , BUSINESS_IND = BUSINESS_IND == 'Y'
+    , CURRENT_IND = CURRENT_IND == 'Y'
+    , TELEPHONE_STATUS_CODE = factor(TELEPHONE_STATUS_CODE)
+  )
+
+summary(bio_phone)
+```
+
+Note to self - re-pull telephone data with additional types.
+
+```{r}
+eng_activity <- eng_activity %>%
+  mutate(
+    ACTIVITY_DESC = factor(ACTIVITY_DESC)
+    , KSM_ACTIVITY = !is.na(KSM_ACTIVITY)
+    , ACTIVITY_PARTICIPATION_CODE = factor(ACTIVITY_PARTICIPATION_CODE)
+  )
+
+summary(eng_activity)
+```
+
+Clean up start/stop FY.
+
+```{r}
+eng_committee <- eng_committee %>%
+  mutate(
+    COMMITTEE_CODE = factor(COMMITTEE_CODE)
+    , COMMITTEE_DESC = factor(COMMITTEE_DESC)
+    , COMMITTEE_ROLE_CODE = factor(COMMITTEE_ROLE_CODE)
+    , COMMITTEE_ROLE = factor(COMMITTEE_ROLE)
+    , KSM_COMMITTEE = !is.na(KSM_COMMITTEE)
+    , COMMITTEE_STATUS = factor(COMMITTEE_STATUS)
+  )
+
+summary(eng_committee)
+```
+
+```{r}
+eng_event <- eng_event %>%
+  mutate(
+    EVENT_NAME = factor(EVENT_NAME)
+    , KSM_EVENT = !is.na(KSM_EVENT)
+    , EVENT_TYPE = factor(EVENT_TYPE)
+  )
+
+summary(eng_event)
+```
+
+```{r}
+giv_giftclub <- giv_giftclub %>%
+  mutate(
+    GIFT_CLUB = factor(GIFT_CLUB)
+    , GIFT_CLUB_CODE = factor(GIFT_CLUB_CODE)
+    , GC_CATEGORY = factor(GC_CATEGORY)
+  )
+
+summary(giv_giftclub)
+```
+
+```{r}
+giv_payments <- giv_payments %>%
+  mutate(
+    PLEDGE_FY = as.numeric(PLEDGE_FY)
+  )
+
+summary(giv_payments)
+```
+
+```{r}
+giv_transactions <- giv_transactions %>%
+  mutate(
+    TRANSACTION_TYPE = factor(TRANSACTION_TYPE)
+    , TX_GYPM_IND = factor(TX_GYPM_IND)
+    , ASSOCIATED_DESC = factor(ASSOCIATED_DESC)
+    , PAYMENT_TYPE = factor(PAYMENT_TYPE)
+    , ALLOC_SHORT_NAME = factor(ALLOC_SHORT_NAME)
+    , AF_FLAG = !is.na(AF_FLAG)
+    , CRU_FLAG = !is.na(CRU_FLAG)
+    , PROPOSAL_ID = factor(PROPOSAL_ID)
+  )
+
+summary(giv_transactions)
+```
+
+```{r}
+prs_assignment <- prs_assignment %>%
+  mutate(
+    ASSIGNMENT_TYPE = factor(ASSIGNMENT_TYPE)
+    , ASSIGNMENT_TYPE_DESC = factor(ASSIGNMENT_TYPE_DESC)
+    , ASSIGNMENT_REPORT_NAME = factor(ASSIGNMENT_REPORT_NAME)
+    , COMMITTEE_DESC = factor(COMMITTEE_DESC)
+  )
+
+prs_assignment %>% select(-ASSIGNMENT_REPORT_NAME) %>% summary()
+```
+
+No meaningful COMMITTEE_DESC data.
+
+```{r}
+prs_contact <- prs_contact %>%
+  mutate(
+    CONTACT_CREDIT_TYPE = factor(CONTACT_CREDIT_TYPE)
+    , CONTACT_CREDIT_DESC = factor(CONTACT_CREDIT_DESC)
+    , ARD_STAFF = !is.na(ARD_STAFF)
+    , FRONTLINE_KSM_STAFF = !is.na(FRONTLINE_KSM_STAFF)
+    , CONTACT_TYPE_CATEGORY = factor(CONTACT_TYPE_CATEGORY)
+    , VISIT_TYPE = factor(VISIT_TYPE)
+  )
+
+summary(prs_contact)
+```
+
+```{r}
+prs_evaluation <- prs_evaluation %>%
+  mutate(
+    EVALUATION_TYPE = factor(EVALUATION_TYPE)
+    , EVALUATION_DESC = factor(EVALUATION_DESC)
+    , RATING_CODE = factor(RATING_CODE)
+    , RATING_DESC = factor(RATING_DESC)
+  )
+
+summary(prs_evaluation)
+```
+
+```{r}
+prs_program <- prs_program %>%
+  mutate(
+    PROGRAM_CODE = factor(PROGRAM_CODE)
+    , PROGRAM = factor(PROGRAM)
+  )
+
+summary(prs_program)
+```
+
 
