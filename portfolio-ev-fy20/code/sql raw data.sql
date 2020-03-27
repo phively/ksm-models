@@ -465,7 +465,7 @@ Inner Join tmp_mv_hh hh
   On hh.id_number = t.id_number
 Inner Join tms_telephone_type tt
   On tt.telephone_type_code = t.telephone_type_code
-Where t.telephone_type_code In ('H', 'B', 'M') -- Home, Business, Mobile
+Where t.telephone_type_code In ('H', 'P', 'B', 'Q', 'M', 'PM', 'A', 'R') -- Home, Business, Mobile, Alternate
 ;
 
 -- Have address
