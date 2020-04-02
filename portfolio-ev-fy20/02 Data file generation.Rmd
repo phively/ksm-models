@@ -1,6 +1,10 @@
 ---
 title: "02 Data file generation"
-output: html_notebook
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
 ---
 
 # Goal
@@ -13,7 +17,10 @@ library(lubridate)
 library(wranglR)
 library(readxl)
 library(foreach)
+library(reticulate)
 library(featuretoolsR)
+
+source(file = 'code/featuretools helper functions.R')
 ```
 
 # Data import
@@ -30,7 +37,7 @@ fileloader <- function(filename, sheetnum) {
 # Base table
 households <- fileloader('2020-03-16 Engagement data.xlsx', 1)
 # Biodata tables
-bio_phone <- fileloader('2020-03-16 Addr phone.xlsx', 1)
+bio_phone <- fileloader('2020-03-27 phone numbers.xlsx', 1)
 bio_address <- fileloader('2020-03-16 Addr phone.xlsx', 2)
 bio_employment <- fileloader('2020-03-16 employment email.xlsx', 1)
 bio_email <- fileloader('2020-03-16 employment email.xlsx', 2)
@@ -118,7 +125,7 @@ bio_phone <- bio_phone %>%
 summary(bio_phone)
 ```
 
-Note to self - re-pull telephone data with additional types.
+Note to self - re-pull telephone data with additional types (done). Those 1902 dates do look pretty fishy.
 
 ```{r}
 eng_activity <- eng_activity %>%
@@ -244,4 +251,152 @@ prs_program <- prs_program %>%
 summary(prs_program)
 ```
 
+# Quick test
+
+Test features with biodata only.
+
+```{r}
+hh <- households %>%
+  select(
+    -HOUSEHOLD_RPT_NAME
+    , -HOUSEHOLD_SPOUSE_ID
+    , -HOUSEHOLD_SPOUSE_RPT_NAME
+    , -RECORD_STATUS_CODE
+    , -DATA_AS_OF
+  )
+```
+
+Create entities.
+
+```{r}
+es <- as_entityset(
+  hh # data frame
+  , entity_id = 'household' # name of entity
+  , index = 'HOUSEHOLD_ID' # unique identifier
+  , id = 'household' # name of entity set
+) %>%
+  # Bio entities
+  add_entity(
+    bio_address %>% select(-START_DT, -STOP_DT, -DATE_MODIFIED, -ADDR_TYPE_CODE)
+    , entity_id = 'bio_address'
+    , make_index = TRUE
+    , index = 'bio_address_idx'
+    , time_index = 'DATE_ADDED' # when the record can first be used
+  ) %>%
+  add_entity(
+  bio_email %>% select(-EMAIL_TYPE_CODE, -START_DT, -STOP_DT)
+  , entity_id = 'bio_email'
+  , make_index = TRUE
+  , index = 'bio_email_idx'
+  , time_index = 'DATE_ADDED' # when the record can first be used
+  ) %>%
+  add_entity(
+  bio_employment %>% select(-START_DT, -STOP_DT, -JOB_TITLE, -EMPLOYER_NAME)
+  , entity_id = 'bio_employment'
+  , make_index = TRUE
+  , index = 'bio_employment_idx'
+  , time_index = 'DATE_ADDED' # when the record can first be used
+  ) %>%
+  add_entity(
+  bio_phone %>% select(-TELEPHONE_TYPE_CODE, -START_DT, -STOP_DT)
+  , entity_id = 'bio_phone'
+  , make_index = TRUE
+  , index = 'bio_phone_idx'
+  , time_index = 'DATE_ADDED' # when the record can first be used
+)
+```
+
+Create relationships.
+
+```{r}
+es <- es %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'bio_address'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'bio_email'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'bio_employment'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'bio_phone'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  )
+```
+
+```{r}
+print(es)
+```
+
+```{r}
+# Use base R data
+dfs_r <- es %>% dfs(
+  target_entity = 'household'
+  , agg_primitives = c('count')
+  , trans_primitives = c('month', 'year')
+  , max_depth = 2
+  , verbose = TRUE
+)
+```
+
+```{r, rows.print = 20}
+print_features(dfs_r)
+```
+
+We see that dfs created counts for the total number of address, email, etc. entries on the table per household_id. However, it would be more useful to get counts broken down by other criteria -- for example, how many historical home addresses, active emails, etc.
+
+# "Interesting values" function
+
+The featuretools "interesting values" functionality creates new aggregation fields for each of a predefined set of factor levels -- or just the n most common.
+
+```{python}
+import featuretools as ft
+
+# Import R data
+py_es = r.es
+
+# Add interesting values tabulation; here I'm looking at up to the 6 most common levels for each table.
+py_es.add_interesting_values(max_values = 6, verbose = True)
+```
+
+```{r}
+# Import data from python
+dfs_py <- py$py_es %>% dfs(
+  target_entity = 'household'
+  , agg_primitives = c('count')
+  , trans_primitives = c('month', 'year')
+  , max_depth = 2
+  , verbose = TRUE
+)
+```
+
+```{r, rows.print = 20}
+print_features(dfs_py)
+```
+
+Here we see the interesting values functionality added counts specifically by contact status, type, etc. This took only a few seconds, which definitely beats doing this for dozens of fields by hand.
+
+# Full run
+
+```{r}
+# features <- es %>% dfs(
+#   target_entity = 'household'
+#   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'last', 'percent_true')
+#   , trans_primitives = c('month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+#   , max_depth = 2
+#   , verbose = TRUE
+# )
+```
 
