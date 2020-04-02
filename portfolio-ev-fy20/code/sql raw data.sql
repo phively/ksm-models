@@ -443,18 +443,16 @@ Select
     As date_modified
   , Case
       When t.start_dt Is Not Null
-        And substr(t.start_dt, 1, 4) <> '0000'
-        And substr(t.start_dt, 5, 2) <> '00'
-          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(t.start_dt, 1, 6) || '01', 'yyyymmdd'))
+        And ksm_pkg.to_date2(t.start_dt) Is Not Null
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(ksm_pkg.to_date2(substr(t.start_dt, 1, 6) || '01', 'yyyymmdd'))
       Else rpt_pbh634.ksm_pkg.get_fiscal_year(t.date_added)
       End
     As start_fy_calc
   , Case
       When t.stop_dt Is Not Null
         And t.telephone_status_code <> 'A'
-        And substr(t.stop_dt, 1, 4) <> '0000'
-        And substr(t.stop_dt, 5, 2) <> '00'
-          Then rpt_pbh634.ksm_pkg.get_fiscal_year(to_date(substr(t.stop_dt, 1, 6) || '01', 'yyyymmdd'))
+        And ksm_pkg.to_date2(t.start_dt) Is Not Null
+          Then rpt_pbh634.ksm_pkg.get_fiscal_year(ksm_pkg.to_date2(substr(t.stop_dt, 1, 6) || '01', 'yyyymmdd'))
       When t.telephone_status_code <> 'A'
         Then rpt_pbh634.ksm_pkg.get_fiscal_year(t.date_modified)
       Else NULL
@@ -465,7 +463,7 @@ Inner Join tmp_mv_hh hh
   On hh.id_number = t.id_number
 Inner Join tms_telephone_type tt
   On tt.telephone_type_code = t.telephone_type_code
-Where t.telephone_type_code In ('H', 'P', 'B', 'Q', 'M', 'PM', 'A', 'R') -- Home, Business, Mobile, Alternate
+Where t.telephone_type_code In ('H', 'P', 'B', 'Q', 'M', 'PM') -- Home, Business, Mobile
 ;
 
 -- Have address
