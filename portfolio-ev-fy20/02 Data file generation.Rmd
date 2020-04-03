@@ -391,12 +391,196 @@ Here we see the interesting values functionality added counts specifically by co
 # Full run
 
 ```{r}
-# features <- es %>% dfs(
-#   target_entity = 'household'
-#   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'last', 'percent_true')
-#   , trans_primitives = c('month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
-#   , max_depth = 2
-#   , verbose = TRUE
-# )
+r_entityset <- as_entityset(
+  hh # data frame
+  , entity_id = 'household' # name of entity
+  , index = 'HOUSEHOLD_ID' # unique identifier
+  , id = 'household' # name of entity set
+) %>%
+# Bio entities
+  add_entity(
+    bio_address %>% select(-START_DT, -STOP_DT, -DATE_MODIFIED, -ADDR_TYPE_CODE)
+    , entity_id = 'bio_address'
+    , make_index = TRUE
+    , index = 'bio_address_idx'
+    , time_index = 'DATE_ADDED' # when the record can first be used
+  ) %>%
+  add_entity(
+  bio_email %>% select(-EMAIL_TYPE_CODE, -START_DT, -STOP_DT)
+  , entity_id = 'bio_email'
+  , make_index = TRUE
+  , index = 'bio_email_idx'
+  , time_index = 'DATE_ADDED' # when the record can first be used
+  ) %>%
+  add_entity(
+  bio_employment %>% select(-START_DT, -STOP_DT, -JOB_TITLE, -EMPLOYER_NAME)
+  , entity_id = 'bio_employment'
+  , make_index = TRUE
+  , index = 'bio_employment_idx'
+  , time_index = 'DATE_ADDED' # when the record can first be used
+  ) %>%
+  add_entity(
+  bio_phone %>% select(-TELEPHONE_TYPE_CODE, -START_DT, -STOP_DT)
+  , entity_id = 'bio_phone'
+  , make_index = TRUE
+  , index = 'bio_phone_idx'
+  , time_index = 'DATE_ADDED' # when the record can first be used
+  ) %>%
+# Engagement entities
+  add_entity(
+  eng_activity %>% select(-ID_NUMBER, -START_DT, -STOP_DT)
+  , entity_id = 'eng_activity'
+  , make_index = TRUE
+  , index = 'eng_activity_idx'
+  , time_index = 'DATE_ADDED'
+  ) %>%
+  add_entity(
+  eng_committee %>% select(-ID_NUMBER, -COMMITTEE_CODE, -COMMITTEE_ROLE_CODE, -COMMITTEE_ROLE_XSEQUENCE)
+  , entity_id = 'eng_committee'
+  , make_index = TRUE
+  , index = 'eng_committee_idx'
+  , time_index = 'START_DT_CALC'
+  ) %>%
+  add_entity(
+  eng_event %>% select(-ID_NUMBER, -EVENT_ID)
+  , entity_id = 'eng_event'
+  , make_index = TRUE
+  , index = 'eng_event_idx'
+  , time_index = 'START_DT'
+  ) %>%
+# Giving entities
+  add_entity(
+  giv_giftclub %>% select(-GIFT_CLUB_CODE, -GIFT_CLUB_START_DATE, -GIFT_CLUB_END_DATE, -STOP_DT)
+  , entity_id = 'giv_giftclub'
+  , make_index = TRUE
+  , index = 'giv_giftclub_idx'
+  , time_index = 'START_DT'
+  ) %>%
+  add_entity(
+  giv_transactions %>% select(-TX_NUMBER, -TX_SEQUENCE, -MATCHED_TX_NUMBER, -PLEDGE_NUMBER)
+  , entity_id = 'giv_transactions'
+  , make_index = TRUE
+  , index = 'giv_transactions_idx'
+  , time_index = 'DATE_OF_RECORD'
+  ) %>%
+  # Payments actually won't work as initially conceived because PLEDGE_NUMBER can't be used as an index
+  # add_entity(
+  # giv_payments
+  # , entity_id = 'giv_payments'
+  # , make_index = TRUE
+  # , index = 'giv_payments_idx'
+  # , time_index = 'PLEDGE_DATE'
+  # )
+# Prospect entities
+  add_entity(
+  prs_assignment %>% select(-ASSIGNMENT_TYPE, COMMITTEE_DESC)
+  , entity_id = 'prs_assignment'
+  , make_index = TRUE
+  , index = 'prs_assignment_idx'
+  , time_index = 'START_DT_CALC'
+  ) %>%
+  add_entity(
+  prs_contact %>% select(-CONTACT_CREDIT_TYPE)
+  , entity_id = 'prs_contact'
+  , make_index = TRUE
+  , index = 'prs_contact_idx'
+  , time_index = 'CONTACT_DATE'
+  ) %>%
+  add_entity(
+  prs_evaluation %>% select(-EVALUATION_TYPE, -RATING_CODE)
+  , entity_id = 'prs_evaluation'
+  , make_index = TRUE
+  , index = 'prs_evaluation_idx'
+  , time_index = 'EVAL_DT'
+  ) %>%
+  add_entity(
+  prs_program %>% select(-PROGRAM_CODE, -START_DATE, -STOP_DATE)
+  , entity_id = 'prs_program'
+  , make_index = TRUE
+  , index = 'prs_program_idx'
+  , time_index = 'DATE_ADDED'
+  )
+```
+
+Create relationships.
+
+```{r}
+r_entityset <- r_entityset %>%
+# Bio
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'bio_address'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'bio_email'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'bio_employment'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'bio_phone'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+# Engagement
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'eng_activity'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'eng_committee'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'eng_event'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+# Giving
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'giv_giftclub'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+  add_relationship(
+    parent_set = 'household'
+    , child_set = 'giv_transactions'
+    , parent_idx = 'HOUSEHOLD_ID'
+    , child_idx = 'HOUSEHOLD_ID'
+  ) %>%
+# Prospect
+```
+
+```{r}
+print(r_entityset)
+```
+
+```{r}
+features <- r_entityset %>% dfs(
+   target_entity = 'household'
+   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'last', 'percent_true')
+   , trans_primitives = c('month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+   , max_depth = 2
+   , verbose = TRUE
+)
+```
+
+```{r, rows.print = 25}
+print_features(features)
 ```
 
