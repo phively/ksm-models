@@ -49,8 +49,12 @@ Select
   , hh.household_last_masters_year
   , hh.household_program
   , hh.household_program_group
+  , trunc(entity.date_added)
+    As date_added
   , hh.data_as_of
 From tmp_mv_hh hh
+Inner Join entity
+  On entity.id_number = hh.id_number
 Where
   -- Primary only
   hh.household_primary = 'Y'
@@ -111,8 +115,8 @@ Select
   , e.event_name
   , e.ksm_event
   , e.event_type
-  , e.start_dt
-  , e.stop_dt
+  , e.start_dt_calc
+  , e.stop_dt_calc
   , e.start_fy_calc
   , e.stop_fy_calc
 From v_nu_event_participants_fast e
@@ -196,6 +200,8 @@ Select
   , gc.gift_club_end_date
   , ksm_pkg.to_date2(gc.gift_club_start_date) As start_dt
   , ksm_pkg.to_date2(gc.gift_club_end_date) As stop_dt
+  , gc.date_added
+  , gc.date_modified
   , Case
       When substr(gc.gift_club_start_date, 1, 4) <> '0000'
         And substr(gc.gift_club_start_date, 5, 2) <> '00'
@@ -239,30 +245,44 @@ Where gct.club_status = 'A' -- Only current gift clubs
 --------------------
 
 -- Evaluation
-Select
-  hh.household_id
-  , e.evaluation_type
-  , tet.short_desc
-    As evaluation_desc
-  , e.rating_code
-  , trt.short_desc
-    As rating_desc
-  , Case
-      When trt.rating_code = 0 -- Under $10K set to 100
-        Then 100
-      Else ksm_pkg.get_number_from_dollar(trt.short_desc)
+With
+eval_with_id As (
+  Select
+    Case
+      When trim(e.id_number) Is Not Null
+        Then e.id_number
+      Else prs_e.id_number
       End
-    As rating_numeric
-  , trunc(e.evaluation_date)
-    As eval_dt
-From evaluation e
+      As id_number
+    , e.evaluation_type
+    , tet.short_desc
+      As evaluation_desc
+    , e.rating_code
+    , trt.short_desc
+      As rating_desc
+    , Case
+        When trt.rating_code = 0 -- Under $10K set to 100
+          Then 100
+        Else ksm_pkg.get_number_from_dollar(trt.short_desc)
+        End
+      As rating_numeric
+    , trunc(e.evaluation_date)
+      As eval_dt
+  From evaluation e
+  Left Join prospect_entity prs_e
+    On prs_e.prospect_id = e.prospect_id
+  Inner Join tms_rating trt
+    On trt.rating_code = e.rating_code
+  Inner Join tms_evaluation_type tet
+    On tet.evaluation_type = e.evaluation_type
+  Where e.evaluation_type In ('PR', 'UR')
+)
+Select Distinct
+  hh.household_id
+  , e.*
+From eval_with_id e
 Inner Join tmp_mv_hh hh
   On hh.id_number = e.id_number
-Inner Join tms_rating trt
-  On trt.rating_code = e.rating_code
-Inner Join tms_evaluation_type tet
-  On tet.evaluation_type = e.evaluation_type
-Where e.evaluation_type In ('PR', 'UR')
 ;
 
 -- Contact
