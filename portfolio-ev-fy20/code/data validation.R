@@ -1,4 +1,4 @@
-##### Tests and failed counter
+##### Tests and passed counters
 tests <- 0
 passed <- 0
 
@@ -11,13 +11,18 @@ print_results <- function(test_result, output) {
   }
 }
 
+##### Function to increment the test/passed counters
+increment_counters <- function(test_result) {
+  assign('tests', tests + 1, envir = .GlobalEnv)
+  assign('passed', passed + test_result, envir = .GlobalEnv)
+}
+
 ##### Check whether household IDs are unique
 cat('===== Checking for unique records... =====', '\n')
 test_result <- nrow(catracks$households) == catracks$households %>% select(HOUSEHOLD_ID) %>% unique() %>% nrow()
 output <- paste('All households unique :', test_result)
 print_results(test_result, output)
-tests <- tests + 1
-passed <- passed + test_result
+increment_counters(test_result)
 
 ##### Check whether every record has a time_index
 cat('===== Checking for valid start dates... =====', '\n')
@@ -29,13 +34,12 @@ chk_time_index <- function(data, name) {
   test_result <- data %>% filter(is.na(!!ti)) %>% nrow() == 0
   output <- paste(name, time_index, ':', test_result)
   print_results(test_result, output)
-  assign('tests', tests + 1, envir = .GlobalEnv)
-  assign('passed', passed + test_result, envir = .GlobalEnv)
+  increment_counters(test_result)
 }
 
 mapply(FUN = chk_time_index, catracks, names(catracks))
 
-##### Results
+##### Final results
 failed <- tests - passed
 cat('\n', passed, 'of', tests, 'tests passed', '\n')
 if(failed == 0) {cat(' All tests successful!')}
