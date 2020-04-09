@@ -454,9 +454,10 @@ Select
   , tt.business_ind
   , tt.current_ind
   , t.telephone_status_code
-  , t.start_dt
-  , t.stop_dt
-  , t.status_change_date
+--  , t.start_dt
+--  , t.stop_dt
+  , trunc(t.status_change_date)
+    As status_change_date
   , trunc(t.date_added)
     As date_added
   , trunc(t.date_modified)
