@@ -1,0 +1,53 @@
+---
+title: "03 Data file output"
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+Create a set of modeling-ready, time-sliced data files with featuretoolsR.
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(lubridate)
+library(wranglR)
+library(readxl)
+library(foreach)
+library(reticulate)
+library(nanotime)
+library(featuretoolsR)
+
+source(file = 'code/featuretools helper functions.R')
+```
+
+# Load and check data
+
+```{r}
+source(file = 'code/data xlsx import.R')
+source(file = 'code/data cleanup.R')
+source(file = 'code/data validation.R')
+```
+
+# Create entities
+
+# Full run
+
+```{r}
+# Full run (slow)
+# dfs_output_fy17 <- py_entityset %>%
+#   filter_by_date(ymd('2017-08-31'))
+#   dfs(
+#    target_entity = 'households'
+#    , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+#    , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+#    , max_depth = 2
+#    , cutoff_time = 
+#    , verbose = TRUE
+# )
+```

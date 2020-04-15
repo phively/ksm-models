@@ -9,7 +9,7 @@ output:
 
 # Goal
 
-Use featuretoolsR to create a large data frame for use in modeling.
+Explore using featuretoolsR to create a large data frame for use in modeling.
 
 ```{r setup, message = FALSE, warning = FALSE}
 library(tidyverse)
@@ -389,7 +389,7 @@ print_features(dfs_py)
 
 Here we see the interesting values functionality added counts specifically by contact status, type, etc. This took only a few seconds, which definitely beats doing this for dozens of fields by hand.
 
-# Full run
+# Full data test
 
 Clean up the environment.
 
@@ -597,41 +597,13 @@ dfs_giv <- py$py_giv %>% dfs(
 )
 ```
 
-```{python}
-# Add a cutoff time
-fm_giv, features = ft.dfs(
-  entityset = py_giv
-  , target_entity = 'households'
-  , agg_primitives = ['count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true']
-  , trans_primitives = ['cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous']
-  , cutoff_time = pd.Timestamp('2019-01-01 00:00:00')
-  , cutoff_time_in_index = True
-  , max_depth = 2
-  , verbose = True
-)
-```
-
-```{r}
-dfs_giv_cutoff <- py$py_giv %>% dfs(
-   target_entity = 'households'
-   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
-   , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
-   , cutoff_time = py$pd$Timestamp('2019-01-01 00:00:00') # Can't get this to work
-   , cutoff_time_in_index = TRUE
-   , max_depth = 2
-   , verbose = TRUE
-)
-```
-
 ```{r, rows.print = 40}
 # Results -- commented out due to size
 # print_features(dfs_giv)
 # dfs_giv[[1]] %>% filter(`COUNT(giv_transactions)` > 0) %>% View()
-# py$fm_giv %>% filter(`COUNT(giv_transactions)` > 0) %>% View()
 ```
 
-
-## Interesting values test
+## Large interesting values test
 
 First, add interesting values in Python.
 
@@ -660,17 +632,12 @@ dfs_py <- py_entityset %>% dfs(
 )
 ```
 
-## Full run
-
-```{r}
-# Full run (slow)
-dfs_output <- py_entityset %>% dfs(
-   target_entity = 'households'
-   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
-   , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
-   , max_depth = 2
-   , cutoff_time = 
-   , verbose = TRUE
-)
+```{r, rows.print = 40}
+# Results -- commented out due to size
+# print_features(dfs_py)
+# dfs_py[[1]] %>% View()
 ```
+
+## Time filter test
+
 
