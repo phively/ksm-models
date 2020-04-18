@@ -28,13 +28,32 @@ source(file = 'code/featuretools helper functions.R')
 
 # Load and check data
 
-```{r}
+```{r, warning = FALSE}
+data_dt <- '2020-04-08'
 source(file = 'code/data xlsx import.R')
 source(file = 'code/data cleanup.R')
 source(file = 'code/data validation.R')
 ```
 
-# Create entities
+# Set up Python session
+
+```{python}
+import featuretools as ft
+```
+
+
+# Create entity sets
+
+```{r}
+fy18 <- entityset_create(
+  entityset_name = 'fy18'
+  , datalist = catracks
+  , cutoff_dt = ymd('20180831')
+  , master_entity = 'households'
+  , master_idx = 'HOUSEHOLD_ID'
+  , debug = TRUE
+)
+```
 
 # Full run
 
