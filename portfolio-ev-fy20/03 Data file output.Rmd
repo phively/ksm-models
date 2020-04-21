@@ -41,7 +41,6 @@ source(file = 'code/data validation.R')
 import featuretools as ft
 ```
 
-
 # Create entity sets
 
 ```{r}
@@ -55,18 +54,31 @@ fy18 <- entityset_create(
 )
 ```
 
-# Full run
+View results.
 
 ```{r}
-# Full run (slow)
-# dfs_output_fy17 <- py_entityset %>%
-#   filter_by_date(ymd('2017-08-31'))
-#   dfs(
-#    target_entity = 'households'
-#    , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
-#    , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
-#    , max_depth = 2
-#    , cutoff_time = 
-#    , verbose = TRUE
-# )
+fy18
 ```
+
+Add interesting values.
+
+```{r}
+fy18$add_interesting_values(max_values = 6L)
+```
+
+# Full run
+
+```{r, cache = TRUE}
+# Full run (slow)
+dfs_output_fy18 <- fy18 %>%
+  dfs(
+   target_entity = 'households'
+   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+   , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+   , max_depth = 2
+   , verbose = TRUE
+)
+
+save('dfs_output_fy18', file = 'data/output/dfs_output_fy18.Rdata')
+```
+

@@ -54,13 +54,18 @@ entityset_create_entities <- function(entityset_name, df, df_name, master_entity
 entityset_create_relationships <- function(entityset_name, df_name, master_entity = 'households', master_idx = 'HOUSEHOLD_ID', debug = FALSE) {
   if (debug) {paste(df_name, '->', master_entity, 'on', master_idx) %>% print()}
   entityset <- get(entityset_name, envir = .GlobalEnv)
-  entityset %>%
-    add_relationship(
-      parent_set = master_entity
-      , child_set = df_name
-      , parent_idx = master_idx
-      , child_idx = master_idx
-    )
+  # Check for self-join
+  if (df_name == master_entity) {
+    paste('Cannot self-join', master_entity, 'on', master_idx) %>% message()
+  } else {
+    entityset %>%
+      add_relationship(
+        parent_set = master_entity
+        , child_set = df_name
+        , parent_idx = master_idx
+        , child_idx = master_idx
+      )
+  }
   assign(entityset_name, entityset, envir = .GlobalEnv)
 }
 

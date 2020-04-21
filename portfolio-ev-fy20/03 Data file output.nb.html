@@ -2910,7 +2910,7 @@ div.tocify {
 <h1>Setup</h1>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeSh0aWR5dmVyc2UpXG5saWJyYXJ5KGx1YnJpZGF0ZSlcbmxpYnJhcnkod3JhbmdsUilcbmxpYnJhcnkocmVhZHhsKVxubGlicmFyeShmb3JlYWNoKVxubGlicmFyeShyZXRpY3VsYXRlKVxubGlicmFyeShuYW5vdGltZSlcbmxpYnJhcnkoZmVhdHVyZXRvb2xzUilcbmBgYCJ9 -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeSh0aWR5dmVyc2UpXG5saWJyYXJ5KGx1YnJpZGF0ZSlcbmxpYnJhcnkod3JhbmdsUilcbmxpYnJhcnkocmVhZHhsKVxubGlicmFyeShmb3JlYWNoKVxubGlicmFyeShyZXRpY3VsYXRlKVxubGlicmFyeShuYW5vdGltZSlcbmxpYnJhcnkoZmVhdHVyZXRvb2xzUilcblxuc291cmNlKGZpbGUgPSAnY29kZS9mZWF0dXJldG9vbHMgaGVscGVyIGZ1bmN0aW9ucy5SJylcbmBgYCJ9 -->
 <pre class="r"><code>library(tidyverse)
 library(lubridate)
 library(wranglR)
@@ -2918,16 +2918,9 @@ library(readxl)
 library(foreach)
 library(reticulate)
 library(nanotime)
-library(featuretoolsR)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiKy0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0rXG58ICAgZmVhdHVyZXRvb2xzUiAwLjQuMyAgIHxcbistLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tK1xuXHUwMDFiWzMybeKImlx1MDAxYlszOW0gVXNpbmcgRmVhdHVyZXRvb2xzIDAuMTMuM1xuIn0= -->
-<pre><code>+-------------------------+
-|   featuretoolsR 0.4.3   |
-+-------------------------+
-[32m√[39m Using Featuretools 0.13.3</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc291cmNlKGZpbGUgPSAnY29kZS9mZWF0dXJldG9vbHMgaGVscGVyIGZ1bmN0aW9ucy5SJylcbmBgYCJ9 -->
-<pre class="r"><code>source(file = &#39;code/featuretools helper functions.R&#39;)</code></pre>
+library(featuretoolsR)
+
+source(file = &#39;code/featuretools helper functions.R&#39;)</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
@@ -2936,34 +2929,10 @@ library(featuretoolsR)</code></pre>
 <h1>Load and check data</h1>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZGF0YV9kdCA8LSAnMjAyMC0wNC0wOCdcbnNvdXJjZShmaWxlID0gJ2NvZGUvZGF0YSB4bHN4IGltcG9ydC5SJylcbnNvdXJjZShmaWxlID0gJ2NvZGUvZGF0YSBjbGVhbnVwLlInKVxuc291cmNlKGZpbGUgPSAnY29kZS9kYXRhIHZhbGlkYXRpb24uUicpXG5gYGAifQ== -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZGF0YV9kdCA8LSAnMjAyMC0wNC0wOCdcbnNvdXJjZShmaWxlID0gJ2NvZGUvZGF0YSB4bHN4IGltcG9ydC5SJylcbmBgYCJ9 -->
 <pre class="r"><code>data_dt &lt;- &#39;2020-04-08&#39;
-source(file = &#39;code/data xlsx import.R&#39;)
-source(file = &#39;code/data cleanup.R&#39;)
-source(file = &#39;code/data validation.R&#39;)</code></pre>
+source(file = &#39;code/data xlsx import.R&#39;)</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiPT09PT0gQ2hlY2tpbmcgZm9yIHVuaXF1ZSByZWNvcmRzLi4uID09PT09IFxuQWxsIGhvdXNlaG9sZHMgdW5pcXVlIDogVFJVRSBcbj09PT09IENoZWNraW5nIGZvciB2YWxpZCBzdGFydCBkYXRlcy4uLiA9PT09PSBcbmhvdXNlaG9sZHMgREFURV9BRERFRCA6IFRSVUUgXG5iaW9fcGhvbmUgREFURV9BRERFRCA6IFRSVUUgXG5iaW9fYWRkcmVzcyBEQVRFX0FEREVEIDogVFJVRSBcbmJpb19lbXBsb3ltZW50IERBVEVfQURERUQgOiBUUlVFIFxuYmlvX2VtYWlsIERBVEVfQURERUQgOiBUUlVFIFxuZW5nX2NvbW1pdHRlZSBTVEFSVF9EVF9DQUxDIDogVFJVRSBcbmVuZ19ldmVudCBTVEFSVF9EVF9DQUxDIDogVFJVRSBcbmVuZ19hY3Rpdml0eSBEQVRFX0FEREVEIDogVFJVRSBcbmdpdl90cmFuc2FjdGlvbnMgREFURV9PRl9SRUNPUkQgOiBUUlVFIFxuZ2l2X2dpZnRjbHViIFNUQVJUX0RUX0NBTEMgOiBUUlVFIFxucHJzX2V2YWx1YXRpb24gRVZBTF9EVCA6IFRSVUUgXG5wcnNfY29udGFjdCBDT05UQUNUX0RBVEUgOiBUUlVFIFxucHJzX3Byb2dyYW0gREFURV9BRERFRCA6IFRSVUUgXG5wcnNfYXNzaWdubWVudCBTVEFSVF9EVF9DQUxDIDogVFJVRSBcblxuIDE1IG9mIDE1IHRlc3RzIHBhc3NlZCBcbiBBbGwgdGVzdHMgc3VjY2Vzc2Z1bCFcbiJ9 -->
-<pre><code>===== Checking for unique records... ===== 
-All households unique : TRUE 
-===== Checking for valid start dates... ===== 
-households DATE_ADDED : TRUE 
-bio_phone DATE_ADDED : TRUE 
-bio_address DATE_ADDED : TRUE 
-bio_employment DATE_ADDED : TRUE 
-bio_email DATE_ADDED : TRUE 
-eng_committee START_DT_CALC : TRUE 
-eng_event START_DT_CALC : TRUE 
-eng_activity DATE_ADDED : TRUE 
-giv_transactions DATE_OF_RECORD : TRUE 
-giv_giftclub START_DT_CALC : TRUE 
-prs_evaluation EVAL_DT : TRUE 
-prs_contact CONTACT_DATE : TRUE 
-prs_program DATE_ADDED : TRUE 
-prs_assignment START_DT_CALC : TRUE 
-
- 15 of 15 tests passed 
- All tests successful!</code></pre>
-<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 </div>
@@ -2971,9 +2940,11 @@ prs_assignment START_DT_CALC : TRUE
 <h1>Set up Python session</h1>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgcHl0aG9uXG5pbXBvcnQgZmVhdHVyZXRvb2xzIGFzIGZ0XG5gYGAifQ== -->
-<pre class="python"><code>import featuretools as ft</code></pre>
-<!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoic3lzOjE6IEZ1dHVyZVdhcm5pbmc6IFJhbmdlSW5kZXguX3N0YXJ0IGlzIGRlcHJlY2F0ZWQgYW5kIHdpbGwgYmUgcmVtb3ZlZCBpbiBhIGZ1dHVyZSB2ZXJzaW9uLiBVc2UgUmFuZ2VJbmRleC5zdGFydCBpbnN0ZWFkXG5zeXM6MTogRnV0dXJlV2FybmluZzogUmFuZ2VJbmRleC5fc3RvcCBpcyBkZXByZWNhdGVkIGFuZCB3aWxsIGJlIHJlbW92ZWQgaW4gYSBmdXR1cmUgdmVyc2lvbi4gVXNlIFJhbmdlSW5kZXguc3RvcCBpbnN0ZWFkXG5zeXM6MTogRnV0dXJlV2FybmluZzogUmFuZ2VJbmRleC5fc3RlcCBpcyBkZXByZWNhdGVkIGFuZCB3aWxsIGJlIHJlbW92ZWQgaW4gYSBmdXR1cmUgdmVyc2lvbi4gVXNlIFJhbmdlSW5kZXguc3RlcCBpbnN0ZWFkXG4ifQ== -->
+<pre><code>sys:1: FutureWarning: RangeIndex._start is deprecated and will be removed in a future version. Use RangeIndex.start instead
+sys:1: FutureWarning: RangeIndex._stop is deprecated and will be removed in a future version. Use RangeIndex.stop instead
+sys:1: FutureWarning: RangeIndex._step is deprecated and will be removed in a future version. Use RangeIndex.step instead</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 </div>
@@ -2991,7 +2962,7 @@ prs_assignment START_DT_CALC : TRUE
   , debug = TRUE
 )</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiTmV3IGVudGl0eSBzZXQ6IGZ5MThcIlxuWzFdIFwiY3V0b2ZmIGRhdGUgMjAxOC0wOC0zMVwiXG5bMV0gXCJkYXRhbGlzdCBzaXplIDE0XCJcblsxXSBcIkFkZGluZyBob3VzZWhvbGRzIHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIGJpb19waG9uZSB0byBmeTE4XCJcblsxXSBcIkFkZGluZyBiaW9fYWRkcmVzcyB0byBmeTE4XCJcblsxXSBcIkFkZGluZyBiaW9fZW1wbG95bWVudCB0byBmeTE4XCJcblsxXSBcIkFkZGluZyBiaW9fZW1haWwgdG8gZnkxOFwiXG5bMV0gXCJBZGRpbmcgZW5nX2NvbW1pdHRlZSB0byBmeTE4XCJcblsxXSBcIkFkZGluZyBlbmdfZXZlbnQgdG8gZnkxOFwiXG5bMV0gXCJBZGRpbmcgZW5nX2FjdGl2aXR5IHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIGdpdl90cmFuc2FjdGlvbnMgdG8gZnkxOFwiXG5bMV0gXCJBZGRpbmcgZ2l2X2dpZnRjbHViIHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIHByc19ldmFsdWF0aW9uIHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIHByc19jb250YWN0IHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIHByc19wcm9ncmFtIHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIHByc19hc3NpZ25tZW50IHRvIGZ5MThcIlxuWzFdIFwiaG91c2Vob2xkcyAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG5bMV0gXCJiaW9fcGhvbmUgLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuWzFdIFwiYmlvX2FkZHJlc3MgLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuWzFdIFwiYmlvX2VtcGxveW1lbnQgLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuWzFdIFwiYmlvX2VtYWlsIC0+IGhvdXNlaG9sZHMgb24gSE9VU0VIT0xEX0lEXCJcblsxXSBcImVuZ19jb21taXR0ZWUgLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuWzFdIFwiZW5nX2V2ZW50IC0+IGhvdXNlaG9sZHMgb24gSE9VU0VIT0xEX0lEXCJcblsxXSBcImVuZ19hY3Rpdml0eSAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG5bMV0gXCJnaXZfdHJhbnNhY3Rpb25zIC0+IGhvdXNlaG9sZHMgb24gSE9VU0VIT0xEX0lEXCJcblsxXSBcImdpdl9naWZ0Y2x1YiAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG5bMV0gXCJwcnNfZXZhbHVhdGlvbiAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG5bMV0gXCJwcnNfY29udGFjdCAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG5bMV0gXCJwcnNfcHJvZ3JhbSAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG5bMV0gXCJwcnNfYXNzaWdubWVudCAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG4ifQ== -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiTmV3IGVudGl0eSBzZXQ6IGZ5MThcIlxuWzFdIFwiY3V0b2ZmIGRhdGUgMjAxOC0wOC0zMVwiXG5bMV0gXCJkYXRhbGlzdCBzaXplIDE0XCJcblsxXSBcIkFkZGluZyBob3VzZWhvbGRzIHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIGJpb19waG9uZSB0byBmeTE4XCJcblsxXSBcIkFkZGluZyBiaW9fYWRkcmVzcyB0byBmeTE4XCJcblsxXSBcIkFkZGluZyBiaW9fZW1wbG95bWVudCB0byBmeTE4XCJcblsxXSBcIkFkZGluZyBiaW9fZW1haWwgdG8gZnkxOFwiXG5bMV0gXCJBZGRpbmcgZW5nX2NvbW1pdHRlZSB0byBmeTE4XCJcblsxXSBcIkFkZGluZyBlbmdfZXZlbnQgdG8gZnkxOFwiXG5bMV0gXCJBZGRpbmcgZW5nX2FjdGl2aXR5IHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIGdpdl90cmFuc2FjdGlvbnMgdG8gZnkxOFwiXG5bMV0gXCJBZGRpbmcgZ2l2X2dpZnRjbHViIHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIHByc19ldmFsdWF0aW9uIHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIHByc19jb250YWN0IHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIHByc19wcm9ncmFtIHRvIGZ5MThcIlxuWzFdIFwiQWRkaW5nIHByc19hc3NpZ25tZW50IHRvIGZ5MThcIlxuWzFdIFwiaG91c2Vob2xkcyAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG4ifQ== -->
 <pre><code>[1] &quot;New entity set: fy18&quot;
 [1] &quot;cutoff date 2018-08-31&quot;
 [1] &quot;datalist size 14&quot;
@@ -3009,8 +2980,13 @@ prs_assignment START_DT_CALC : TRUE
 [1] &quot;Adding prs_contact to fy18&quot;
 [1] &quot;Adding prs_program to fy18&quot;
 [1] &quot;Adding prs_assignment to fy18&quot;
-[1] &quot;households -&gt; households on HOUSEHOLD_ID&quot;
-[1] &quot;bio_phone -&gt; households on HOUSEHOLD_ID&quot;
+[1] &quot;households -&gt; households on HOUSEHOLD_ID&quot;</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiQ2Fubm90IHNlbGYtam9pbiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFxuIn0= -->
+<pre><code>Cannot self-join households on HOUSEHOLD_ID</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiYmlvX3Bob25lIC0+IGhvdXNlaG9sZHMgb24gSE9VU0VIT0xEX0lEXCJcblsxXSBcImJpb19hZGRyZXNzIC0+IGhvdXNlaG9sZHMgb24gSE9VU0VIT0xEX0lEXCJcblsxXSBcImJpb19lbXBsb3ltZW50IC0+IGhvdXNlaG9sZHMgb24gSE9VU0VIT0xEX0lEXCJcblsxXSBcImJpb19lbWFpbCAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG5bMV0gXCJlbmdfY29tbWl0dGVlIC0+IGhvdXNlaG9sZHMgb24gSE9VU0VIT0xEX0lEXCJcblsxXSBcImVuZ19ldmVudCAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG5bMV0gXCJlbmdfYWN0aXZpdHkgLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuWzFdIFwiZ2l2X3RyYW5zYWN0aW9ucyAtPiBob3VzZWhvbGRzIG9uIEhPVVNFSE9MRF9JRFwiXG5bMV0gXCJnaXZfZ2lmdGNsdWIgLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuWzFdIFwicHJzX2V2YWx1YXRpb24gLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuWzFdIFwicHJzX2NvbnRhY3QgLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuWzFdIFwicHJzX3Byb2dyYW0gLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuWzFdIFwicHJzX2Fzc2lnbm1lbnQgLT4gaG91c2Vob2xkcyBvbiBIT1VTRUhPTERfSURcIlxuIn0= -->
+<pre><code>[1] &quot;bio_phone -&gt; households on HOUSEHOLD_ID&quot;
 [1] &quot;bio_address -&gt; households on HOUSEHOLD_ID&quot;
 [1] &quot;bio_employment -&gt; households on HOUSEHOLD_ID&quot;
 [1] &quot;bio_email -&gt; households on HOUSEHOLD_ID&quot;
@@ -3026,28 +3002,76 @@ prs_assignment START_DT_CALC : TRUE
 <!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
+<p>View results.</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZnkxOFxuYGBgIn0= -->
+<pre class="r"><code>fy18</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiRW50aXR5c2V0OiBmeTE4XG4gIEVudGl0aWVzOlxuICAgIGhvdXNlaG9sZHMgW1Jvd3M6IDgzNTE5LCBDb2x1bW5zOiAxMF1cbiAgICBiaW9fcGhvbmUgW1Jvd3M6IDI0NjY1NiwgQ29sdW1uczogMTFdXG4gICAgYmlvX2FkZHJlc3MgW1Jvd3M6IDM1NzMwOCwgQ29sdW1uczogOV1cbiAgICBiaW9fZW1wbG95bWVudCBbUm93czogMTcwNzM3LCBDb2x1bW5zOiA5XVxuICAgIGJpb19lbWFpbCBbUm93czogMjA5OTcwLCBDb2x1bW5zOiA5XVxuICAgIGVuZ19jb21taXR0ZWUgW1Jvd3M6IDg1MjM4LCBDb2x1bW5zOiA5XVxuICAgIGVuZ19ldmVudCBbUm93czogMTgzNTY1LCBDb2x1bW5zOiA5XVxuICAgIGVuZ19hY3Rpdml0eSBbUm93czogMTA3MzcsIENvbHVtbnM6IDldXG4gICAgZ2l2X3RyYW5zYWN0aW9ucyBbUm93czogMjY0NTk4LCBDb2x1bW5zOiAxNV1cbiAgICBnaXZfZ2lmdGNsdWIgW1Jvd3M6IDEwNzU1MywgQ29sdW1uczogMTBdXG4gICAgcHJzX2V2YWx1YXRpb24gW1Jvd3M6IDIzNDA2LCBDb2x1bW5zOiA3XVxuICAgIHByc19jb250YWN0IFtSb3dzOiAxOTMwMzYsIENvbHVtbnM6IDEwXVxuICAgIHByc19wcm9ncmFtIFtSb3dzOiAxNDQ5MiwgQ29sdW1uczogN11cbiAgICBwcnNfYXNzaWdubWVudCBbUm93czogMTM3NTQsIENvbHVtbnM6IDddXG4gIFJlbGF0aW9uc2hpcHM6XG4gICAgYmlvX3Bob25lLkhPVVNFSE9MRF9JRCAtPiBob3VzZWhvbGRzLkhPVVNFSE9MRF9JRFxuICAgIGJpb19hZGRyZXNzLkhPVVNFSE9MRF9JRCAtPiBob3VzZWhvbGRzLkhPVVNFSE9MRF9JRFxuICAgIGJpb19lbXBsb3ltZW50LkhPVVNFSE9MRF9JRCAtPiBob3VzZWhvbGRzLkhPVVNFSE9MRF9JRFxuICAgIGJpb19lbWFpbC5IT1VTRUhPTERfSUQgLT4gaG91c2Vob2xkcy5IT1VTRUhPTERfSURcbiAgICBlbmdfY29tbWl0dGVlLkhPVVNFSE9MRF9JRCAtPiBob3VzZWhvbGRzLkhPVVNFSE9MRF9JRFxuICAgIGVuZ19ldmVudC5IT1VTRUhPTERfSUQgLT4gaG91c2Vob2xkcy5IT1VTRUhPTERfSURcbiAgICBlbmdfYWN0aXZpdHkuSE9VU0VIT0xEX0lEIC0+IGhvdXNlaG9sZHMuSE9VU0VIT0xEX0lEXG4gICAgZ2l2X3RyYW5zYWN0aW9ucy5IT1VTRUhPTERfSUQgLT4gaG91c2Vob2xkcy5IT1VTRUhPTERfSURcbiAgICBnaXZfZ2lmdGNsdWIuSE9VU0VIT0xEX0lEIC0+IGhvdXNlaG9sZHMuSE9VU0VIT0xEX0lEXG4gICAgcHJzX2V2YWx1YXRpb24uSE9VU0VIT0xEX0lEIC0+IGhvdXNlaG9sZHMuSE9VU0VIT0xEX0lEXG4gICAgcHJzX2NvbnRhY3QuSE9VU0VIT0xEX0lEIC0+IGhvdXNlaG9sZHMuSE9VU0VIT0xEX0lEXG4gICAgcHJzX3Byb2dyYW0uSE9VU0VIT0xEX0lEIC0+IGhvdXNlaG9sZHMuSE9VU0VIT0xEX0lEXG4gICAgcHJzX2Fzc2lnbm1lbnQuSE9VU0VIT0xEX0lEIC0+IGhvdXNlaG9sZHMuSE9VU0VIT0xEX0lEXG4ifQ== -->
+<pre><code>Entityset: fy18
+  Entities:
+    households [Rows: 83519, Columns: 10]
+    bio_phone [Rows: 246656, Columns: 11]
+    bio_address [Rows: 357308, Columns: 9]
+    bio_employment [Rows: 170737, Columns: 9]
+    bio_email [Rows: 209970, Columns: 9]
+    eng_committee [Rows: 85238, Columns: 9]
+    eng_event [Rows: 183565, Columns: 9]
+    eng_activity [Rows: 10737, Columns: 9]
+    giv_transactions [Rows: 264598, Columns: 15]
+    giv_giftclub [Rows: 107553, Columns: 10]
+    prs_evaluation [Rows: 23406, Columns: 7]
+    prs_contact [Rows: 193036, Columns: 10]
+    prs_program [Rows: 14492, Columns: 7]
+    prs_assignment [Rows: 13754, Columns: 7]
+  Relationships:
+    bio_phone.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    bio_address.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    bio_employment.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    bio_email.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    eng_committee.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    eng_event.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    eng_activity.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    giv_transactions.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    giv_giftclub.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    prs_evaluation.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    prs_contact.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    prs_program.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID
+    prs_assignment.HOUSEHOLD_ID -&gt; households.HOUSEHOLD_ID</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>Add interesting values.</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZnkxOCRhZGRfaW50ZXJlc3RpbmdfdmFsdWVzKG1heF92YWx1ZXMgPSA2TClcbmBgYCJ9 -->
+<pre class="r"><code>fy18$add_interesting_values(max_values = 6L)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
 </div>
 <div id="full-run" class="section level1">
 <h1>Full run</h1>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBGdWxsIHJ1biAoc2xvdylcbiMgZGZzX291dHB1dF9meTE3IDwtIHB5X2VudGl0eXNldCAlPiVcbiMgICBmaWx0ZXJfYnlfZGF0ZSh5bWQoJzIwMTctMDgtMzEnKSlcbiMgICBkZnMoXG4jICAgIHRhcmdldF9lbnRpdHkgPSAnaG91c2Vob2xkcydcbiMgICAgLCBhZ2dfcHJpbWl0aXZlcyA9IGMoJ2NvdW50JywgJ3N1bScsICdzdGQnLCAnbWVhbicsICdtYXgnLCAnbWluJywgJ21lZGlhbicsICdmaXJzdCcsICdsYXN0JywgJ3BlcmNlbnRfdHJ1ZScpXG4jICAgICwgdHJhbnNfcHJpbWl0aXZlcyA9IGMoJ2N1bV9zdW0nLCAnY3VtX21heCcsICdtb250aCcsICd5ZWFyJywgJ3N1YnRyYWN0X251bWVyaWMnLCAnZGl2aWRlX251bWVyaWMnLCAndGltZV9zaW5jZV9wcmV2aW91cycpXG4jICAgICwgbWF4X2RlcHRoID0gMlxuIyAgICAsIGN1dG9mZl90aW1lID0gXG4jICAgICwgdmVyYm9zZSA9IFRSVUVcbiMgKVxuYGBgIn0= -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBGdWxsIHJ1biAoc2xvdylcbiMgZGZzX291dHB1dF9meTE4IDwtIGZ5MTggJT4lXG4jICAgZGZzKFxuIyAgICB0YXJnZXRfZW50aXR5ID0gJ2hvdXNlaG9sZHMnXG4jICAgICwgYWdnX3ByaW1pdGl2ZXMgPSBjKCdjb3VudCcsICdzdW0nLCAnc3RkJywgJ21lYW4nLCAnbWF4JywgJ21pbicsICdtZWRpYW4nLCAnZmlyc3QnLCAnbGFzdCcsICdwZXJjZW50X3RydWUnKVxuIyAgICAsIHRyYW5zX3ByaW1pdGl2ZXMgPSBjKCdjdW1fc3VtJywgJ2N1bV9tYXgnLCAnbW9udGgnLCAneWVhcicsICdzdWJ0cmFjdF9udW1lcmljJywgJ2RpdmlkZV9udW1lcmljJywgJ3RpbWVfc2luY2VfcHJldmlvdXMnKVxuIyAgICAsIG1heF9kZXB0aCA9IDJcbiMgICAgLCB2ZXJib3NlID0gVFJVRVxuIyApXG5gYGAifQ== -->
 <pre class="r"><code># Full run (slow)
-# dfs_output_fy17 &lt;- py_entityset %&gt;%
-#   filter_by_date(ymd(&#39;2017-08-31&#39;))
+# dfs_output_fy18 &lt;- fy18 %&gt;%
 #   dfs(
 #    target_entity = &#39;households&#39;
 #    , agg_primitives = c(&#39;count&#39;, &#39;sum&#39;, &#39;std&#39;, &#39;mean&#39;, &#39;max&#39;, &#39;min&#39;, &#39;median&#39;, &#39;first&#39;, &#39;last&#39;, &#39;percent_true&#39;)
 #    , trans_primitives = c(&#39;cum_sum&#39;, &#39;cum_max&#39;, &#39;month&#39;, &#39;year&#39;, &#39;subtract_numeric&#39;, &#39;divide_numeric&#39;, &#39;time_since_previous&#39;)
 #    , max_depth = 2
-#    , cutoff_time = 
 #    , verbose = TRUE
 # )</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<!-- rnb-text-end -->
 </div>
 
-<div id="rmd-source-code">LS0tDQp0aXRsZTogIjAzIERhdGEgZmlsZSBvdXRwdXQiDQpvdXRwdXQ6DQogIGh0bWxfbm90ZWJvb2s6DQogICAgdG9jOiBUUlVFDQogICAgdG9jX2Zsb2F0Og0KICAgICAgY29sbGFwc2VkOiBGQUxTRQ0KLS0tDQoNCiMgR29hbA0KDQpDcmVhdGUgYSBzZXQgb2YgbW9kZWxpbmctcmVhZHksIHRpbWUtc2xpY2VkIGRhdGEgZmlsZXMgd2l0aCBmZWF0dXJldG9vbHNSLg0KDQojIFNldHVwDQoNCmBgYHtyIHNldHVwLCBtZXNzYWdlID0gRkFMU0UsIHdhcm5pbmcgPSBGQUxTRX0NCmxpYnJhcnkodGlkeXZlcnNlKQ0KbGlicmFyeShsdWJyaWRhdGUpDQpsaWJyYXJ5KHdyYW5nbFIpDQpsaWJyYXJ5KHJlYWR4bCkNCmxpYnJhcnkoZm9yZWFjaCkNCmxpYnJhcnkocmV0aWN1bGF0ZSkNCmxpYnJhcnkobmFub3RpbWUpDQpsaWJyYXJ5KGZlYXR1cmV0b29sc1IpDQoNCnNvdXJjZShmaWxlID0gJ2NvZGUvZmVhdHVyZXRvb2xzIGhlbHBlciBmdW5jdGlvbnMuUicpDQpgYGANCg0KIyBMb2FkIGFuZCBjaGVjayBkYXRhDQoNCmBgYHtyLCB3YXJuaW5nID0gRkFMU0V9DQpkYXRhX2R0IDwtICcyMDIwLTA0LTA4Jw0Kc291cmNlKGZpbGUgPSAnY29kZS9kYXRhIHhsc3ggaW1wb3J0LlInKQ0Kc291cmNlKGZpbGUgPSAnY29kZS9kYXRhIGNsZWFudXAuUicpDQpzb3VyY2UoZmlsZSA9ICdjb2RlL2RhdGEgdmFsaWRhdGlvbi5SJykNCmBgYA0KDQojIFNldCB1cCBQeXRob24gc2Vzc2lvbg0KDQpgYGB7cHl0aG9ufQ0KaW1wb3J0IGZlYXR1cmV0b29scyBhcyBmdA0KYGBgDQoNCg0KIyBDcmVhdGUgZW50aXR5IHNldHMNCg0KYGBge3J9DQpmeTE4IDwtIGVudGl0eXNldF9jcmVhdGUoDQogIGVudGl0eXNldF9uYW1lID0gJ2Z5MTgnDQogICwgZGF0YWxpc3QgPSBjYXRyYWNrcw0KICAsIGN1dG9mZl9kdCA9IHltZCgnMjAxODA4MzEnKQ0KICAsIG1hc3Rlcl9lbnRpdHkgPSAnaG91c2Vob2xkcycNCiAgLCBtYXN0ZXJfaWR4ID0gJ0hPVVNFSE9MRF9JRCcNCiAgLCBkZWJ1ZyA9IFRSVUUNCikNCmBgYA0KDQojIEZ1bGwgcnVuDQoNCmBgYHtyfQ0KIyBGdWxsIHJ1biAoc2xvdykNCiMgZGZzX291dHB1dF9meTE3IDwtIHB5X2VudGl0eXNldCAlPiUNCiMgICBmaWx0ZXJfYnlfZGF0ZSh5bWQoJzIwMTctMDgtMzEnKSkNCiMgICBkZnMoDQojICAgIHRhcmdldF9lbnRpdHkgPSAnaG91c2Vob2xkcycNCiMgICAgLCBhZ2dfcHJpbWl0aXZlcyA9IGMoJ2NvdW50JywgJ3N1bScsICdzdGQnLCAnbWVhbicsICdtYXgnLCAnbWluJywgJ21lZGlhbicsICdmaXJzdCcsICdsYXN0JywgJ3BlcmNlbnRfdHJ1ZScpDQojICAgICwgdHJhbnNfcHJpbWl0aXZlcyA9IGMoJ2N1bV9zdW0nLCAnY3VtX21heCcsICdtb250aCcsICd5ZWFyJywgJ3N1YnRyYWN0X251bWVyaWMnLCAnZGl2aWRlX251bWVyaWMnLCAndGltZV9zaW5jZV9wcmV2aW91cycpDQojICAgICwgbWF4X2RlcHRoID0gMg0KIyAgICAsIGN1dG9mZl90aW1lID0gDQojICAgICwgdmVyYm9zZSA9IFRSVUUNCiMgKQ0KYGBg</div>
+<div id="rmd-source-code">LS0tDQp0aXRsZTogIjAzIERhdGEgZmlsZSBvdXRwdXQiDQpvdXRwdXQ6DQogIGh0bWxfbm90ZWJvb2s6DQogICAgdG9jOiBUUlVFDQogICAgdG9jX2Zsb2F0Og0KICAgICAgY29sbGFwc2VkOiBGQUxTRQ0KLS0tDQoNCiMgR29hbA0KDQpDcmVhdGUgYSBzZXQgb2YgbW9kZWxpbmctcmVhZHksIHRpbWUtc2xpY2VkIGRhdGEgZmlsZXMgd2l0aCBmZWF0dXJldG9vbHNSLg0KDQojIFNldHVwDQoNCmBgYHtyIHNldHVwLCBtZXNzYWdlID0gRkFMU0UsIHdhcm5pbmcgPSBGQUxTRX0NCmxpYnJhcnkodGlkeXZlcnNlKQ0KbGlicmFyeShsdWJyaWRhdGUpDQpsaWJyYXJ5KHdyYW5nbFIpDQpsaWJyYXJ5KHJlYWR4bCkNCmxpYnJhcnkoZm9yZWFjaCkNCmxpYnJhcnkocmV0aWN1bGF0ZSkNCmxpYnJhcnkobmFub3RpbWUpDQpsaWJyYXJ5KGZlYXR1cmV0b29sc1IpDQoNCnNvdXJjZShmaWxlID0gJ2NvZGUvZmVhdHVyZXRvb2xzIGhlbHBlciBmdW5jdGlvbnMuUicpDQpgYGANCg0KIyBMb2FkIGFuZCBjaGVjayBkYXRhDQoNCmBgYHtyLCB3YXJuaW5nID0gRkFMU0V9DQpkYXRhX2R0IDwtICcyMDIwLTA0LTA4Jw0Kc291cmNlKGZpbGUgPSAnY29kZS9kYXRhIHhsc3ggaW1wb3J0LlInKQ0Kc291cmNlKGZpbGUgPSAnY29kZS9kYXRhIGNsZWFudXAuUicpDQpzb3VyY2UoZmlsZSA9ICdjb2RlL2RhdGEgdmFsaWRhdGlvbi5SJykNCmBgYA0KDQojIFNldCB1cCBQeXRob24gc2Vzc2lvbg0KDQpgYGB7cHl0aG9ufQ0KaW1wb3J0IGZlYXR1cmV0b29scyBhcyBmdA0KYGBgDQoNCiMgQ3JlYXRlIGVudGl0eSBzZXRzDQoNCmBgYHtyfQ0KZnkxOCA8LSBlbnRpdHlzZXRfY3JlYXRlKA0KICBlbnRpdHlzZXRfbmFtZSA9ICdmeTE4Jw0KICAsIGRhdGFsaXN0ID0gY2F0cmFja3MNCiAgLCBjdXRvZmZfZHQgPSB5bWQoJzIwMTgwODMxJykNCiAgLCBtYXN0ZXJfZW50aXR5ID0gJ2hvdXNlaG9sZHMnDQogICwgbWFzdGVyX2lkeCA9ICdIT1VTRUhPTERfSUQnDQogICwgZGVidWcgPSBUUlVFDQopDQpgYGANCg0KVmlldyByZXN1bHRzLg0KDQpgYGB7cn0NCmZ5MTgNCmBgYA0KDQpBZGQgaW50ZXJlc3RpbmcgdmFsdWVzLg0KDQpgYGB7cn0NCmZ5MTgkYWRkX2ludGVyZXN0aW5nX3ZhbHVlcyhtYXhfdmFsdWVzID0gNkwpDQpgYGANCg0KIyBGdWxsIHJ1bg0KDQpgYGB7ciwgY2FjaGUgPSBUUlVFfQ0KIyBGdWxsIHJ1biAoc2xvdykNCmRmc19vdXRwdXRfZnkxOCA8LSBmeTE4ICU+JQ0KICBkZnMoDQogICB0YXJnZXRfZW50aXR5ID0gJ2hvdXNlaG9sZHMnDQogICAsIGFnZ19wcmltaXRpdmVzID0gYygnY291bnQnLCAnc3VtJywgJ3N0ZCcsICdtZWFuJywgJ21heCcsICdtaW4nLCAnbWVkaWFuJywgJ2ZpcnN0JywgJ2xhc3QnLCAncGVyY2VudF90cnVlJykNCiAgICwgdHJhbnNfcHJpbWl0aXZlcyA9IGMoJ2N1bV9zdW0nLCAnY3VtX21heCcsICdtb250aCcsICd5ZWFyJywgJ3N1YnRyYWN0X251bWVyaWMnLCAnZGl2aWRlX251bWVyaWMnLCAndGltZV9zaW5jZV9wcmV2aW91cycpDQogICAsIG1heF9kZXB0aCA9IDINCiAgICwgdmVyYm9zZSA9IFRSVUUNCikNCg0Kc2F2ZSgnZGZzX291dHB1dF9meTE4JywgZmlsZSA9ICdkYXRhL291dHB1dC9kZnNfb3V0cHV0X2Z5MTguUmRhdGEnKQ0KYGBgDQoNCg==</div>
 
 
 </div>
