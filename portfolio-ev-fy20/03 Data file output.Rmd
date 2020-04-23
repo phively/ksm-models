@@ -70,15 +70,15 @@ fy18$add_interesting_values(max_values = 6L)
 
 ```{r, cache = TRUE}
 # Full run (slow)
-dfs_output_fy18 <- fy18 %>%
-  dfs(
-   target_entity = 'households'
-   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
-   , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
-   , max_depth = 2
-   , verbose = TRUE
-)
-
-save('dfs_output_fy18', file = 'data/output/dfs_output_fy18.Rdata')
+# dfs_output_fy18 <- fy18 %>%
+#   dfs(
+#    target_entity = 'households'
+#    , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+#    , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+#    , max_depth = 2
+#    , verbose = TRUE
+# )
+# 
+# save('dfs_output_fy18', file = 'data/output/dfs_output_fy18.Rdata')
 ```
 

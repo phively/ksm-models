@@ -24,6 +24,39 @@ filter_by_date_all <- function(datalist, cutoff_dt) {
   lapply(datalist, FUN = filter_by_date, cutoff_dt = cutoff_dt)
 }
 
+# Chunk dataset to reduce the size of each table
+filter_datalist <- function(datalist, master_ids_to_keep, master_idx_name = 'HOUSEHOLD_ID') {
+  tmp <- datalist
+  idx <- ensym(master_idx_name)
+  for(i in 1:length(datalist)) {
+    tmp[[i]] <- datalist[[i]] %>% filter(!!idx %in% master_ids_to_keep)
+  }
+  return(tmp)
+}
+
+chunk_datalist <- function(datalist, master_table_name = 'households', master_idx_name = 'HOUSEHOLD_ID', chunks = 100, seed = 123) {
+  # Create chunks; randomly sort master IDs into n(chunks) distinct groups
+  master_idx <- datalist[[master_table_name]] %>% select(master_idx_name)
+  idx <- master_idx %>% wranglR::KFoldXVal(k = chunks, seed = seed)
+  unique_ids <- foreach(
+    i = 1:chunks
+    , .combine = list
+    , .multicombine = TRUE
+  ) %do% {
+    master_idx[idx[[i]], ] %>% unlist()
+  }
+  # For each chunk's set of unique_ids, create a new datalist whose elements contain only matching unique_ids
+  output <- foreach (
+    i = 1:length(unique_ids)
+    , .combine = list
+    , .multicombine = TRUE
+  ) %do% {
+    # For each datalist entry, filter for the current IDs
+    filter_datalist(datalist = datalist, master_ids_to_keep = unique_ids[[i]])
+  }
+  return(output)
+}
+
 # Make an entity set from a list of dataframes
 
 entityset_create_entities <- function(entityset_name, df, df_name, master_entity = 'households', master_idx = 'HOUSEHOLD_ID', debug = FALSE) {

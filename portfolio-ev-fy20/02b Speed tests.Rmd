@@ -1,0 +1,88 @@
+---
+title: "2b Speed tests"
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+Determine featuretoolsR scaling with RAM and cores. Does data chunking make a difference or not?
+
+Background: I tried running the dfs algorithm on the entire 80,000+ row data file and it choked at about 77% after about 40 hours and trying to commit over 110 GB (!) of RAM. Clearly need to try something else.
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(lubridate)
+library(wranglR)
+library(readxl)
+library(foreach)
+library(reticulate)
+library(nanotime)
+library(featuretoolsR)
+
+source(file = 'code/featuretools helper functions.R')
+```
+
+# Load and check data
+
+```{r, warning = FALSE}
+data_dt <- '2020-04-08'
+source(file = 'code/data xlsx import.R')
+source(file = 'code/data cleanup.R')
+source(file = 'code/data validation.R')
+```
+
+# Set up Python session
+
+```{python}
+import featuretools as ft
+```
+
+# Testing with 1% of the data
+
+The first approach I can think of to increasing efficiency is pre-filtering the tables passed to dfs. For example, say there are household_ids in some of the tables not present in the master table. I don't know whether the program is 
+
+```{r}
+# Chunk the data into n (approximately) equal-sized bins
+catracks_chunked <- chunk_datalist(catracks, master_table_name = 'households', master_idx_name = 'HOUSEHOLD_ID', chunks = 100, seed = 123)
+```
+
+Look at the main table from the first chunk.
+
+```{r}
+catracks_chunked[[1]][[1]] %>% summary()
+```
+
+```{r}
+chunk1 <- entityset_create(
+  entityset_name = 'chunk1'
+  , datalist = catracks_chunked[[1]]
+  , cutoff_dt = ymd('20180831')
+  , master_entity = 'households'
+  , master_idx = 'HOUSEHOLD_ID'
+  , debug = TRUE
+)
+
+chunk1$add_interesting_values(max_values = 6L)
+```
+
+```{r, cache = TRUE}
+dfs_test <- chunk1 %>%
+  dfs(
+    target_entity = 'households'
+    , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+    , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+    , max_depth = 2
+    , verbose = TRUE
+  )
+```
+
+So 1/100 of the datafile only took a few minutes, after prefiltering all the tables. Looks like the maximum RAM committed was 2.9GB. This is promising for thinking about a parallelized workflow.
+
+# Testing 3% of the data in parallel
+

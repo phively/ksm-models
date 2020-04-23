@@ -640,4 +640,4 @@ dfs_py <- py_entityset %>% dfs(
 
 ## Time filter test
 
-
+Couldn't get this to work in R (datetime format issues) so I created helper functions instead to pre-filter data before creating an entityset.
