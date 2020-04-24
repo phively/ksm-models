@@ -20,6 +20,7 @@ library(tidyverse)
 library(lubridate)
 library(wranglR)
 library(readxl)
+library(doSNOW)
 library(foreach)
 library(reticulate)
 library(nanotime)
@@ -72,6 +73,7 @@ chunk1$add_interesting_values(max_values = 6L)
 ```
 
 ```{r, cache = TRUE}
+t1_0 <- Sys.time()
 dfs_test <- chunk1 %>%
   dfs(
     target_entity = 'households'
@@ -80,9 +82,69 @@ dfs_test <- chunk1 %>%
     , max_depth = 2
     , verbose = TRUE
   )
+t1_1 <- Sys.time()
+```
+
+```{r}
+t1_1 - t1_0
 ```
 
 So 1/100 of the datafile only took a few minutes, after prefiltering all the tables. Looks like the maximum RAM committed was 2.9GB. This is promising for thinking about a parallelized workflow.
 
 # Testing 3% of the data in parallel
+
+```{r}
+# 3 cores
+c3 <- makeCluster(3, outfile = 'logs/c3.txt')
+registerDoSNOW(c3)
+```
+
+```{r}
+# Functions to show progress
+show_progress <- function(n, lim) {
+  setTxtProgressBar(
+    pb = txtProgressBar(max = lim, style = 3)
+    , value = n
+  )
+}
+```
+
+```{r, cache = TRUE}
+t3_0 <- Sys.time()
+
+chunks <- 3
+
+dfs_test_par3 <- foreach(
+  i = 1:chunks
+  , .combine = list
+  , .multicombine = TRUE
+  , .packages = c('tidyverse', 'featuretoolsR', 'lubridate', 'reticulate')
+  , .options.snow = list(progress = function(n) {show_progress(n = n, lim = chunks)})
+) %dopar% {
+  # Extract current dataset
+  chunk <- entityset_create(
+    entityset_name = 'chunk'
+    , datalist = catracks_chunked[[i]]
+    , cutoff_dt = ymd('20180831')
+    , master_entity = 'households'
+  )
+  chunk$add_interesting_values(max_values = 6L)
+  output <- chunk %>% 
+    dfs(
+      target_entity = 'households'
+      , agg_primitives = c('count')
+      , trans_primitives = c('month')
+      # , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+      # , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+      , max_depth = 2
+      , verbose = TRUE
+    )
+  return(output)
+}
+t3_1 <- Sys.time()
+```
+
+```{r}
+t3_1 - t3_0
+```
 
