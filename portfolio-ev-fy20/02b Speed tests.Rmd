@@ -48,7 +48,7 @@ import featuretools as ft
 
 The first approach I can think of to increasing efficiency is pre-filtering the tables passed to dfs. For example, say there are household_ids in some of the tables not present in the master table. I don't know whether the program is 
 
-```{r}
+```{r, message = FALSE}
 # Chunk the data into n (approximately) equal-sized bins
 catracks_chunked <- chunk_datalist(catracks, master_table_name = 'households', master_idx_name = 'HOUSEHOLD_ID', chunks = 100, seed = 123)
 ```
@@ -91,26 +91,20 @@ t1_1 - t1_0
 
 So 1/100 of the datafile only took a few minutes, after prefiltering all the tables. Looks like the maximum RAM committed was 2.9GB. This is promising for thinking about a parallelized workflow.
 
-# Testing 3% of the data in parallel
+# Testing 1% of the data in parallel
+
+```{r}
+catracks_minichunked <- chunk_datalist(catracks_chunked[[1]], master_table_name = 'households', master_idx_name = 'HOUSEHOLD_ID', chunks = 3, seed = 123)
+```
 
 ```{r}
 # 3 cores
-c3 <- makeCluster(3, outfile = 'logs/c3.txt')
+c3 <- makeCluster(3, outfile = '')
 registerDoSNOW(c3)
 ```
 
-```{r}
-# Functions to show progress
-show_progress <- function(n, lim) {
-  setTxtProgressBar(
-    pb = txtProgressBar(max = lim, style = 3)
-    , value = n
-  )
-}
-```
-
 ```{r, cache = TRUE}
-t3_0 <- Sys.time()
+t1p_0 <- Sys.time()
 
 chunks <- 3
 
@@ -119,7 +113,44 @@ dfs_test_par3 <- foreach(
   , .combine = list
   , .multicombine = TRUE
   , .packages = c('tidyverse', 'featuretoolsR', 'lubridate', 'reticulate')
-  , .options.snow = list(progress = function(n) {show_progress(n = n, lim = chunks)})
+  , .options.snow = list(progress = function(n) {show_progress(progress = n, limit = chunks)})
+) %dopar% {
+  # Extract current dataset
+  chunk <- entityset_create(
+    entityset_name = 'chunk'
+    , datalist = catracks_minichunked[[i]]
+    , cutoff_dt = ymd('20180831')
+    , master_entity = 'households'
+  )
+  chunk$add_interesting_values(max_values = 6L)
+  output <- chunk %>% 
+    dfs(
+      target_entity = 'households'
+      , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+      , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+      , max_depth = 2
+      , verbose = TRUE
+    )
+  return(output)
+}
+t1p_1 <- Sys.time()
+```
+
+```{r}
+t1p_1 - t1p_0
+```
+
+# Testing 3% of the data in parallel
+
+```{r, cache = TRUE}
+t3_0 <- Sys.time()
+
+dfs_test_par3 <- foreach(
+  i = 1:3
+  , .combine = list
+  , .multicombine = TRUE
+  , .packages = c('tidyverse', 'featuretoolsR', 'lubridate', 'reticulate')
+  , .options.snow = list(progress = function(n) {show_progress(progress = n, limit = chunks)})
 ) %dopar% {
   # Extract current dataset
   chunk <- entityset_create(
@@ -132,10 +163,8 @@ dfs_test_par3 <- foreach(
   output <- chunk %>% 
     dfs(
       target_entity = 'households'
-      , agg_primitives = c('count')
-      , trans_primitives = c('month')
-      # , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
-      # , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+      , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+      , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
       , max_depth = 2
       , verbose = TRUE
     )
@@ -148,3 +177,148 @@ t3_1 <- Sys.time()
 t3_1 - t3_0
 ```
 
+# 6 cores, 1% of data
+
+```{r}
+catracks_minichunked <- chunk_datalist(catracks_chunked[[1]], master_table_name = 'households', master_idx_name = 'HOUSEHOLD_ID', chunks = 6, seed = 123)
+```
+
+```{r}
+# 6 cores
+stopCluster(c3)
+c6 <- makeCluster(6, outfile = '')
+registerDoSNOW(c6)
+```
+
+```{r}
+t1.6c_0 <- Sys.time()
+
+chunks <- 6
+
+dfs_test_par6_1 <- foreach(
+  i = 1:chunks
+  , .combine = list
+  , .multicombine = TRUE
+  , .packages = c('tidyverse', 'featuretoolsR', 'lubridate', 'reticulate')
+  , .options.snow = list(progress = function(n) {show_progress(progress = n, limit = chunks)})
+) %dopar% {
+  # Extract current dataset
+  chunk <- entityset_create(
+    entityset_name = 'chunk'
+    , datalist = catracks_minichunked[[i]]
+    , cutoff_dt = ymd('20180831')
+    , master_entity = 'households'
+  )
+  chunk$add_interesting_values(max_values = 6L)
+  output <- chunk %>% 
+    dfs(
+      target_entity = 'households'
+      , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+      , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+      , max_depth = 2
+      , verbose = TRUE
+    )
+  return(output)
+}
+t1.6c_1 <- Sys.time()
+```
+
+```{r}
+t1.6c_1 - t1.6c_0
+```
+
+# 6 cores, 3% of data
+
+```{r}
+catracks_tochunk <- catracks
+catracks_tochunk$households <- catracks$households %>% filter(HOUSEHOLD_ID %in% c(catracks_chunked[[1]]$households$HOUSEHOLD_ID, catracks_chunked[[2]]$households$HOUSEHOLD_ID, catracks_chunked[[3]]$households$HOUSEHOLD_ID))
+minichunked6 <- chunk_datalist(catracks_tochunk, master_table_name = 'households', master_idx_name = 'HOUSEHOLD_ID', chunks = 6, seed = 123)
+```
+
+```{r, cache = TRUE}
+t3.6c_0 <- Sys.time()
+
+dfs_test_par6 <- foreach(
+  i = 1:chunks
+  , .combine = list
+  , .multicombine = TRUE
+  , .packages = c('tidyverse', 'featuretoolsR', 'lubridate', 'reticulate')
+  , .options.snow = list(progress = function(n) {show_progress(progress = n, limit = chunks)})
+) %dopar% {
+  # Extract current dataset
+  chunk <- entityset_create(
+    entityset_name = 'chunk'
+    , datalist = minichunked6[[i]]
+    , cutoff_dt = ymd('20180831')
+    , master_entity = 'households'
+  )
+  chunk$add_interesting_values(max_values = 6L)
+  output <- chunk %>% 
+    dfs(
+      target_entity = 'households'
+      , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+      , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+      , max_depth = 2
+      #, verbose = TRUE
+    )
+  return(output)
+}
+
+t3.6c_1 <- Sys.time()
+```
+
+```{r}
+t3.6c_1 - t3.6c_0
+```
+
+# 3% of the data in sequence
+
+```{r}
+bigchunk <- entityset_create(
+    entityset_name = 'chunk1'
+    , datalist = catracks_tochunk %>% filter_datalist(master_ids_to_keep = catracks_tochunk$households$HOUSEHOLD_ID)
+    , cutoff_dt = ymd('20180831')
+    , master_entity = 'households'
+    , master_idx = 'HOUSEHOLD_ID'
+  )
+```
+
+```{r}
+t3s_0 <- Sys.time()
+
+dfs_bigchunk <- bigchunk %>%
+  dfs(
+    target_entity = 'households'
+    , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+    , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+    , max_depth = 2
+    , verbose = TRUE
+  )
+
+t3s_1 <- Sys.time()
+```
+
+```{r}
+t3s_1 - t3s_0
+```
+
+Peaks at over 10GB of RAM.
+
+# Results
+
+```{r}
+bench_results <- data.frame(
+  data = c(1, 3, 1, 3, 1, 3)
+  , cores = c(1, 1, 3, 3, 6, 6)
+  , minutes = c(18.2595, 19.01459, 17.80355, 26.08334, 22.57554, 28.55634)
+)
+```
+
+```{r}
+bench_results %>%
+  ggplot(aes(x = cores, y = minutes, color = factor(data), group = factor(data))) +
+  geom_point() +
+  geom_line()
+```
+
+Surprisingly, increasing the number of rows processed has a bigger effect on run time than the number of cores. Looks like parallelization via foreach is a bust. It's also possible reticulate doesn't support multiple cores.

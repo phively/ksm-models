@@ -24,6 +24,14 @@ filter_by_date_all <- function(datalist, cutoff_dt) {
   lapply(datalist, FUN = filter_by_date, cutoff_dt = cutoff_dt)
 }
 
+# doSNOW function to create a progress bar
+show_progress <- function(progress, limit) {
+  setTxtProgressBar(
+    pb = txtProgressBar(max = limit, style = 3)
+    , value = progress
+  )
+}
+
 # Chunk dataset to reduce the size of each table
 filter_datalist <- function(datalist, master_ids_to_keep, master_idx_name = 'HOUSEHOLD_ID') {
   tmp <- datalist
