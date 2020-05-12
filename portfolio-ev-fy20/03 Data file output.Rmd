@@ -41,44 +41,231 @@ source(file = 'code/data validation.R')
 import featuretools as ft
 ```
 
-# Create entity sets
+# Create chunked entity sets
 
-```{r}
-fy18 <- entityset_create(
-  entityset_name = 'fy18'
-  , datalist = catracks
-  , cutoff_dt = ymd('20180831')
-  , master_entity = 'households'
-  , master_idx = 'HOUSEHOLD_ID'
-  , debug = TRUE
+```{r, message = FALSE}
+n <- 4
+# Chunk the data into n (approximately) equal-sized bins
+catracks_chunked <- chunk_datalist(
+  catracks
+  , master_table_name = 'households'
+  , master_idx_name = 'HOUSEHOLD_ID'
+  , chunks = n
+  , seed = 123
 )
 ```
 
-View results.
-
 ```{r}
-fy18
+cutoff_dt <- ymd('20180831')
+n_interesting_values <- 6L
+
+entities_fy18 <- foreach(
+  i = 1:length(catracks_chunked)
+  , .combine = list
+  , .multicombine = TRUE) %do% {
+    # Create entityset
+    a <- catracks_chunked[[i]] %>%
+      entityset_create(
+        entityset_name = paste0('chunk', i)
+        , cutoff_dt = cutoff_dt
+        , master_entity = 'households'
+        , master_idx = 'HOUSEHOLD_ID'
+        , debug = TRUE
+      )
+    # Insert interesting values
+    a$add_interesting_values(max_values = n_interesting_values)
+    # Return result as a list item
+    return(a)
+  }
 ```
 
-Add interesting values.
-
 ```{r}
-fy18$add_interesting_values(max_values = 6L)
+foreach (i = 1:n) %do% {
+  print(entities_fy18[[i]])
+}
 ```
+
+Comparing this to the full dataset:
+
+```{r, message = FALSE}
+catracks %>%
+  entityset_create(
+    entityset_name = paste0('chunk', i)
+    , cutoff_dt = cutoff_dt
+    , master_entity = 'households'
+    , master_idx = 'HOUSEHOLD_ID'
+    , debug = FALSE
+  ) %>%
+  print()
+```
+
+Each chunk does contain about `r (1/n) %>% scales::percent() %>% I()` of the total data, as expected.
 
 # Full run
 
 ```{r, cache = TRUE}
 # Full run (slow)
-# dfs_output_fy18 <- fy18 %>%
-#   dfs(
-#    target_entity = 'households'
-#    , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
-#    , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
-#    , max_depth = 2
-#    , verbose = TRUE
-# )
-# 
-# save('dfs_output_fy18', file = 'data/output/dfs_output_fy18.Rdata')
+dfs_output_fy18_1 <- entities_fy18[[1]] %>%
+  dfs(
+   target_entity = 'households'
+   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+   , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+   , max_depth = 2
+   , verbose = TRUE
+)
+
+save('dfs_output_fy18_1', file = 'data/output/dfs_output_fy18_1.Rdata')
+```
+
+```{r, cache = TRUE}
+# Full run (slow)
+dfs_output_fy18_2 <- entities_fy18[[2]] %>%
+  dfs(
+   target_entity = 'households'
+   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+   , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+   , max_depth = 2
+   , verbose = TRUE
+)
+
+save('dfs_output_fy18_2', file = 'data/output/dfs_output_fy18_2.Rdata')
+```
+
+```{r, cache = TRUE}
+# Full run (slow)
+dfs_output_fy18_3 <- entities_fy18[[3]] %>%
+  dfs(
+   target_entity = 'households'
+   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+   , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+   , max_depth = 2
+   , verbose = TRUE
+)
+
+save('dfs_output_fy18_3', file = 'data/output/dfs_output_fy18_3.Rdata')
+```
+
+```{r, cache = TRUE}
+# Full run (slow)
+dfs_output_fy18_4 <- entities_fy18[[4]] %>%
+  dfs(
+   target_entity = 'households'
+   , agg_primitives = c('count', 'sum', 'std', 'mean', 'max', 'min', 'median', 'first', 'last', 'percent_true')
+   , trans_primitives = c('cum_sum', 'cum_max', 'month', 'year', 'subtract_numeric', 'divide_numeric', 'time_since_previous')
+   , max_depth = 2
+   , verbose = TRUE
+)
+
+save('dfs_output_fy18_4', file = 'data/output/dfs_output_fy18_4.Rdata')
+```
+
+# Combine output files into one dataframe
+
+```{r}
+# First two data frames
+load('data/output/dfs_output_fy18_1.Rdata')
+load('data/output/dfs_output_fy18_2.Rdata')
+
+dfs_output_fy18_full1 <- bind_rows(
+  dfs_output_fy18_1[[1]]
+  , dfs_output_fy18_2[[1]]
+)
+
+save('dfs_output_fy18_full1', file = 'data/output/dfs_output_fy18_full1.Rdata')
+
+remove(dfs_output_fy18_1, dfs_output_fy18_2)
+```
+
+```{r}
+# Third and fourth data frames
+load('data/output/dfs_output_fy18_3.Rdata')
+load('data/output/dfs_output_fy18_4.Rdata')
+
+dfs_output_fy18_full2 <- bind_rows(
+  dfs_output_fy18_3[[1]]
+  , dfs_output_fy18_4[[1]]
+)
+
+save('dfs_output_fy18_full2', file = 'data/output/dfs_output_fy18_full2.Rdata')
+
+remove(dfs_output_fy18_3, dfs_output_fy18_4)
+```
+
+```{r}
+load('data/output/dfs_output_fy18_full1.Rdata')
+load('data/output/dfs_output_fy18_full2.Rdata')
+```
+
+Check for conflicting fields.
+
+```{r}
+names1 <- dfs_output_fy18_full1 %>% names()
+names2 <- dfs_output_fy18_full2 %>% names()
+
+which(names1 %nin% names2)
+which(names2 %nin% names1)
+```
+
+Create full list of fields.
+
+```{r}
+dfs_output_fy18 <- bind_rows(
+  dfs_output_fy18_full1[1, ]
+  , dfs_output_fy18_full2[1, ]
+)
+dfs_output_fy18 <- dfs_output_fy18 %>% head(0)
+```
+
+Merge output into list of fields.
+
+```{r}
+dfs_output_fy18_full1 <- bind_rows(
+  dfs_output_fy18
+  , dfs_output_fy18_full1
+)
+
+save('dfs_output_fy18_full1', file = 'data/output/dfs_output_fy18_full1.Rdata')
+```
+
+```{r}
+remove(dfs_output_fy18_full1)
+gc()
+```
+
+
+```{r}
+dfs_output_fy18_full2 <- bind_rows(
+  dfs_output_fy18
+  , dfs_output_fy18_full2
+)
+
+save('dfs_output_fy18_full2', file = 'data/output/dfs_output_fy18_full2.Rdata')
+```
+
+```{r}
+remove(dfs_output_fy18_full2)
+gc()
+```
+
+```{r}
+load('data/output/dfs_output_fy18_full1.Rdata')
+load('data/output/dfs_output_fy18_full2.Rdata')
+```
+
+```{r}
+# Use pagefile
+utils::memory.limit(128000)
+
+dfs_output_fy18 <- rbind(
+  dfs_output_fy18_full1
+  , dfs_output_fy18_full2
+)
+
+save('dfs_output_fy18', file = 'data/output/dfs_output_fy18.Rdata')
+```
+
+```{r}
+remove(dfs_output_fy18_full1, dfs_output_fy18_full2)
+gc()
 ```
 
