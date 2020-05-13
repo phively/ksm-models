@@ -6,3 +6,4 @@ The purpose of this analysis is to understand the factors affecting portfolio yi
 * [02 Data file generation](https://phively.github.io/ksm-models/portfolio-ev-fy20/02%20Data%20file%20generation.nb.html)
 * [02b Speed tests](https://phively.github.io/ksm-models/portfolio-ev-fy20/02b%20Speed%20tests.nb.html)
 * [03 Data file output](https://phively.github.io/ksm-models/portfolio-ev-fy20/03%20Data%20file%20output.nb.html)
+* [04 Data file exploration](https://phively.github.io/ksm-models/portfolio-ev-fy20/04%20Data%20file%20exploration.nb.html)

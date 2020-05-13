@@ -1,0 +1,96 @@
+---
+title: "04 Data file exploration"
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+Explore the tens of thousands of fields created by dfs. Presumably the resulting feature matrix is very sparse. Which merit a closer look?
+
+# Setup
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(e1071)
+library(lubridate)
+library(wranglR)
+library(readxl)
+library(foreach)
+library(reticulate)
+```
+
+```{r}
+# Load data
+load('data/output/dfs_output_fy18.Rdata')
+```
+
+# Initial exploration
+
+Build a summary matrix describing key attributes of the features.
+
+```{r}
+function_class_helper <- function(data, FUN) {
+  fun <- match.fun(FUN)
+  if (is.numeric(data)) {
+    fun(data, na.rm = TRUE)
+  } else if (is.factor(data)) {
+    fun(summary(data), na.rm = TRUE)
+  } else {
+    NA
+  }
+}
+
+summary_df <- function(data) {
+  output <- data.frame(
+    var = colnames(data)
+    , class = sapply(data, class)
+  ) %>%
+  # General summaries
+  mutate(
+    n_NAs = sapply(data, function(x) sum(is.na(x)))
+    , n_obs = nrow(data) - n_NAs
+    , n_fac_levels = sapply(data, function(x) ifelse(is.factor(x), length(levels(x)), NA))
+  ) %>%
+  # Factor or numeric summaries
+  mutate(
+    min = sapply(data, function(x) {function_class_helper(x, min)})
+    , mean = sapply(data, function(x) {function_class_helper(x, mean)})
+    , median = sapply(data, function(x) {function_class_helper(x, median)})
+    , max = sapply(data, function(x) {function_class_helper(x, max)})
+    , sd = sapply(data, function(x) {function_class_helper(x, sd)})
+    , skewness = sapply(data, function(x) {function_class_helper(x, skewness)})
+    , kurtosis = sapply(data, function(x) {function_class_helper(x, kurtosis)})
+  )
+  return(output)
+}
+```
+
+```{r, warning = FALSE}
+# Test my summary_df function
+a <- data.frame(
+  seq = 1:10
+  , seqNAs = c(1:9, NA)
+  , fac = factor(c(1, 1, 1, 2, 2, 2, 3, 3, 3, 1))
+  , letters = as.character(letters[1:10])
+  , seqsq = (1:10)^2
+  , mean0 = seq(-4.5, 4.5, by = 1)
+)
+
+summary(a)
+```
+
+```{r}
+summary_df(a)
+```
+
+```{r, warning = FALSE}
+data_summary <- summary_df(dfs_output_fy18)
+```
+
+
+
+
