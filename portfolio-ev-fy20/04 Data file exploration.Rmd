@@ -44,6 +44,22 @@ function_class_helper <- function(data, FUN) {
   }
 }
 
+function_count_helper <- function(data, lower = -Inf, upper = Inf, excl_upper_bound = TRUE) {
+  # If excl_upper_bound then use < rather than <=
+  lt <- if(excl_upper_bound) {
+    match.fun('<')
+  } else {
+    match.fun('<=')
+  }
+  if (is.numeric(data)) {
+    sum(data >= lower & lt(data, upper), na.rm = TRUE)
+  } else if (is.factor(data)) {
+    sum(summary(data) >= lower & lt(summary(data), upper), na.rm = TRUE)
+  } else {
+    NA
+  }
+}
+
 summary_df <- function(data) {
   output <- data.frame(
     var = colnames(data)
@@ -51,13 +67,17 @@ summary_df <- function(data) {
   ) %>%
   # General summaries
   mutate(
-    n_NAs = sapply(data, function(x) sum(is.na(x)))
-    , n_obs = nrow(data) - n_NAs
+    n = nrow(data)
+    , n_NAs = sapply(data, function(x) sum(is.na(x)))
+    , n_nonNAs = n - n_NAs
     , n_fac_levels = sapply(data, function(x) ifelse(is.factor(x), length(levels(x)), NA))
   ) %>%
   # Factor or numeric summaries
   mutate(
-    min = sapply(data, function(x) {function_class_helper(x, min)})
+    n_zero = sapply(data, function(x) function_count_helper(x, lower = 0, upper = 0, excl_upper_bound = FALSE))
+    , n_lt_10 = sapply(data, function(x) function_count_helper(x, upper = 10, excl_upper_bound = TRUE))
+    , n_lt_100 = sapply(data, function(x) function_count_helper(x, upper = 100, excl_upper_bound = TRUE))
+    , min = sapply(data, function(x) {function_class_helper(x, min)})
     , mean = sapply(data, function(x) {function_class_helper(x, mean)})
     , median = sapply(data, function(x) {function_class_helper(x, median)})
     , max = sapply(data, function(x) {function_class_helper(x, max)})
@@ -73,11 +93,12 @@ summary_df <- function(data) {
 # Test my summary_df function
 a <- data.frame(
   seq = 1:10
-  , seqNAs = c(1:9, NA)
+  , seqNAs = c(seq(-40, 120, by = 20), NA)
   , fac = factor(c(1, 1, 1, 2, 2, 2, 3, 3, 3, 1))
   , letters = as.character(letters[1:10])
   , seqsq = (1:10)^2
   , mean0 = seq(-4.5, 4.5, by = 1)
+  , has0 = rep(-2:2, each = 2)
 )
 
 summary(a)
@@ -91,6 +112,128 @@ summary_df(a)
 data_summary <- summary_df(dfs_output_fy18)
 ```
 
+```{r}
+data_summary %>%
+  mutate(
+    pct_nas = n_NAs / n
+  ) %>%
+  ggplot(aes(x = pct_nas)) +
+  geom_histogram(binwidth = .01) +
+  scale_x_continuous(breaks = seq(0, 1, by = .1) %>% round(1), label = scales::percent) +
+  labs(title = 'Count of features by % NA data', x = '% NA')
+```
 
+```{r}
+data_summary %>%
+  mutate(
+    pct_zero = n_zero / n_nonNAs
+  ) %>%
+  ggplot(aes(x = pct_zero)) +
+  geom_histogram(binwidth = .01) +
+  scale_x_continuous(breaks = seq(0, 1, by = .1) %>% round(1), label = scales::percent) +
+  labs(title = 'Count of features by % zeros', x = '% zero')
+```
 
+```{r}
+data_summary %>%
+  mutate(
+    pct_0_or_NA = (n_zero + n_NAs) / n
+  ) %>%
+  ggplot(aes(x = pct_0_or_NA)) +
+  geom_histogram(binwidth = .01) +
+  scale_x_continuous(breaks = seq(0, 1, by = .1) %>% round(1), label = scales::percent) +
+  labs(title = 'Count of features by < 10', x = '% < 10')
+```
+
+```{r}
+data_summary %>%
+  mutate(
+    pct_lt_10 = n_lt_10 / n_nonNAs
+  ) %>%
+  ggplot(aes(x = pct_lt_10)) +
+  geom_histogram(binwidth = .01) +
+  scale_x_continuous(breaks = seq(0, 1, by = .1) %>% round(1), label = scales::percent) +
+  labs(title = 'Count of features by < 10', x = '% < 10')
+```
+
+A number of features are mostly (90%+) NAs or 0, depending on data type. Looking at overall counts the vast majority fo features are either mostly low or mostly high. Not clear what this should mean in terms of including/excluding different variables.
+
+```{r}
+data_summary %>%
+  ggplot(aes(x = sd)) +
+  geom_histogram(bins = 30) +
+  labs(title = 'Distribution of feature standard deviations') +
+  scale_x_log10(breaks = 10^seq(-20, 20, by = 2))
+```
+
+I assume the very low standard deviation features are the ones where most observations are 0.
+
+```{r}
+data_summary %>%
+  ggplot(aes(x = mean)) +
+  geom_histogram(bins = 30) +
+  labs(title = 'Distribution of feature means') +
+  scale_x_log10(breaks = 10^seq(-20, 20, by = 2))
+```
+
+```{r}
+data_summary %>%
+  mutate(
+    sd_range = case_when(
+      sd == 0 ~ 0
+      , round(sd, 1) >= 1 & round(sd, 1) < 2 ~ 1
+      , round(sd, 1) >= 2 ~ 2
+      , TRUE ~ round(sd, 1)
+    ) %>% factor() %>%
+      fct_recode(`~0` = '0', `~1` = '1', `2+` = '2')
+  ) %>%
+  ggplot(aes(x = sd_range)) +
+  geom_bar() +
+  labs(title = 'Approximate SD distributions')
+```
+
+A very large proportion of the valid standard deviations are close to 0.
+
+```{r}
+data_summary %>%
+  ggplot(aes(x = median)) +
+  geom_histogram(bins = 30) +
+  labs(title = 'Distribution of feature medians') +
+  scale_x_log10(breaks = 10^seq(-20, 20, by = 2))
+```
+
+The means and medians actually look very similar, which I find a bit surprising.
+
+```{r}
+data_summary %>%
+  ggplot(aes(x = min)) +
+  geom_histogram(bins = 30) +
+  labs(title = 'Distribution of feature mins') +
+  scale_x_log10(breaks = 10^seq(-20, 20, by = 2))
+```
+
+```{r}
+data_summary %>%
+  ggplot(aes(x = max)) +
+  geom_histogram(bins = 30) +
+  labs(title = 'Distribution of feature maxes') +
+  scale_x_log10(breaks = 10^seq(-20, 20, by = 2))
+```
+
+Mostly 0 for both, surprisingly.
+
+```{r}
+data_summary %>%
+  ggplot(aes(x = skewness)) +
+  geom_histogram(bins = 30) +
+  labs(title = 'Distribution of feature skewness')
+```
+
+```{r}
+data_summary %>%
+  ggplot(aes(x = kurtosis)) +
+  geom_histogram(bins = 30) +
+  labs(title = 'Distribution of feature kurtosis') +
+  scale_x_sqrt()
+```
 
