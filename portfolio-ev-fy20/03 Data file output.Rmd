@@ -162,110 +162,65 @@ save('dfs_output_fy18_4', file = 'data/output/dfs_output_fy18_4.Rdata')
 # Combine output files into one dataframe
 
 ```{r}
-# First two data frames
-load('data/output/dfs_output_fy18_1.Rdata')
-load('data/output/dfs_output_fy18_2.Rdata')
-
-dfs_output_fy18_full1 <- bind_rows(
-  dfs_output_fy18_1[[1]]
-  , dfs_output_fy18_2[[1]]
-)
-
-save('dfs_output_fy18_full1', file = 'data/output/dfs_output_fy18_full1.Rdata')
-
-remove(dfs_output_fy18_1, dfs_output_fy18_2)
-```
-
-```{r}
-# Third and fourth data frames
-load('data/output/dfs_output_fy18_3.Rdata')
-load('data/output/dfs_output_fy18_4.Rdata')
-
-dfs_output_fy18_full2 <- bind_rows(
-  dfs_output_fy18_3[[1]]
-  , dfs_output_fy18_4[[1]]
-)
-
-save('dfs_output_fy18_full2', file = 'data/output/dfs_output_fy18_full2.Rdata')
-
-remove(dfs_output_fy18_3, dfs_output_fy18_4)
-```
-
-```{r}
-load('data/output/dfs_output_fy18_full1.Rdata')
-load('data/output/dfs_output_fy18_full2.Rdata')
-```
-
-Check for conflicting fields.
-
-```{r}
-names1 <- dfs_output_fy18_full1 %>% names()
-names2 <- dfs_output_fy18_full2 %>% names()
-
-which(names1 %nin% names2)
-which(names2 %nin% names1)
-```
-
-Create full list of fields.
-
-```{r}
-dfs_output_fy18 <- bind_rows(
-  dfs_output_fy18_full1[1, ]
-  , dfs_output_fy18_full2[1, ]
-)
-dfs_output_fy18 <- dfs_output_fy18 %>% head(0)
-```
-
-Merge output into list of fields.
-
-```{r}
-dfs_output_fy18_full1 <- bind_rows(
-  dfs_output_fy18
-  , dfs_output_fy18_full1
-)
-
-save('dfs_output_fy18_full1', file = 'data/output/dfs_output_fy18_full1.Rdata')
-```
-
-```{r}
-remove(dfs_output_fy18_full1)
-gc()
-```
-
-
-```{r}
-dfs_output_fy18_full2 <- bind_rows(
-  dfs_output_fy18
-  , dfs_output_fy18_full2
-)
-
-save('dfs_output_fy18_full2', file = 'data/output/dfs_output_fy18_full2.Rdata')
-```
-
-```{r}
-remove(dfs_output_fy18_full2)
-gc()
-```
-
-```{r}
-load('data/output/dfs_output_fy18_full1.Rdata')
-load('data/output/dfs_output_fy18_full2.Rdata')
-```
-
-```{r}
 # Use pagefile
 utils::memory.limit(128000)
 
-dfs_output_fy18 <- rbind(
-  dfs_output_fy18_full1
-  , dfs_output_fy18_full2
+# Load data
+load('data/output/dfs_output_fy18_1.Rdata')
+load('data/output/dfs_output_fy18_2.Rdata')
+load('data/output/dfs_output_fy18_3.Rdata')
+load('data/output/dfs_output_fy18_4.Rdata')
+
+# Append HHID
+dfs_output_fy18_1[[1]]$HOUSEHOLD_ID <- rownames(dfs_output_fy18_1[[1]])
+dfs_output_fy18_2[[1]]$HOUSEHOLD_ID <- rownames(dfs_output_fy18_2[[1]])
+dfs_output_fy18_3[[1]]$HOUSEHOLD_ID <- rownames(dfs_output_fy18_3[[1]])
+dfs_output_fy18_4[[1]]$HOUSEHOLD_ID <- rownames(dfs_output_fy18_4[[1]])
+
+gc()
+```
+
+```{r}
+dfs_output_fy18 <- bind_rows(
+    dfs_output_fy18_1[[1]]
+  , dfs_output_fy18_2[[1]]
+  , dfs_output_fy18_3[[1]]
+  , dfs_output_fy18_4[[1]]
 )
 
 save('dfs_output_fy18', file = 'data/output/dfs_output_fy18.Rdata')
 ```
 
 ```{r}
-remove(dfs_output_fy18_full1, dfs_output_fy18_full2)
+remove(dfs_output_fy18_1, dfs_output_fy18_2, dfs_output_fy18_3, dfs_output_fy18_4)
 gc()
 ```
 
+# Response variable
+
+Subsequent year gift amounts (FY19 in this case).
+
+```{r}
+output_fy18_rv <- catracks$giv_transactions %>%
+  group_by(HOUSEHOLD_ID) %>%
+  summarise(
+    fy19_cash = sum(ifelse(TX_GYPM_IND != 'P', HH_RECOGNITION_CREDIT, 0))
+    , fy19_frp = sum(ifelse(TX_GYPM_IND != 'Y', HH_RECOGNITION_CREDIT, 0))
+  ) %>%
+  group_by()
+
+save('output_fy18_rv', file = 'data/output/output_fy18_rv.Rdata')
+```
+
+Check that the HHIDs are unique.
+
+```{r}
+output_fy18_rv %>%
+  sapply(FUN = function(x) {unique(x) %>% length()})
+
+output_fy18_rv %>% nrow()
+
+dfs_output_fy18$HOUSEHOLD_ID %>% unique() %>% length()
+
+dfs_output_fy18 %>% nrow()
+```
