@@ -20,7 +20,7 @@ library(lubridate)
 library(wranglR)
 library(readxl)
 library(foreach)
-library(reticulate)
+library(Boruta)
 ```
 
 ```{r}
@@ -237,3 +237,62 @@ data_summary %>%
   scale_x_sqrt()
 ```
 
+# Response variable
+
+```{r}
+load('data/output/output_fy18_rv.Rdata')
+```
+
+# Feature importance
+
+Use the Boruta algorithm to categorize features as important/unimportant. See [Sauve & Tuleau-Malot (2014)](https://hal-unice.archives-ouvertes.fr/hal-00551375/document) for a justification of using variable importance to prescreen features.
+
+As I've said before, variable importance in a random forest is defined as the change in MSE when permuting a given observation vector. One nice feature is that highly correlated variables should be similarly important.
+
+```{r}
+# Use pagefile
+utils::memory.limit(128000)
+
+# Sample rows
+prop = 1/1000 # Proportion of data to sample
+set.seed(60952)
+samp <- sample_n(dfs_output_fy18, size = nrow(dfs_output_fy18) * prop) %>%
+  # Drop list type
+  select_if(
+    ~ !is.list(.)
+  ) %>%
+  # Replace numeric NA with 0
+  mutate_if(
+    is.numeric
+    , ~ replace(., is.na(.), 0)
+  ) %>%
+  # Replace factor NA with missing
+  mutate_if(
+    is.factor
+    , fct_explicit_na
+  )
+dollars <- samp %>% select(HOUSEHOLD_ID) %>%
+  left_join(
+    output_fy18_rv %>% filter(HOUSEHOLD_ID %in% samp$HOUSEHOLD_ID)
+    , by = c('HOUSEHOLD_ID' = 'HOUSEHOLD_ID')
+  ) %>%
+  # Fill in NA with 0
+  mutate_if(
+    is.numeric
+    , function(x) ReplaceValues(x)
+  )
+```
+
+```{r}
+# Check that the order is the same
+paste(sum(samp$HOUSEHOLD_ID != dollars$HOUSEHOLD_ID), 'mismatched')
+```
+
+```{r}
+# Run Boruta algorithm
+rf_vars <- Boruta(
+    y = log10(dollars$fy19_frp + 1)
+    , x = samp
+    , seed = 964592
+  )
+```

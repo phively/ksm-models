@@ -196,16 +196,37 @@ remove(dfs_output_fy18_1, dfs_output_fy18_2, dfs_output_fy18_3, dfs_output_fy18_
 gc()
 ```
 
+Fill in NAs.
+
+```{r}
+dfs_output_fy18 <- dfs_output_fy18 %>%
+  # Replace numeric NA with 0
+  mutate_if(
+    is.numeric
+    , ~ replace(., is.na(.), 0)
+  ) %>%
+  # Replace factor NA with missing
+  mutate_if(
+    is.factor
+    , fct_explicit_na
+  )
+
+save('dfs_output_fy18', file = 'data/output/dfs_output_fy18_noNA.Rdata')
+```
+
+
 # Response variable
 
 Subsequent year gift amounts (FY19 in this case).
 
 ```{r}
+fy <- 2019
+
 output_fy18_rv <- catracks$giv_transactions %>%
   group_by(HOUSEHOLD_ID) %>%
   summarise(
-    fy19_cash = sum(ifelse(TX_GYPM_IND != 'P', HH_RECOGNITION_CREDIT, 0))
-    , fy19_frp = sum(ifelse(TX_GYPM_IND != 'Y', HH_RECOGNITION_CREDIT, 0))
+    fy19_cash = sum(ifelse(TX_GYPM_IND != 'P' & FISCAL_YEAR == fy, HH_RECOGNITION_CREDIT, 0))
+    , fy19_frp = sum(ifelse(TX_GYPM_IND != 'Y' & FISCAL_YEAR == fy, HH_RECOGNITION_CREDIT, 0))
   ) %>%
   group_by()
 
