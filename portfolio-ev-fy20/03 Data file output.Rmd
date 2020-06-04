@@ -230,6 +230,17 @@ dfs_output_fy18 <- dfs_output_fy18 %>%
 save('dfs_output_fy18', file = 'data/output/dfs_output_fy18_noNA.Rdata')
 ```
 
+Version without lists.
+
+```{r}
+dfs_output_fy18 <- dfs_output_fy18 %>%
+  select_if(
+    function(x) {!is.list(x)}
+  )
+
+save('dfs_output_fy18', file = 'data/output/dfs_output_fy18_noNA_nolists.Rdata')
+```
+
 # Response variable
 
 Subsequent year gift amounts (FY19 in this case).

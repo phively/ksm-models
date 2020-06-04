@@ -20,6 +20,7 @@ library(lubridate)
 library(wranglR)
 library(readxl)
 library(foreach)
+library(doParallel)
 library(caret)
 library(glmnet)
 ```
@@ -145,7 +146,7 @@ data_summary %>%
   ggplot(aes(x = pct_0_or_NA)) +
   geom_histogram(binwidth = .01) +
   scale_x_continuous(breaks = seq(0, 1, by = .1) %>% round(1), label = scales::percent) +
-  labs(title = 'Count of features by < 10', x = '% < 10')
+  labs(title = 'Count of features 0 or NA', x = '% 0 or NA')
 ```
 
 ```{r}
@@ -243,7 +244,7 @@ data_summary %>%
 # Load data and response variable
 
 ```{r}
-load('data/output/dfs_output_fy18.Rdata')
+load('data/output/dfs_output_fy18_noNA_nolists.Rdata')
 load('data/output/output_fy18_rv.Rdata')
 ```
 
@@ -274,24 +275,176 @@ rv <- dfs_output_fy18 %>%
 paste(sum(dfs_output_fy18$HOUSEHOLD_ID != rv$HOUSEHOLD_ID), 'mismatched')
 ```
 
-# Data cleanup
+# Caret benchmarking
 
-I'll perform variable pre-screening by computing the AUC for each predictor against an indicator, as recommended by the [University of Melbourne](http://proceedings.mlr.press/v7/miller09/miller09.pdf).
+Use the caret package to clean up the feature matrix. Begin by checking for low-variance predictors.
+
+Begin with some benchmarking.
 
 ```{r}
+nzv_benchmarker <- function(saveMetrics = TRUE, foreach = FALSE, allowParallel = TRUE) {
+  time0 <- Sys.time()
+  nearZeroVar(dfs_output_fy18[, 1:10], saveMetrics = saveMetrics, foreach = foreach, allowParallel = allowParallel)
+  time10 <- Sys.time()
+  nearZeroVar(dfs_output_fy18[, 1:20], saveMetrics = saveMetrics, foreach = foreach, allowParallel = allowParallel)
+  time20 <- Sys.time()
+  nearZeroVar(dfs_output_fy18[, 1:30], saveMetrics = saveMetrics, foreach = foreach, allowParallel = allowParallel)
+  time30 <- Sys.time()
+  nearZeroVar(dfs_output_fy18[, 1:40], saveMetrics = saveMetrics, foreach = foreach, allowParallel = allowParallel)
+  time40 <- Sys.time()
+  nearZeroVar(dfs_output_fy18[, 1:50], saveMetrics = saveMetrics, foreach = foreach, allowParallel = allowParallel)
+  time50 <- Sys.time()
+  return(
+    c(
+      time10 - time0
+      , time20 - time10
+      , time30 - time20
+      , time40 - time30
+      , time50 - time40
+    )
+  )
+}
 
+n_vars <- seq(10, 50, by = 10)
 ```
 
-# caret
+```{r}
+nzv_timing <- data.frame(
+  vars = n_vars
+  , time = nzv_benchmarker()
+)
+```
+```{r}
+nzv_timing %>%
+  ggplot(aes(x = vars, y = time)) +
+  geom_point() +
+  geom_smooth(method = 'lm', alpha = .5)
+```
 
-Use the caret package to clean up the feature matrix.
+Linear scaling with the number of variables, which is...expected but not a hopeful sign.
+
+```{r}
+# Hours to run
+{nzv_timing %>% lm(time ~ vars, data = .) %>% predict(newdata = data.frame(vars = ncol(dfs_output_fy18)))} / 3600
+```
+
+```{r}
+# Benchmarking in parallel
+nzv_timing_parallel <- data.frame(
+  vars = n_vars
+  , time = nzv_benchmarker(foreach = TRUE)
+)
+```
+```{r}
+nzv_timing_parallel %>%
+  ggplot(aes(x = vars, y = time)) +
+  geom_point() +
+  geom_smooth(method = 'lm', alpha = .5)
+```
+
+```{r}
+# Hours to run
+{nzv_timing_parallel %>% lm(time ~ vars, data = .) %>% predict(newdata = data.frame(vars = ncol(dfs_output_fy18)))} / 3600
+```
+
+Parallel processing cuts down the time needed by over 50% - not too shabby!
+
+```{r}
+# Test scaling with different core counts
+c2 <- makePSOCKcluster(2)
+c4 <- makePSOCKcluster(5)
+c6 <- makePSOCKcluster(6)
+c8 <- makePSOCKcluster(8)
+c10 <- makePSOCKcluster(10)
+
+nzv_timing_cores <- data.frame()
+
+registerDoParallel(c2)
+nzv_timing_cores <- nzv_timing_cores %>% rbind(data.frame(cores = 2, vars = n_vars, time = nzv_benchmarker(foreach = TRUE)))
+stopCluster(c2)
+registerDoParallel(c4)
+nzv_timing_cores <- nzv_timing_cores %>% rbind(data.frame(cores = 4, vars = n_vars, time = nzv_benchmarker(foreach = TRUE)))
+stopCluster(c4)
+registerDoParallel(c6)
+nzv_timing_cores <- nzv_timing_cores %>% rbind(data.frame(cores = 6, vars = n_vars, time = nzv_benchmarker(foreach = TRUE)))
+stopCluster(c6)
+registerDoParallel(c8)
+nzv_timing_cores <- nzv_timing_cores %>% rbind(data.frame(cores = 8, vars = n_vars, time = nzv_benchmarker(foreach = TRUE)))
+stopCluster(c8)
+registerDoParallel(c10)
+nzv_timing_cores <- nzv_timing_cores %>% rbind(data.frame(cores = 10, vars = n_vars, time = nzv_benchmarker(foreach = TRUE)))
+stopCluster(c10)
+```
+
+```{r}
+nzv_timing_cores %>%
+  ggplot(aes(x = vars, y = time, color = factor(cores))) +
+  geom_point() +
+  geom_smooth(method = 'lm', alpha = .2)
+```
+
+Interesting...try it with more vars.
+
+```{r}
+time0 <- Sys.time()
+c2 <- makePSOCKcluster(2)
+registerDoParallel(c2)
+a <- nearZeroVar(dfs_output_fy18[, 1:300], saveMetrics = TRUE, foreach = TRUE, allowParallel = TRUE)
+time2 <- Sys.time()
+stopCluster(c2)
+
+c4 <- makePSOCKcluster(5)
+registerDoParallel(c4)
+a <- nearZeroVar(dfs_output_fy18[, 1:300], saveMetrics = TRUE, foreach = TRUE, allowParallel = TRUE)
+time4 <- Sys.time()
+stopCluster(c4)
+
+c6 <- makePSOCKcluster(6)
+registerDoParallel(c6)
+a <- nearZeroVar(dfs_output_fy18[, 1:300], saveMetrics = TRUE, foreach = TRUE, allowParallel = TRUE)
+time6 <- Sys.time()
+stopCluster(c6)
+
+c8 <- makePSOCKcluster(8)
+registerDoParallel(c8)
+a <- nearZeroVar(dfs_output_fy18[, 1:300], saveMetrics = TRUE, foreach = TRUE, allowParallel = TRUE)
+time8 <- Sys.time()
+stopCluster(c8)
+
+c10 <- makePSOCKcluster(10)
+registerDoParallel(c10)
+a <- nearZeroVar(dfs_output_fy18[, 1:300], saveMetrics = TRUE, foreach = TRUE, allowParallel = TRUE)
+time10 <- Sys.time()
+stopCluster(c10)
+
+nzv_cores_300 <- data.frame(cores = seq(2, 10, by = 2), time = c(time2 - time0, time4 - time2, time6 - time4, time8 - time6, time10 - time8))
+```
+
+```{r}
+nzv_cores_300 %>%
+  ggplot(aes(x = cores, y = time)) +
+  geom_point() +
+  geom_smooth(method = 'lm', alpha = .5)
+```
+
+4, 6 or 8 cores all appear to be reasonable.
+
+# Near-zero variance run
 
 ```{r}
 # Use pagefile
 utils::memory.limit(128000)
 
+# Set up parallel cluster
+c6 <- makePSOCKcluster(6)
+registerDoParallel(c6)
+
 # Check variances
-caret_vars <- nearZeroVar(dfs_output_fy18[, 1:10], saveMetrics = TRUE)
+caret_vars <- nearZeroVar(dfs_output_fy18, saveMetrics = TRUE, foreach = TRUE, allowParallel = TRUE)
+
+save('caret_vars', file = 'data/output/caret_fy18.Rdata')
+
+stopCluster(c6)
 ```
 
 https://topepo.github.io/caret/pre-processing.html
