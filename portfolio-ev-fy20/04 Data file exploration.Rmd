@@ -20,7 +20,8 @@ library(lubridate)
 library(wranglR)
 library(readxl)
 library(foreach)
-library(Boruta)
+library(caret)
+library(glmnet)
 ```
 
 ```{r}
@@ -110,6 +111,8 @@ summary_df(a)
 
 ```{r, warning = FALSE}
 data_summary <- summary_df(dfs_output_fy18)
+
+save('data_summary', file = 'data/output/dfs_output_fy18_summary.Rdata')
 ```
 
 ```{r}
@@ -156,7 +159,7 @@ data_summary %>%
   labs(title = 'Count of features by < 10', x = '% < 10')
 ```
 
-A number of features are mostly (90%+) NAs or 0, depending on data type. Looking at overall counts the vast majority fo features are either mostly low or mostly high. Not clear what this should mean in terms of including/excluding different variables.
+A number of features are mostly (90%+) NAs or 0, depending on data type. Looking at overall counts the vast majority of features are either mostly low or mostly high. Not clear what this should mean in terms of including/excluding different variables.
 
 ```{r}
 data_summary %>%
@@ -237,17 +240,65 @@ data_summary %>%
   scale_x_sqrt()
 ```
 
-# Response variable
+# Load data and response variable
 
 ```{r}
+load('data/output/dfs_output_fy18.Rdata')
 load('data/output/output_fy18_rv.Rdata')
 ```
 
+```{r}
+rv <- dfs_output_fy18 %>%
+  select(HOUSEHOLD_ID) %>%
+  left_join(
+    output_fy18_rv
+    , by = c('HOUSEHOLD_ID' = 'HOUSEHOLD_ID')
+  ) %>%
+  # Fill in NA with 0
+  mutate_if(
+    is.numeric
+    , function(x) ReplaceValues(x)
+  ) %>%
+  # Transformed amounts
+  mutate(
+    gave_any = fy19_cash + fy19_frp > 0
+    , gave_cash = fy19_cash > 0
+    , gave_frp = fy19_frp > 0
+    , fy19_log_cash = log10(fy19_cash + 1)
+    , fy19_log_frp = log10(fy19_frp + 1)
+  )
+```
+
+```{r}
+# Check that the order is the same
+paste(sum(dfs_output_fy18$HOUSEHOLD_ID != rv$HOUSEHOLD_ID), 'mismatched')
+```
+
+# Data cleanup
+
+I'll perform variable pre-screening by computing the AUC for each predictor against an indicator, as recommended by the [University of Melbourne](http://proceedings.mlr.press/v7/miller09/miller09.pdf).
+
+```{r}
+
+```
+
+# caret
+
+Use the caret package to clean up the feature matrix.
+
+```{r}
+# Use pagefile
+utils::memory.limit(128000)
+
+# Check variances
+caret_vars <- nearZeroVar(dfs_output_fy18[, 1:10], saveMetrics = TRUE)
+```
+
+https://topepo.github.io/caret/pre-processing.html
+
 # Feature importance
 
-Use the Boruta algorithm to categorize features as important/unimportant. See [Sauve & Tuleau-Malot (2014)](https://hal-unice.archives-ouvertes.fr/hal-00551375/document) for a justification of using variable importance to prescreen features.
-
-As I've said before, variable importance in a random forest is defined as the change in MSE when permuting a given observation vector. One nice feature is that highly correlated variables should be similarly important.
+With such a high number of features I'm using the LASSO method as implemented by glmnet to help identify the most interesting ones.
 
 ```{r}
 # Use pagefile
@@ -260,17 +311,8 @@ samp <- sample_n(dfs_output_fy18, size = nrow(dfs_output_fy18) * prop) %>%
   # Drop list type
   select_if(
     ~ !is.list(.)
-  ) %>%
-  # Replace numeric NA with 0
-  mutate_if(
-    is.numeric
-    , ~ replace(., is.na(.), 0)
-  ) %>%
-  # Replace factor NA with missing
-  mutate_if(
-    is.factor
-    , fct_explicit_na
   )
+
 dollars <- samp %>% select(HOUSEHOLD_ID) %>%
   left_join(
     output_fy18_rv %>% filter(HOUSEHOLD_ID %in% samp$HOUSEHOLD_ID)
@@ -289,10 +331,14 @@ paste(sum(samp$HOUSEHOLD_ID != dollars$HOUSEHOLD_ID), 'mismatched')
 ```
 
 ```{r}
-# Run Boruta algorithm
-rf_vars <- Boruta(
-    y = log10(dollars$fy19_frp + 1)
-    , x = samp
-    , seed = 964592
-  )
+# glmnet LASSO
+tmp <- data.frame(fy19_frp = dollars$fy19_frp, samp[, 1:100]) %>%
+  na.omit()
+
+m_lasso <- glmnet(
+  x = model.matrix(fy19_frp ~ ., data = tmp)[, -1]
+  , y = log10(tmp$fy19_frp + 1)
+  , family = 'gaussian'
+  , alpha = 1
+)
 ```
