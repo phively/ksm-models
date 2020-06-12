@@ -1,0 +1,104 @@
+---
+title: "01 Bad model and data file creation"
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+The overall idea here is to tag alumni records with descriptions of how they would like to be engaged, e.g. student supporter, connector, etc. The issue is that as of today there is no target variable to use to fit a model. The first step is to create a bad model based on my best guess, then split the results into a set of several data files for staff review. They'll be able to flag records as fitting or not fitting the desired role and I'll use the reviewed data to fit a better model.
+
+# Setup
+
+```{r setup, message = FALSE}
+library(tidyverse)
+library(readxl)
+library(wranglR)
+library(splines)
+```
+
+```{r}
+# Load data
+entities <- read_xlsx(path = 'data/2020-06-12 master data file.xlsx', guess_max = 1E6)
+
+# Convert to factor and clean
+factorize <- function(var) {
+  factor(var) %>%
+    fct_explicit_na() %>%
+    return()
+}
+
+# Clean data
+entities <- entities %>%
+  # Fill numeric with 0
+  mutate_if(
+    is.numeric
+    , ReplaceValues
+  ) %>%
+  # Factors
+  mutate(
+    GENDER_CODE = factorize(GENDER_CODE)
+    , ETHNICITY = factorize(ETHNICITY)
+    , FIRST_KSM_YEAR = as.numeric(FIRST_KSM_YEAR)
+    , PROGRAM_GROUP = factorize(PROGRAM_GROUP)
+    , TAG = factorize(TAG)
+    , KAC = factorize(KAC)
+    , KALC = factorize(KALC)
+    , CLUB_TITLE = factorize(CLUB_TITLE)
+    , GAB = factorize(GAB)
+  ) %>%
+  # New data
+  mutate(
+    has_tag = TAG != '(Missing)'
+  ) %>%
+  # Dedupe
+  distinct(ID_NUMBER, .keep_all = TRUE)
+```
+
+# First pass model
+
+```{r}
+# Modeling data file
+mdat <- entities %>%
+  select(ID_NUMBER:PRIORITIES_SUPPORTED_COUNT, has_tag, -TAG) %>%
+  # Transform numerics
+  mutate_at(vars(COMM_FEATURE:PRIORITIES_SUPPORTED_COUNT), .funs = sqrt)
+```
+
+
+```{r}
+set.seed(123)
+
+sample <- mdat %>%
+  filter(has_tag)
+
+# Select people with a tag and an equal number of random entities
+sample <- mdat %>%
+  filter(!has_tag) %>%
+  sample_n(nrow(sample)) %>%
+  rbind(sample)
+```
+
+```{r}
+bad_model_1 <- mdat %>%
+  glm(
+    has_tag ~
+      GENDER_CODE + ETHNICITY + ns(FIRST_KSM_YEAR, df = 3) + PROGRAM_GROUP + KAC + KALC + GAB +
+      COMM_FEATURE + MAGAZINE + SPEAKER + DEAN_VISITS + RECENT_JOBS_COUNT + CAREER_INTERESTS_COUNT + TOTAL_VISITORS + TOTAL_VISITS +
+      DISTINCT_COMMITTEES + TOTAL_EVENTS + TOTAL_ACTIVITIES + KLC_YEARS_COUNT + PRIORITIES_SUPPORTED_COUNT
+    , data = .
+    , family = 'binomial'
+  )
+```
+
+```{r}
+summary(bad_model_1)
+```
+
+```{r}
+plot(bad_model_1)
+```
+
