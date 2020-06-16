@@ -18,11 +18,15 @@ library(tidyverse)
 library(readxl)
 library(wranglR)
 library(splines)
+library(caret)
+
+# Parameters
+data_date <- '2020-06-15'
 ```
 
 ```{r}
 # Load data
-entities <- read_xlsx(path = 'data/2020-06-12 master data file.xlsx', guess_max = 1E6)
+entities <- read_xlsx(path = paste0('data/', data_date, ' master data file.xlsx'), guess_max = 1E6)
 
 # Convert to factor and clean
 factorize <- function(var) {
@@ -55,7 +59,11 @@ entities <- entities %>%
     has_tag = TAG != '(Missing)'
   ) %>%
   # Dedupe
-  distinct(ID_NUMBER, .keep_all = TRUE)
+  distinct(ID_NUMBER, .keep_all = TRUE) %>%
+  # Alumni only
+  filter(
+    !is.na(FIRST_KSM_YEAR)
+  )
 ```
 
 # First pass model
@@ -78,17 +86,34 @@ sample <- mdat %>%
 # Select people with a tag and an equal number of random entities
 sample <- mdat %>%
   filter(!has_tag) %>%
-  sample_n(nrow(sample)) %>%
+  sample_n(nrow(sample) * 2) %>%
   rbind(sample)
 ```
 
 ```{r}
-bad_model_1 <- mdat %>%
+bad_model_1 <- sample %>%
   glm(
     has_tag ~
-      GENDER_CODE + ETHNICITY + ns(FIRST_KSM_YEAR, df = 3) + PROGRAM_GROUP + KAC + KALC + GAB +
-      COMM_FEATURE + MAGAZINE + SPEAKER + DEAN_VISITS + RECENT_JOBS_COUNT + CAREER_INTERESTS_COUNT + TOTAL_VISITORS + TOTAL_VISITS +
-      DISTINCT_COMMITTEES + TOTAL_EVENTS + TOTAL_ACTIVITIES + KLC_YEARS_COUNT + PRIORITIES_SUPPORTED_COUNT
+      GENDER_CODE
+    #+ ETHNICITY
+    + ns(FIRST_KSM_YEAR, df = 3)
+    #+ PROGRAM_GROUP
+    #+ KAC
+    #+ KALC
+    #+ GAB
+    + COMM_FEATURE
+    + MAGAZINE
+    + SPEAKER
+    + DEAN_VISITS
+    + RECENT_JOBS_COUNT
+    + CAREER_INTERESTS_COUNT
+    + TOTAL_VISITORS
+    + TOTAL_VISITS
+    + DISTINCT_COMMITTEES
+    + TOTAL_EVENTS
+    + TOTAL_ACTIVITIES
+    + KLC_YEARS_COUNT
+    + PRIORITIES_SUPPORTED_COUNT
     , data = .
     , family = 'binomial'
   )
@@ -100,5 +125,178 @@ summary(bad_model_1)
 
 ```{r}
 plot(bad_model_1)
+```
+
+```{r}
+sample_results <- data.frame(
+  actual = sample$has_tag + 0
+  , predicted = bad_model_1$fitted.values
+)
+
+sample_results %>%
+  ggplot(aes(x = predicted, color = factor(actual))) +
+  geom_point(aes(y = actual)) +
+  geom_density() +
+  scale_x_continuous(breaks = seq(0, 1, by = .2)) +
+  labs(color = 'actual')
+```
+
+```{r}
+# Set default cutoff to just the % true
+cutoff <- sum(sample_results$actual) / nrow(sample_results)
+
+confusionMatrix(
+  data = factor(sample_results$predicted >= cutoff)
+  , reference = factor(sample_results$actual == 1)
+  , positive = 'TRUE'
+)
+```
+
+The diagnostics looks fine.
+
+```{r}
+sample %>%
+  mutate(prediction = bad_model_1$fitted.values) %>%
+  write.csv(file = 'data/output/sample_output.csv', row.names = FALSE)
+```
+
+Looks fine. Score the whole dataset.
+
+```{r}
+entities_modeled <- entities %>%
+  mutate(
+    prediction = predict(bad_model_1, newdata = entities, type = 'response')
+  ) %>%
+  arrange(desc(prediction)) %>%
+  mutate(
+    quantile = row_number() / nrow(entities)
+  )
+```
+
+# List generation
+
+```{r}
+entities_modeled %>%
+  write.csv(file = 'data/output/entities_modeled.csv', row.names = FALSE)
+```
+
+Choose a few random_ids for everyone to see to calibrate the results. As a starting place, 5 from the top 2%, 5 from the middle 2%, 5 from the botom 2%.
+
+```{r}
+set.seed(5986147)
+
+calibrater <- function(data, low, high, n) {
+  data %>%
+    filter(quantile > low & quantile <= high) %>%
+    sample_n(n) %>%
+    return()
+}
+
+calibration <- rbind(
+  calibrater(entities_modeled, 0, 0.02, 5)
+  , calibrater(entities_modeled, 0.49, 0.51, 5)
+  , calibrater(entities_modeled, 0.98, 1.0, 5)
+) %>%
+  arrange(desc(prediction))
+
+calibration %>%
+  write.csv(file = 'data/output/calibration.csv', row.names = FALSE)
+```
+
+```{r}
+checkers <- c(
+  # AR
+  'Gail'
+  , 'Gina'
+  , 'Mark'
+  , 'Peggy'
+  , 'Tanya'
+  # AG
+  , 'Bridget'
+  , 'Colleen'
+  , 'Christine P'
+  , 'Julie'
+  , 'Kam'
+  , 'Pat'
+)
+
+n_checkers <- length(checkers)
+```
+
+```{r}
+# Keep only fields for checkers
+control <- calibration %>%
+  select(RANDOM_ID:PROGRAM_GROUP, HOME_ADDRESS:CAMPAIGN_PRIORITIES_SUPPORTED) %>%
+  mutate(
+    `Student Supporter?` = NA
+    , `Connector?` = NA
+    , `Notable?` = NA
+    , `Interesting career/story` = NA
+    , Notes = NA
+  )
+```
+
+```{r}
+# Remove calibration set from randomized dataset
+randomizable <- entities_modeled %>%
+  filter(ID_NUMBER %nin% calibration$ID_NUMBER) %>%
+  # Remove previously tagged people
+  filter(!has_tag) %>%
+  mutate(
+    `Student Supporter?` = NA
+    , `Connector?` = NA
+    , `Notable?` = NA
+    , `Interesting career/story` = NA
+    , Notes = NA
+  )
+
+# Function to create blocks
+data_blocker <- function(data, low, high, n) {
+  data %>%
+    filter(quantile > low & quantile <= high) %>%
+    # Keep only selected fields
+    select(names(control)) %>%
+    sample_n(n) %>%
+    return()
+}
+
+# Split into 3 groups
+set.seed(6521784)
+a <- 28
+b <- 29
+c <- 28
+r1 <- randomizable %>% data_blocker(0.0, 0.33, n = a * n_checkers)
+r2 <- randomizable %>% data_blocker(0.33, 0.67, n = b * n_checkers)
+r3 <- randomizable %>% data_blocker(0.67, 1.0, n = c * n_checkers)
+```
+
+Create lists for each person.
+
+```{r}
+for (i in 1:n_checkers) {
+  print(checkers[i])
+  rbind(
+    control
+    , r1[{(i - 1) * a + 1}:{a * i}, ]
+    , r2[{(i - 1) * b + 1}:{b * i}, ]
+    , r3[{(i - 1) * c + 1}:{c * i}, ]
+  ) %>%
+    arrange(RANDOM_ID) %>%
+  writexl::write_xlsx(
+    path = paste0('data/output/', data_date, ' list for ', checkers[i], '.xlsx')
+  )
+}
+```
+
+Create example list.
+
+```{r}
+entities %>%
+  filter(has_tag) %>%
+  select(ID_NUMBER:INSTITUTIONAL_SUFFIX, GENDER_CODE:TAG, HOME_ADDRESS:CAMPAIGN_PRIORITIES_SUPPORTED) %>%
+  arrange(TAG) %>%
+  writexl::write_xlsx(
+    path = paste0('data/output/', data_date, ' EXAMPLES.xlsx')
+  )
 ```
 

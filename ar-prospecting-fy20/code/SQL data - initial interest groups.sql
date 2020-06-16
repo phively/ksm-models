@@ -199,12 +199,14 @@ params As (
 -- Current job/company
 , curr_employ As (
   Select
-    id_number
-    , prs.business_title
+    de.catracks_id
+      As id_number
+    , de.primary_job_title
       As current_job_title
-    , trim(prs.employer_name1 || ' ' || prs.employer_name2)
+    , trim(de.primary_employer)
       As current_employer
-  From nu_prs_trp_prospect prs
+    , de.primary_job_source
+  From v_datamart_entities de
 )
 
 -- Other current or recent job/company
