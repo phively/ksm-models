@@ -178,6 +178,8 @@ entities_modeled <- entities %>%
 ```{r}
 entities_modeled %>%
   write.csv(file = 'data/output/entities_modeled.csv', row.names = FALSE)
+
+save(entities_modeled, file = 'data/output/entities_modeled.Rdata')
 ```
 
 Choose a few random_ids for everyone to see to calibrate the results. As a starting place, 5 from the top 2%, 5 from the middle 2%, 5 from the botom 2%.

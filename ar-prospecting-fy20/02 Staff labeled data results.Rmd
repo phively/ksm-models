@@ -1,0 +1,95 @@
+---
+title: "02 Staff labeled data results"
+output:
+  html_notebook:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+---
+
+# Goal
+
+Quick analysis of the datasets labeled by staff, ultimately to create some sort of weighted training data set.
+
+# Setup
+
+```{r setup}
+library(tidyverse)
+library(wranglR)
+library(readxl)
+library(splines)
+library(foreach)
+```
+
+```{r}
+# Load master data
+load(file = 'data/output/entities_modeled.Rdata')
+```
+
+```{r}
+# Function to load and parse completed lists
+parse_lists <- function(path) {
+  files <- list.files(path)
+  foreach(f = files, .combine = rbind, .multicombine = TRUE) %do% {
+    # Load the data and extract contributor name
+    data <- read_xlsx(path = paste0(path, '/', f), guess_max = 1E6)
+    name <- str_match(f, '(?<=list for ).*(?=.xlsx)')
+    data$name <- name
+    # Keep only needed fields
+    data %>%
+      rename(Student = `Student Supporter?`, Connector = `Connector?`, Notable = `Notable?`, Interesting = `Interesting career/story`) %>%
+      select(RANDOM_ID, name, Student, Connector, Notable, Interesting, Notes) %>%
+      return()
+  }
+}
+
+lists <- parse_lists(path = 'data/output/completed lists/')
+```
+
+# Initial exploration
+
+```{r}
+lists <- lists %>%
+  mutate(
+    across(.cols = name:Interesting, .fns = as.factor)
+  )
+
+lists %>% summary(maxsum = 1E3)
+```
+
+I can weight yes as 1, maybe as 0.5. Or just everything as 1?
+
+```{r, rows.print = 100}
+level_checker <- function(field) {
+  lists %>%
+    filter(!is.na({{ field }})) %>%
+    group_by(name, {{ field}}) %>%
+    summarise(n(), .groups = 'drop')
+}
+```
+
+```{r, rows.print = 100}
+level_checker(Student)
+level_checker(Notable)
+level_checker(Connector)
+level_checker(Interesting)
+```
+
+Since all the possibles were from one person I'm inclined to treat them the same as yes.
+
+```{r}
+lists <- lists %>%
+  mutate(
+    across(.cols = Student:Interesting, .fns = function(x) {!is.na(x)})
+  )
+```
+
+```{r}
+lists %>% summary(maxsum = 1E3)
+```
+
+Finally, combine individual results back into the master data frame.
+
+
+
+# Calibration names
