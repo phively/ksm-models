@@ -95,11 +95,13 @@ Finally, combine individual results back into the master data frame.
 A few people appeared on every list:
 
 ```{r}
-calibration <- entities_modeled %>%
+calibration_raw <- entities_modeled %>%
   left_join(
     lists
     , by = c('RANDOM_ID' = 'RANDOM_ID')
-  ) %>%
+  )
+
+calibration <- calibration_raw %>%
   group_by(ID_NUMBER, RANDOM_ID, REPORT_NAME, INSTITUTIONAL_SUFFIX, quantile) %>%
   summarise(
     n = n()
@@ -145,9 +147,97 @@ entities_modeled %>%
 
 Okay, it appears that the team is looking for indicators of engagement. If someone is completely unengaged, they are not being identified as someone who fits into one of the segments. I see both pros and cons to this approach.
 
-# TO DO
+# Inter-rater agreement
 
-- Correlation matrix showing agreement between raters
-- Scoring based on % of time they agree with the majority vote?
-- Weighted overall lists based on scoring
-- Response variable as a 4-element vector? One per student supporter, connector, notable, career? Or just 0-4 ranking of estimated sum? (This assumes each type of alum is equally interesting)
+Can define rater agreement either as the RMSE between their own rating and the group average, or the dot product between their ratings.
+
+Start with MSE. How often do raters agree with the group consensus? Compute the consensus for each category, then as usual find:
+
+$$ RMSE = \sqrt{ \frac{\sum_{i=1}^{N} \left( x_i - \bar{x} \right)^2}{N} } $$
+
+
+```{r, rows.print = 20}
+# Count of distinct raters
+n_raters <- calibration_raw$name %>% levels() %>% length()
+
+f_rmse <- function(x, xbar) {
+  sqrt({x - xbar}^2) %>%
+    sum() %>%
+    return()
+}
+
+calibration_comparison <- calibration_raw %>%
+  filter(
+    ID_NUMBER %in% calibration$ID_NUMBER
+  ) %>%
+  select(
+    ID_NUMBER, RANDOM_ID, REPORT_NAME, INSTITUTIONAL_SUFFIX
+    , quantile, name, Student, Connector, Notable, Interesting
+  ) %>%
+  group_by(ID_NUMBER) %>%
+  mutate(
+    avg_Student = sum(Student) / n_raters
+    , avg_Connector = sum(Connector) / n_raters
+    , avg_Notable = sum(Notable) / n_raters
+    , avg_Interesting = sum(Interesting) / n_raters
+  ) %>%
+  # Compute MSE
+  mutate(
+    SE_Student = (Student - avg_Student)^2
+    , SE_Connector = (Connector - avg_Connector)^2
+    , SE_Notable = (Notable - avg_Notable)^2
+    , SE_Interesting = (Interesting - avg_Interesting)^2
+  ) %>%
+  # Group by rater
+  group_by(name) %>%
+  summarise(
+    Student = sqrt(sum(SE_Student) / n_raters)
+    , Connector = sqrt(sum(SE_Connector) / n_raters)
+    , Notable = sqrt(sum(SE_Notable) / n_raters)
+    , Interesting = sqrt(sum(SE_Interesting) / n_raters)
+    , .groups = 'drop'
+  ) %>% mutate(
+    summed = Student + Connector + Notable + Interesting
+  ) %>%
+  arrange(
+    desc(summed)
+  )
+
+calibration_comparison %>% print()
+```
+
+```{r}
+calibration_comparison %>%
+  pivot_longer(
+    cols = Student:Interesting
+    , names_to = 'category'
+  ) %>%
+  ggplot(aes(x = category, y = value, color = name)) +
+  geom_point() +
+  geom_line(aes(group = name))
+```
+
+```{r}
+calibration_comparison %>%
+  pivot_longer(
+    cols = Student:Interesting
+    , names_to = 'Category'
+  ) %>%
+  ggplot(aes(x = Category, y = value)) +
+  geom_boxplot(alpha = .5)
+```
+
+Kind of hard to interpret, but there is only really significant agreement for Notable. The others look a bit all over the place. Note that the medians are below .5 though, so it's not totally random.
+
+As a first pass I could use 1 - RMSE as a weight for each person's ratings.
+
+# Inter-rater correlations
+
+First create a matrix encoding ratings for each combination of alum/staff.
+
+# To Do
+
+- [ ] Correlation matrix showing agreement between raters
+- [ ] Scoring based on % of time they agree with the majority vote?
+- [ ] Weighted overall lists based on scoring
+- [ ] Response variable as a 4-element vector? One per student supporter, connector, notable, career? Or just 0-4 ranking of estimated sum? (This assumes each type of alum is equally interesting)
