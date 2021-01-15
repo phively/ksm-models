@@ -90,6 +90,64 @@ lists %>% summary(maxsum = 1E3)
 
 Finally, combine individual results back into the master data frame.
 
-
-
 # Calibration names
+
+A few people appeared on every list:
+
+```{r}
+calibration <- entities_modeled %>%
+  left_join(
+    lists
+    , by = c('RANDOM_ID' = 'RANDOM_ID')
+  ) %>%
+  group_by(ID_NUMBER, RANDOM_ID, REPORT_NAME, INSTITUTIONAL_SUFFIX, quantile) %>%
+  summarise(
+    n = n()
+    , student_supporter = sum(Student)
+    , connector = sum(Connector)
+    , notable = sum(Notable)
+    , career = sum(Interesting)
+    , .groups = 'drop'
+  ) %>%
+  filter(n > 1) %>%
+  mutate(
+    total = student_supporter + connector + notable + career
+    , tag = case_when(
+        quantile < .3 ~ '**'
+        , quantile %>% between(.3, .7) ~ '+'
+        , quantile > .7 ~ '--'
+      )
+  )
+```
+
+```{r, rows.print = 100}
+calibration %>%
+  select(-ID_NUMBER, -REPORT_NAME, -INSTITUTIONAL_SUFFIX, -n) %>%
+  select(RANDOM_ID, quantile, tag, everything()) %>%
+  arrange(desc(total))
+```
+
+Now that's interesting. People who are very interesting based on my initial (suspect) modeling process are consistently identified as such, while people in the middle or near the bottom are not easily identified.
+
+Look at some of the data more in depth.
+
+```{r}
+entities_modeled %>%
+  filter(RANDOM_ID %in% calibration$RANDOM_ID) %>%
+  left_join(
+    calibration %>% select(-ID_NUMBER, -REPORT_NAME, -INSTITUTIONAL_SUFFIX, -quantile, -n)
+    , by = c('RANDOM_ID' = 'RANDOM_ID')
+  ) %>%
+  select(RANDOM_ID, quantile, student_supporter, connector, notable, career, total, tag, everything()) %>%
+  arrange(desc(total)) %>%
+  View()
+```
+
+Okay, it appears that the team is looking for indicators of engagement. If someone is completely unengaged, they are not being identified as someone who fits into one of the segments. I see both pros and cons to this approach.
+
+# TO DO
+
+- Correlation matrix showing agreement between raters
+- Scoring based on % of time they agree with the majority vote?
+- Weighted overall lists based on scoring
+- Response variable as a 4-element vector? One per student supporter, connector, notable, career? Or just 0-4 ranking of estimated sum? (This assumes each type of alum is equally interesting)
