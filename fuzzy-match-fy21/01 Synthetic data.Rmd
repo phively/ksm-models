@@ -1,0 +1,22 @@
+---
+title: "01 Synthetic data"
+output:
+  html_notebook:
+    code_folding: show
+    toc: true
+    toc_float: true
+---
+
+# Goals
+
+Create a synthetic dataset to test fuzzy matching approaches. Ideally, I'd like to use some sort of generative approach: drawing from distributions of common individual names, U.S. cities weighted by population, top employers, common job titles, etc.
+
+# Setup
+
+```{r setup}
+library(tidyverse)
+
+# Hide the dplyr .groups message
+options(dplyr.summarise.inform = FALSE)
+```
+
