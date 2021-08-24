@@ -15,8 +15,111 @@ Create a synthetic dataset to test fuzzy matching approaches. Ideally, I'd like 
 
 ```{r setup}
 library(tidyverse)
+library(readxl)
 
 # Hide the dplyr .groups message
 options(dplyr.summarise.inform = FALSE)
+```
+
+# Data
+
+  * Name frequency distribution data from [census.gov](https://www.census.gov/topics/population/genealogy/data/2010_surnames.html)
+  * Top cities from [census.gov](https://www.census.gov/programs-surveys/popest/data/data-sets.html)
+  * Street names adapted from [fivethirtyeight.com](https://fivethirtyeight.com/features/whats-the-most-common-street-name-in-america/)
+  * Top employers from [wikipedia.org](https://en.wikipedia.org/wiki/List_of_largest_United_States%E2%80%93based_employers_globally)
+  * Job titles based on [linkedin.com](https://www.linkedin.com/business/talent/blog/talent-strategy/fastest-growing-jobs-in-the-us) 2017 job growth statistics
+
+```{r}
+# Read in Excel data
+name_first <- read_xlsx(path = 'data/Names_First_Top1000.xlsx')
+
+name_last <- read_xlsx(path = 'data/Names_2010Census_Top1000.xlsx', skip = 1) %>%
+  filter(
+    !is.na(RANK)
+  ) %>% mutate(
+    SURNAME = str_to_title(SURNAME)
+  )
+
+city <- read_xlsx(path = 'data/cities SUB-IP-EST2019-ANNRNK.xlsx', skip = 3) %>%
+  filter(
+    !is.na(Census)
+  ) %>% rename(
+    index = `...1`
+    , City = `...2`
+  ) %>% mutate(
+    City = str_replace(City, ' (city|town|village)', '')
+  )
+
+street <- read_xlsx(path = 'data/streetnames_fivethirtyeight.xlsx', skip = 4) %>%
+  mutate(
+    STREET_NAME = str_replace(STREET_NAME, ',.*', '')
+  )
+
+employer <- read_xlsx(path = 'data/top_employers_wikipedia.xlsx')
+
+job_title <- read_xlsx(path = 'data/job_growth_linkedin_2017.xlsx')
+```
+
+# Data generation
+
+```{r}
+# Helper function to generate probabilities
+get_p <- function(dat, name_col, n_col, top_n = NULL) {
+  # ensym() allows me to use unquoted column names, as in dplyr
+  name_col <- ensym(name_col)
+  n_col <- ensym(n_col)
+  # If top_n not provided, use entire dataframe
+  top_n <- ifelse(is.null(top_n), nrow(dat), top_n)
+  dat <- dat %>%
+    head(top_n)
+  # Create and return data frame
+  data.frame(
+    name = dat %>% select(!!name_col) %>% unlist()
+    , n = dat %>% select(!!n_col) %>% unlist()
+  ) %>% mutate(
+    p = n / sum(dat %>% select(!!n_col) %>% unlist())
+  ) %>% return()
+}
+```
+
+```{r}
+# Create list of probability tables
+# Maximum number of rows to use
+max_n <- 100
+
+# Frequency data list
+fr_dat <- list(
+  name_f = name_first %>% get_p(Name, `TOTAL 1880-2018`, max_n)
+  , name_l = name_last %>% get_p(SURNAME, `FREQUENCY (COUNT)`, max_n)
+  , addr_street = street %>% get_p(STREET_NAME, TOTAL_OCCURANCES, max_n)
+  , addr_city = city %>% get_p(City, `2019`, max_n)
+  , employer = employer %>% get_p(Employer, `Global number of Employees`, max_n)
+  , job = job_title %>% get_p(Title, Rate, max_n)
+)
+```
+
+```{r}
+# Helper function to generate data
+data_gen <- function(
+  n # number of records to generate
+  , pf = .5 # p female
+  , addr_min = 0 # address count min
+  , addr_max = 2 # address count max
+  , addr_p_new = .1 # p new address in same city
+  , street_min = 1 # street number min
+  , street_max = 99 # street number max
+  , job_min = 0 # job count min
+  , job_max = 3 # job count max
+  , job_p = .3 # p new job at same employer
+  , seed = NULL
+) {
+  # Reproducible seed
+  set.seed(seed)
+  # Generate a dataset using the above parameters
+}
+```
+
+```{r}
+# Helper function to scramble data
 ```
 
