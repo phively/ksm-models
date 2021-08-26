@@ -16,6 +16,7 @@ Create a synthetic dataset to test fuzzy matching approaches. Ideally, I'd like 
 ```{r setup}
 library(tidyverse)
 library(readxl)
+library(foreach)
 
 # Hide the dplyr .groups message
 options(dplyr.summarise.inform = FALSE)
@@ -41,6 +42,7 @@ name_last <- read_xlsx(path = 'data/Names_2010Census_Top1000.xlsx', skip = 1) %>
   )
 
 city <- read_xlsx(path = 'data/cities SUB-IP-EST2019-ANNRNK.xlsx', skip = 3) %>%
+  suppressMessages() %>%
   filter(
     !is.na(Census)
   ) %>% rename(
@@ -60,7 +62,7 @@ employer <- read_xlsx(path = 'data/top_employers_wikipedia.xlsx')
 job_title <- read_xlsx(path = 'data/job_growth_linkedin_2017.xlsx')
 ```
 
-# Data generation
+# Data generation process
 
 ```{r}
 # Helper function to generate probabilities
@@ -75,34 +77,36 @@ get_p <- function(dat, name_col, n_col, top_n = NULL) {
   # Create and return data frame
   data.frame(
     name = dat %>% select(!!name_col) %>% unlist()
-    , n = dat %>% select(!!n_col) %>% unlist()
+    , count = dat %>% select(!!n_col) %>% unlist()
   ) %>% mutate(
-    p = n / sum(dat %>% select(!!n_col) %>% unlist())
+    p = count / sum(dat %>% select(!!n_col) %>% unlist())
   ) %>% return()
 }
 ```
 
 ```{r}
-# Create list of probability tables
-# Maximum number of rows to use
-max_n <- 100
-
-# Frequency data list
-fr_dat <- list(
-  name_f = name_first %>% get_p(Name, `TOTAL 1880-2018`, max_n)
-  , name_l = name_last %>% get_p(SURNAME, `FREQUENCY (COUNT)`, max_n)
-  , addr_street = street %>% get_p(STREET_NAME, TOTAL_OCCURANCES, max_n)
-  , addr_city = city %>% get_p(City, `2019`, max_n)
-  , employer = employer %>% get_p(Employer, `Global number of Employees`, max_n)
-  , job = job_title %>% get_p(Title, Rate, max_n)
-)
+# Helper function to create list of probability tables
+ptable_gen <- function(
+  max_n = 100 # Maximum number of rows to use
+) {
+  # Frequency data list
+  list(
+    name_f = name_first %>% get_p(Name, `TOTAL 1880-2018`, max_n)
+    , name_l = name_last %>% get_p(SURNAME, `FREQUENCY (COUNT)`, max_n)
+    , addr_street = street %>% get_p(STREET_NAME, TOTAL_OCCURANCES, max_n)
+    , addr_city = city %>% get_p(City, `2019`, max_n)
+    , employer = employer %>% get_p(Employer, `Global number of Employees`, max_n)
+    , job = job_title %>% get_p(Title, Rate, max_n)
+  ) %>% return()
+}
 ```
 
 ```{r}
 # Helper function to generate data
+# Count of addresses and jobs are currently pulled from the uniform distribution; this could be changed
 data_gen <- function(
-  n # number of records to generate
-  , pf = .5 # p female
+  dataset
+  , n # number of records to generate
   , addr_min = 0 # address count min
   , addr_max = 2 # address count max
   , addr_p_new = .1 # p new address in same city
@@ -115,11 +119,91 @@ data_gen <- function(
 ) {
   # Reproducible seed
   set.seed(seed)
-  # Generate a dataset using the above parameters
+  # Sampler function
+  p_sampler <- function(ptable_part) {
+    ptable_part %>% with(
+      sample(name, size = n, prob = p, replace = TRUE)
+    )
+  }
+  # Generate a data frame using the above parameters
+  # First and last name
+  names <- data.frame(
+    first_name = dataset$name_f %>% p_sampler()
+    , last_name = dataset$name_l %>% p_sampler()
+  )
+  # Addresses
+  # Random vector containing number of addresses to generate
+  n_addr <- sample(addr_min:addr_max, size = n, replace = TRUE)
+  # Preallocating the address data frame; ncol * 2 because we need street1-x and citystate1-x
+  addresses <- matrix(data = NA, nrow = n, ncol = addr_max * 2) %>%
+    data.frame()
+  # Name address columns
+  address_colnames <- foreach(i = 1:addr_max, .combine = c) %do% {
+    c(
+      paste0('street_', i)
+      , paste0('city_state_', i)
+    )
+  }
+  names(addresses) <- address_colnames
+return(addresses) ### FOR ERROR CHECKING ###
+  # Preallocate address parts
+  streetnums <- sample(street_min:street_max, size = sum(n_addr), replace = TRUE)
+  streets <- dataset$addr_street %>% p_sampler()
+  cities <- dataset$addr_city %>% p_sampler()
+  for (i in 1:n) {
+    # Check current n_addr; if 0 skip this row
+    if(n_addr[i] == 0) {next}
+    # Pull appropriate streetnums, streets, and cities and concatenate into one row
+    addr_concat <- NULL
+    # Insert row
+    addresses[i, ] <- addr_concat
+  }
+  # Combine and return results
+  cbind(names, addresses) %>%
+    return()
 }
 ```
 
 ```{r}
+#### SCRATCHPAD
+data_gen(p, n = 5)
+
+for(i in 1:10) {
+  if(i %% 2 == 0) {next}
+  print(i)
+}
+```
+
+
+```{r}
 # Helper function to scramble data
+
+```
+
+# Data generation
+
+```{r}
+p <- ptable_gen(100)
+```
+
+```{r}
+data_10k <- data_gen(
+  p
+  , n = 10000
+  , seed = 112358
+)
+```
+
+```{r}
+# Check data
+data_10k %>%
+  group_by(first_name) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+
+```{r}
+p %>% with(sample_n(name_f %>% select(name), size = 10, weight = name_f$n, replace = TRUE))
 ```
 
