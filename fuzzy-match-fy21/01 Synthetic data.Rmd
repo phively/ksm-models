@@ -41,9 +41,9 @@ name_last <- read_xlsx(path = 'data/Names_2010Census_Top1000.xlsx', skip = 1) %>
     SURNAME = str_to_title(SURNAME)
   )
 
-city <- read_xlsx(path = 'data/cities SUB-IP-EST2019-ANNRNK.xlsx', skip = 3) %>%
-  suppressMessages() %>%
-  filter(
+city <- suppressMessages(
+  read_xlsx(path = 'data/cities SUB-IP-EST2019-ANNRNK.xlsx', skip = 3)
+  ) %>% filter(
     !is.na(Census)
   ) %>% rename(
     index = `...1`
@@ -78,6 +78,7 @@ get_p <- function(dat, name_col, n_col, top_n = NULL) {
   data.frame(
     name = dat %>% select(!!name_col) %>% unlist()
     , count = dat %>% select(!!n_col) %>% unlist()
+    , stringsAsFactors = FALSE
   ) %>% mutate(
     p = count / sum(dat %>% select(!!n_col) %>% unlist())
   ) %>% return()
@@ -102,6 +103,10 @@ ptable_gen <- function(
 ```
 
 ```{r}
+print_debug <- function(message) {
+  cat(paste0(as.character(message), collapse = ''), sep = '\n')
+}
+
 # Helper function to generate data
 # Count of addresses and jobs are currently pulled from the uniform distribution; this could be changed
 data_gen <- function(
@@ -109,20 +114,21 @@ data_gen <- function(
   , n # number of records to generate
   , addr_min = 0 # address count min
   , addr_max = 2 # address count max
-  , addr_p_new = .1 # p new address in same city
+  , addr_p_new = .3 # p new address in same city for a given record
   , street_min = 1 # street number min
   , street_max = 99 # street number max
   , job_min = 0 # job count min
   , job_max = 3 # job count max
-  , job_p = .3 # p new job at same employer
+  , job_p = .3 # p new job at same employer for a given record
   , seed = NULL
+  , debug_addr = FALSE
 ) {
   # Reproducible seed
   set.seed(seed)
   # Sampler function
-  p_sampler <- function(ptable_part) {
+  p_sampler <- function(ptable_part, size = n) {
     ptable_part %>% with(
-      sample(name, size = n, prob = p, replace = TRUE)
+      sample(name, size = size, prob = p, replace = TRUE)
     )
   }
   # Generate a data frame using the above parameters
@@ -133,7 +139,12 @@ data_gen <- function(
   )
   # Addresses
   # Random vector containing number of addresses to generate
-  n_addr <- sample(addr_min:addr_max, size = n, replace = TRUE)
+  addr_n <- sample(addr_min:addr_max, size = n, replace = TRUE)
+  ###DEBUG###
+  if(debug_addr) {
+    message('Generating addresses')
+    c(sum(addr_n), ' generated') %>% print_debug()
+  }
   # Preallocating the address data frame; ncol * 2 because we need street1-x and citystate1-x
   addresses <- matrix(data = NA, nrow = n, ncol = addr_max * 2) %>%
     data.frame()
@@ -145,39 +156,101 @@ data_gen <- function(
     )
   }
   names(addresses) <- address_colnames
-return(addresses) ### FOR ERROR CHECKING ###
   # Preallocate address parts
-  streetnums <- sample(street_min:street_max, size = sum(n_addr), replace = TRUE)
-  streets <- dataset$addr_street %>% p_sampler()
-  cities <- dataset$addr_city %>% p_sampler()
-  for (i in 1:n) {
-    # Check current n_addr; if 0 skip this row
-    if(n_addr[i] == 0) {next}
-    # Pull appropriate streetnums, streets, and cities and concatenate into one row
-    addr_concat <- NULL
-    # Insert row
-    addresses[i, ] <- addr_concat
+  streetnums <- sample(street_min:street_max, size = sum(addr_n), replace = TRUE)
+  streets <- dataset$addr_street %>% p_sampler(size = sum(addr_n))
+  cities <- dataset$addr_city %>% p_sampler(size = sum(addr_n))
+  ###DEBUG###
+  if(debug_addr) {
+    print(data.frame(streetnums, streets, cities))
   }
-  # Combine and return results
-  cbind(names, addresses) %>%
-    return()
+  # Start counter at 1
+  current_line <- 1
+  # Loop through records to be generated
+  for(i in 1:n) {
+    ###DEBUG###
+    if(debug_addr) {
+      message('====Next record====')
+      c('i = ', i) %>% print_debug()
+      c('addr_n = ', addr_n[i]) %>% print_debug()
+    }
+    # Check current addr_n; if 0 skip this row
+    if(addr_n[i] == 0) {next}
+    ###DEBUG###
+    if(debug_addr) {
+      c('Current line = ', current_line) %>% print_debug()
+    }
+    # Intialize addr_conc for the current record
+    addr_conc <- NULL
+    # Pull appropriate streetnums, streets, and cities and concatenate into one row
+    # Iterate through the appropriate number of random address parts per person, based on addr_n
+    for(j in 1:addr_n[i]) {
+      ###DEBUG###
+      if(debug_addr) {
+        message('--Next address--')
+      }
+      # Same city with probability addr_p_new
+      same_city <- runif(1) <= addr_p_new
+      # c(123 streetname, city_state)
+      addr <- c(
+        paste(
+          # 123 streetname
+          streetnums[current_line]
+          , streets[current_line]
+        )
+        # city_state
+        , ifelse(
+            # When same_city passed and this is not the person's first generated address
+            same_city == TRUE & j > 1
+            , cities[current_line - 1]
+            # Otherwise pick a new city (could be same one randomly)
+            , cities[current_line]
+          )
+      )
+      ###DEBUG###
+      if(debug_addr) {
+        c('streetnum = ', streetnums[current_line]) %>% print_debug()
+        c('streets = ', streets[current_line]) %>% print_debug()
+        c('cities = ', cities[current_line]) %>% print_debug()
+        if(j > 1) {
+          c('same city = ', same_city) %>% print_debug()
+        }
+        if(same_city == TRUE & j > 1) {
+          c('forced city = ', cities[current_line - 1]) %>% print_debug()
+        }
+      }
+      # Add current address and increment counter
+      addr_conc <- c(addr_conc, addr)
+      current_line <- current_line + 1
+    }
+    # Insert row
+    addresses[i, 1:length(addr_conc)] <- addr_conc
+  }
+    # Combine and return results
+    cbind(names, addresses) %>%
+      return()
 }
 ```
-
-```{r}
-#### SCRATCHPAD
-data_gen(p, n = 5)
-
-for(i in 1:10) {
-  if(i %% 2 == 0) {next}
-  print(i)
-}
-```
-
 
 ```{r}
 # Helper function to scramble data
 
+```
+
+# Error checking
+
+```{r}
+p <- ptable_gen(100)
+```
+
+```{r, rows.print = 20}
+# Check address generation
+data_gen(p, n = 5, addr_max = 3, seed = 11, debug_addr = TRUE)
+```
+
+```{r, rows.print = 20}
+# Check address generation
+data_gen(p, n = 5, addr_min = 1, addr_max = 2, addr_p_new = 1, seed = 101, debug_addr = TRUE)
 ```
 
 # Data generation
