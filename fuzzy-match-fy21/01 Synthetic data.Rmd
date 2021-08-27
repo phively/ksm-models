@@ -326,8 +326,32 @@ data_gen <- function(
 ```
 
 ```{r}
-# Helper function to scramble data
+# Helper functions to scramble data
+# Per-string operations
+string_scrambler <- function(
+  string # data to scramble
+  , operation # name of operation to perform
+  , p # per-character probability of performing the operation
+) {
+  ### Suggested operations
+  # Substitution (alpha only?)
+  # Insertion (alpha only?)
+  # Deletion
+  # Transposition
+  # Let's arbitrarily decide the count of affected characters follows some sort of Poisson distribution
+}
 
+# Per-field operations
+field_scrambler <- function(
+  field # field to scramble
+  , operation # name of operation to perform
+  , p # per-field probability of performing the operation
+) {
+  ### Suggested operations
+  # Deletion
+  # Replacement
+  # Swapping (with adjacent field)
+}
 ```
 
 # Error checking
