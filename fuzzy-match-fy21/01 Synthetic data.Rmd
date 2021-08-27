@@ -122,6 +122,7 @@ data_gen <- function(
   , job_p = .3 # p new job at same employer for a given record
   , seed = NULL
   , debug_addr = FALSE
+  , debug_jobs = FALSE
 ) {
   # Reproducible seed
   set.seed(seed)
@@ -132,12 +133,12 @@ data_gen <- function(
     )
   }
   # Generate a data frame using the above parameters
-  # First and last name
+   ######## First and last name ########
   names <- data.frame(
     first_name = dataset$name_f %>% p_sampler()
     , last_name = dataset$name_l %>% p_sampler()
   )
-  # Addresses
+  ######## Addresses ########
   # Random vector containing number of addresses to generate
   addr_n <- sample(addr_min:addr_max, size = n, replace = TRUE)
   ###DEBUG###
@@ -223,12 +224,104 @@ data_gen <- function(
       addr_conc <- c(addr_conc, addr)
       current_line <- current_line + 1
     }
+    ###DEBUG###
+    if(debug_addr) {
+      message('Inserting:')
+      print(addr_conc)
+    }
     # Insert row
     addresses[i, 1:length(addr_conc)] <- addr_conc
   }
-    # Combine and return results
-    cbind(names, addresses) %>%
-      return()
+  ######## Employment ########
+  # Random vector containing number of jobs to generate
+  jobs_n <- sample(job_min:job_max, size = n, replace = TRUE)
+  ###DEBUG###
+  if(debug_jobs) {
+    message('Generating jobs')
+    c(sum(jobs_n), ' generated') %>% print_debug()
+  }
+  # Preallocating the jobs data frame; ncol * 2 because we need job1-x and employer1-x
+  jobs <- matrix(data = NA, nrow = n, ncol = job_max * 2) %>%
+    data.frame()
+  # Name jobs columns
+  jobs_colnames <- foreach(i = 1:job_max, .combine = c) %do% {
+    c(
+      paste0('title_', i)
+      , paste0('company_', i)
+    )
+  }
+  names(jobs) <- jobs_colnames
+  # Preallocate job parts
+  titles <- dataset$job %>% p_sampler(size = sum(jobs_n))
+  employers <- dataset$employer %>% p_sampler(size = sum(jobs_n))
+  ###DEBUG###
+  if(debug_jobs) {
+    print(data.frame(titles, employers))
+  }
+  # Start counter at 1
+  current_line <- 1
+  # Loop through records to be generated
+  for(i in 1:n) {
+    ###DEBUG###
+    if(debug_jobs) {
+      message('====Next record====')
+      c('i = ', i) %>% print_debug()
+      c('jobs_n = ', jobs_n[i]) %>% print_debug()
+    }
+    # Check current jobs_n; if 0 skip this row
+    if(jobs_n[i] == 0) {next}
+    ###DEBUG###
+    if(debug_jobs) {
+      c('Current line = ', current_line) %>% print_debug()
+    }
+    # Intialize jobs_conc for the current record
+    jobs_conc <- NULL
+    # Pull appropriate titles and companies and concatenate into one row
+    # Iterate through the appropriate number of random job parts per person, based on jobs_n
+    for(j in 1:jobs_n[i]) {
+      ###DEBUG###
+      if(debug_jobs) {
+        message('--Next job--')
+      }
+      # Same employer with probability job_p
+      same_employer <- runif(1) <= job_p
+      # c(title, employer)
+      job <- c(
+        titles[current_line]
+        , ifelse(
+            # When same_employer passed and this is not the person's first generated employer
+            same_employer == TRUE & j > 1
+            , employers[current_line - 1]
+            # Otherwise pick a new employer (could be same one randomly)
+            , employers[current_line]
+          )
+      )
+      ###DEBUG###
+      if(debug_jobs) {
+        c('title = ', titles[current_line]) %>% print_debug()
+        c('employer = ', employers[current_line]) %>% print_debug()
+        if(j > 1) {
+          c('same employer = ', same_employer) %>% print_debug()
+        }
+        if(same_employer == TRUE & j > 1) {
+          c('forced employer = ', employers[current_line - 1]) %>% print_debug()
+        }
+      }
+      # Add current address and increment counter
+      jobs_conc <- c(jobs_conc, job)
+      current_line <- current_line + 1
+    }
+    ###DEBUG###
+    if(debug_jobs) {
+      message('Inserting:')
+      print(jobs_conc)
+    }
+    # Insert row
+    jobs[i, 1:length(jobs_conc)] <- jobs_conc
+  }
+  # Combine and return results
+  cbind(names, addresses, jobs) %>%
+    return()
 }
 ```
 
@@ -253,6 +346,11 @@ data_gen(p, n = 5, addr_max = 3, seed = 11, debug_addr = TRUE)
 data_gen(p, n = 5, addr_min = 1, addr_max = 2, addr_p_new = 1, seed = 101, debug_addr = TRUE)
 ```
 
+```{r, rows.print = 20}
+# Check job generation
+data_gen(p, n = 5, seed = 222, debug_jobs = TRUE)
+```
+
 # Data generation
 
 ```{r}
@@ -274,9 +372,3 @@ data_10k %>%
   summarise(n = n()) %>%
   arrange(desc(n))
 ```
-
-
-```{r}
-p %>% with(sample_n(name_f %>% select(name), size = 10, weight = name_f$n, replace = TRUE))
-```
-
