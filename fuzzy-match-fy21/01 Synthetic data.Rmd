@@ -108,7 +108,8 @@ print_debug <- function(message) {
 }
 
 # Helper function to generate data
-# Count of addresses and jobs are currently pulled from the uniform distribution; this could be changed
+# Count of addresses and jobs are currently pulled from the uniform distribution; this could be
+#   changed to something like a Poisson distribution
 data_gen <- function(
   dataset
   , n # number of records to generate
@@ -325,36 +326,7 @@ data_gen <- function(
 }
 ```
 
-```{r}
-# Helper functions to scramble data
-# Per-string operations
-string_scrambler <- function(
-  string # data to scramble
-  , operation # name of operation to perform
-  , p # per-character probability of performing the operation
-) {
-  ### Suggested operations
-  # Substitution (alpha only?)
-  # Insertion (alpha only?)
-  # Deletion
-  # Transposition
-  # Let's arbitrarily decide the count of affected characters follows some sort of Poisson distribution
-}
-
-# Per-field operations
-field_scrambler <- function(
-  field # field to scramble
-  , operation # name of operation to perform
-  , p # per-field probability of performing the operation
-) {
-  ### Suggested operations
-  # Deletion
-  # Replacement
-  # Swapping (with adjacent field)
-}
-```
-
-# Error checking
+## Error checking
 
 ```{r}
 p <- ptable_gen(100)
@@ -375,13 +347,158 @@ data_gen(p, n = 5, addr_min = 1, addr_max = 2, addr_p_new = 1, seed = 101, debug
 data_gen(p, n = 5, seed = 222, debug_jobs = TRUE)
 ```
 
+# Data scrambling process
+
+```{r}
+# Helper function to scramble data
+# Per-string operations
+string_scrambler <- function(
+  string # data to scramble
+  , operations = c('substitution', 'insertion', 'deletion', 'transposition') # name of
+    # permissible operations
+  , p = .01 # per-character probability of performing the operation
+  , valid_repl = c(letters, LETTERS, ' ', '.', ',', 0:9)  # valid replacement characters for
+    # relevant operations
+  , seed = NULL # reproducible seed
+  , debug = FALSE
+  , verbose_debug = FALSE
+) {
+  # Constants
+  string_len <- str_length(string)
+  # Reproducible seed
+  set.seed(seed)
+  # Determine whether each character in string will have an operation performed
+  scramble <- sample(c(TRUE, FALSE), size = string_len, prob = c(p, 1 - p), replace = TRUE)
+  # Generate operations to perform
+  ops <- rep(NA, times = sum(scramble))
+  ops[scramble] <- sample(operations, size = sum(scramble), replace = TRUE)
+  # Function to return a random character
+  f_rand_char <- function(valid_repl = valid_repl, size = 1) {
+    sample(valid_repl, size = size, replace = TRUE) %>%
+      return()
+  }
+  # Substitution
+  f_substitution <- function(input_char, valid_repl = valid_repl, size = 1) {
+    f_rand_char(valid_repl = valid_repl, size = size) %>%
+      return()
+  }
+  # Insertion (before current character)
+  f_insertion <- function(input_char, valid_repl = valid_repl, size = 1) {
+    f_rand_char(valid_repl = valid_repl, size = size) %>%
+    paste0(input_char) %>%
+        return()
+  }
+  # Deletion
+  f_deletion <- function(input_char) {
+    return('')
+  }
+  # Transposition (with next character, if present)
+  f_transposition <- function(input_char, next_char) {
+    next_char %>%
+    paste0(input_char) %>%
+      return()
+  }
+  ###DEBUG###
+  if(debug | verbose_debug) {
+    message('====String scrambling initialization====')
+    c('Input string: ', string) %>% print_debug()
+    c('Length: ', string_len) %>% print_debug()
+    message('====Scrambling operations====')
+    c('Scrambling ', sum(scramble), ' characters') %>% print_debug()
+    c('Per-character scramble: ', which(scramble) %>% paste(collapse = ' ')) %>% print_debug()
+    c('Randomized operations: ', ops %>% paste(collapse = ' ')) %>% print_debug()
+  }
+  # If nothing to scramble, return original string
+  if(sum(scramble) == 0) {
+    return(string)
+  }
+  # Implement different operations across the string
+  ###DEBUG###
+  if(verbose_debug) {
+      message('====Detailed scrambling====')
+  }
+  # String to hold output
+  scrambled <- ''
+  # Loop through the string
+  scrambler <- for(i in 1:string_len) {
+    input_char <- str_sub(string, i, i)
+    ###DEBUG###
+    if(verbose_debug) {
+      message('--Next character--')
+      c('Performing ', ops[i], ' at position: ', i, ' on character: ', input_char) %>%
+        print_debug()
+    }
+    # If not doing anything to this character, skip
+    if(scramble[i] == FALSE) {
+      next_char <- input_char
+    }
+    # Otherwise, perform one of the implemented operations
+    next_char <- case_when(
+      ops[i] == 'substitution' ~ f_substitution(input_char, valid_repl)
+      , ops[i] == 'insertion' ~ f_insertion(input_char, valid_repl)
+      , ops[i] == 'deletion' ~ f_deletion(input_char)
+      , ops[i] == 'transposition' ~
+          f_transposition(input_char, next_char = str_sub(string, i + 1, i + 1))
+      # Fallback
+      , TRUE ~ input_char
+    )
+    scrambled <- paste0(scrambled, next_char)
+    ###DEBUG###
+    if(verbose_debug) {
+      c('Result: ', next_char) %>% print_debug()
+      c('Current string: ', scrambled) %>% print_debug
+    }
+  }
+  return(scrambled)
+}
+```
+
+```{r}
+# Helper function to scramble fields
+# Per-field operations
+field_scrambler <- function(
+  field # field to scramble
+  , operation # name of permissible operations
+  , p # per-field probability of performing the operation
+  , seed = NULL # reproducible seed
+) {
+  # Reproducible seed
+  set.seed(seed)
+  ### Suggested operations
+  # Deletion
+  # Replacement
+  # Swapping (with adjacent field)
+}
+```
+
+## Error checking
+
+```{r, rows.print = 20}
+# Check string scrambler
+string_scrambler(
+  string = 'Hello World!'
+  , p = .5
+  , seed = 777
+  , verbose_debug = TRUE
+)
+```
+
+```{r, rows.print = 20}
+# Check string scrambler
+string_scrambler(
+  string = 'The quick brown FOX jumped over the Lazy Dog. 10 times!'
+  , p = .2
+  , seed = 123
+  , verbose_debug = TRUE
+)
+```
+
+
 # Data generation
 
 ```{r}
 p <- ptable_gen(100)
-```
 
-```{r}
 data_10k <- data_gen(
   p
   , n = 10000
@@ -391,8 +508,35 @@ data_10k <- data_gen(
 
 ```{r}
 # Check data
-data_10k %>%
+check_fname <- data_10k %>%
   group_by(first_name) %>%
   summarise(n = n()) %>%
+  left_join(
+    p$name_f %>% select(name, p) %>% rename(first_name = name)
+    , by = 'first_name'
+  ) %>%
+  mutate(
+    pct = n / sum(n)
+    , delta = round(pct - p, 4)
+    , delta_pct = round(delta/p, 4)
+  ) %>%
   arrange(desc(n))
+
+# Print results for top names
+check_fname %>%
+  mutate(
+    across(
+      .cols = p:delta_pct
+      , .fns = scales::percent
+    )
+  ) %>%
+  head(10) %>%
+  print()
+
+# Plot histogram for all names
+check_fname %>%
+  ggplot(aes(x = delta_pct)) +
+  geom_histogram(binwidth = .025, alpha = .5)
 ```
+
+The proportions all look fine.
