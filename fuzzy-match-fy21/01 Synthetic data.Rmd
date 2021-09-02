@@ -392,10 +392,10 @@ string_scrambler <- function(
   f_deletion <- function(input_char) {
     return('')
   }
-  # Transposition (with next character, if present)
-  f_transposition <- function(input_char, next_char) {
-    next_char %>%
-    paste0(input_char) %>%
+  # Transposition (with previous character, if present)
+  f_transposition <- function(input_char, prev_char) {
+    input_char %>%
+    paste0(prev_char) %>%
       return()
   }
   ###DEBUG###
@@ -431,18 +431,42 @@ string_scrambler <- function(
     # If not doing anything to this character, skip
     if(scramble[i] == FALSE) {
       next_char <- input_char
-    }
+      scrambled <- paste0(scrambled, next_char)
+    } else if(ops[i] == 'transposition') {
     # Otherwise, perform one of the implemented operations
-    next_char <- case_when(
-      ops[i] == 'substitution' ~ f_substitution(input_char, valid_repl)
-      , ops[i] == 'insertion' ~ f_insertion(input_char, valid_repl)
-      , ops[i] == 'deletion' ~ f_deletion(input_char)
-      , ops[i] == 'transposition' ~
-          f_transposition(input_char, next_char = str_sub(string, i + 1, i + 1))
-      # Fallback
-      , TRUE ~ input_char
-    )
-    scrambled <- paste0(scrambled, next_char)
+      # Transposition gets special treatment
+      scrambled_len <- str_length(scrambled)
+      scrambled_sub <- str_sub(scrambled, 1, scrambled_len - 1)
+      prev_char <- str_sub(scrambled, scrambled_len, scrambled_len)
+      next_char <- f_transposition(input_char, prev_char)
+      ###DEBUG###
+      if(verbose_debug) {
+        c('Transposition stats:') %>% print_debug()
+        c('Scrambled_len: ' , scrambled_len, ' ; Scrambled_sub: ', scrambled_sub) %>%
+          print_debug()
+        c('prev_char: ', prev_char, ' ; next_char: ', next_char)
+      }
+    } else {
+      next_char <- case_when(
+        ops[i] == 'substitution' ~ f_substitution(input_char, valid_repl)
+        , ops[i] == 'insertion' ~ f_insertion(input_char, valid_repl)
+        , ops[i] == 'deletion' ~ f_deletion(input_char)
+        # Fallback
+        , TRUE ~ input_char
+      )
+    }
+    # If transposition was performed, need to be sure to delete the previous character
+    if(is.na(ops[i])) {
+      # Do nothing
+    } else if(ops[i] == 'transposition') {
+      scrambled <- paste0(
+        scrambled_sub
+        , next_char
+      )
+    } else {
+      # Otherwise continue as normal
+      scrambled <- paste0(scrambled, next_char)
+    }
     ###DEBUG###
     if(verbose_debug) {
       c('Result: ', next_char) %>% print_debug()
