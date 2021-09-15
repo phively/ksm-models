@@ -366,7 +366,7 @@ string_scrambler <- function(
   string # data to scramble
   , operations = c('substitution', 'insertion', 'deletion', 'transposition') # name of
     # permissible operations
-  , p = .01 # per-character probability of performing the operation
+  , p = .01 # per-character probability of performing an operation
   , valid_repl = c(letters, LETTERS, ' ', '.', ',', 0:9)  # valid replacement characters for
     # relevant operations
   , seed = NULL # reproducible seed
@@ -492,38 +492,143 @@ string_scrambler <- function(
 # Per-record (row) operations
 record_scrambler <- function(
   dataset # original dataset
-  , row # row number to scramble
   , operations = c('deletion', 'replacement', 'swapping') # name of permissible operations
-  , p = 0.01 # per-field probability of performing an operation
+  , p_ops = c(0.75, 0.2, 0.05) # probability of choosing each of the operations
+  , p = 0.01 # per-record probability of performing an operation
+  , p_field = 0.05 # per-field probability of performing an additional operation conditional on
+    # p (at least one operation will always be performed)
   , seed = NULL # reproducible seed
+  , debug = FALSE
+  , verbose_debug = FALSE
 ) {
   # Reproducible seed
   set.seed(seed)
+  # Final dataset; starts same as original
+  results <- dataset
   ### Define operations
   # Deletion
   f_deletion <- function(input_field) {
-    return('')
+    return(NA)
   }
   # Replacement
-  f_replacement <- function(input_field, fieldname, dataset) {
+  gen_replacement <- function(dataset, seed = seed) {
     # Create potential replacement data based on the parameters used in the initial dataset
     old_call <- attr(dataset, 'data_gen')
-    # Generate only a single row, with no seed
-    old_call$n <- 1
-    old_call$seed <- NULL
-    # Generate new data and return selected field
-    do.call(data_gen, args = old_call) %>%
-      select(fieldname) %>%
+    # Generate only necessary rows, with new seed
+    old_call$seed <- seed
+    # Generate new data
+    do.call(data_gen, args = old_call)
+  }
+  f_replacement <- function(replacement_data, i, j) {
+    replacement_data[i, j] %>%
       return()
   }
-  # Swapping (with previous record, if possible)
-  f_swapping <- function(input_field) {
-    
+  # Swapping (with another field, if possible)
+  f_swapping <- function(dataset = dataset, i, j) {
+    # Select an index to swap positions (can't be current index)
+    swap_idx <- sample({1:ncol(dataset)}[-j], size = 1)
+    old_field <- dataset[i, j]
+    new_field <- dataset[i, swap_idx]
+    list(
+      old_field = old_field
+      , new_field = new_field
+      , swap_idx = swap_idx
+    ) %>% return()
   }
   # Determine which records will have an operation performed
+  scramble <- sample(c(TRUE, FALSE), size = nrow(dataset), prob = c (p, 1 - p), replace = TRUE)
+  ##DEBUG###
+  if(debug | verbose_debug) {
+    message('====Record scrambling initialization====')
+    c('Total records: ', nrow(dataset)) %>% print_debug()
+    c('Scrambling: ', sum(scramble), ' (', {sum(scramble) / nrow(dataset)} %>% scales::percent()
+      , ')') %>% print_debug()
+  }
   # If nothing to scramble, return dataset
-  # If not doing anything to this record, skip
-  # Otherwise, perform one of the implemented operations
+  if(sum(scramble) == 0) {
+    return(results)
+  }
+  # Otherwise, generate data for potential replacement
+  replacement_data <- gen_replacement(dataset = dataset, seed = seed)
+  ###DEBUG###
+  if(debug | verbose_debug) {
+    message('Generating replacement data...')
+    c('Dimensions: ', dim(replacement_data) %>% paste(collapse = ' x ')) %>% print_debug()
+  }
+  if(verbose_debug) {
+    replacement_data %>% print()
+  }
+  # Loop through the rows
+  for (i in 1:nrow(results)) {
+    ###DEBUG###
+    if(debug || verbose_debug) {
+      message('====Next record====')
+      c('Scramble record ', i, '? ', scramble[i]) %>% print_debug()
+    }
+    # If not doing anything to this record, skip
+    if(scramble[i] == FALSE) {
+      next
+    }
+    # Otherwise, attempt scrambling
+    # Determine how many fields to scramble; must scramble at least one
+    n_scramble <- 1 + rbinom(n = 1, size = ncol(results) - 1, prob = p_field)
+    # Determine which fields to scramble
+    scramble_idx <- sample(1:ncol(results), size = n_scramble, replace = FALSE)
+    # Generate operations to perform
+    scramble_ops <- sample(operations, size = ncol(results), prob = p_ops, replace = TRUE)
+    ###DEBUG###
+    if(debug || verbose_debug) {
+      c('Scrambling total fields: ', n_scramble) %>% print_debug()
+      c('Indices: ', paste(scramble_idx, collapse = ' ')) %>% print_debug()
+      c('Names: ', paste(names(results)[scramble_idx], collapse = ' ')) %>% print_debug()
+      c('Operations: ', paste(scramble_ops[scramble_idx], collapse = ' ')) %>% print_debug()
+    }
+    # Iterate through the fields
+    for (j in scramble_idx) {
+      ###DEBUG###
+      if(verbose_debug) {
+        message('---Next field---')
+        c(scramble_ops[j], ': ', names(results)[j]) %>% print_debug()
+      }
+      # Named variables
+      input_field <- dataset[i, j]
+      new_field <- input_field
+      # Perform the implemented operation
+      if(scramble_ops[j] == 'deletion') {
+        new_field <- f_deletion(input_field)
+      } else if(scramble_ops[j] == 'replacement') {
+        new_field <- f_replacement(replacement_data, i, j)
+      } else if(scramble_ops[j] == 'swapping') {
+        swap_output <- f_swapping(dataset, i, j)
+        new_field <- swap_output$new_field
+        old_field <- swap_output$old_field
+        swap_idx <- swap_output$swap_idx
+      }
+      ###DEBUG###
+      if(verbose_debug) {
+        c(input_field, '  -->  ', new_field) %>% print_debug()
+        if(scramble_ops[j] == 'swapping') {
+          c(new_field, '  -->  ', old_field) %>% print_debug()
+          c('Switched ', names(results)[j], ' and ', names(results)[swap_idx]) %>% print_debug()
+        }
+      }
+      # Overwrite results field with new field
+      results[i, j] <- new_field
+      # Swapping has to replace the swapped field too
+      if(scramble_ops[j] == 'swapping') {
+        results[i, swap_idx] <- old_field
+      }
+    }
+    ###DEBUG###
+      if(verbose_debug) {
+        c('Old record:') %>% print_debug()
+        dataset[i, ] %>% unlist() %>% paste(collapse = '; ') %>% print_debug()
+        c('New record:') %>% print_debug()
+        results[i, ] %>% unlist() %>% paste(collapse = '; ') %>% print_debug()
+      }
+  }
+  # Return final results
+  return(results)
 }
 ```
 
@@ -545,6 +650,40 @@ string_scrambler(
   string = 'The quick brown FOX jumped over the Lazy Dog. 10 times!'
   , p = .2
   , seed = 123
+  , verbose_debug = TRUE
+)
+```
+
+```{r, rows.print = 20}
+# Generate dataset for scrambler
+tmp_dataset <- data_gen(p, n = 5, seed = 876)
+
+print(tmp_dataset)
+```
+
+
+```{r, rows.print = 20}
+# Check record scrambler
+record_scrambler(
+  dataset = tmp_dataset
+  , seed = 123
+  , p = .5
+  , p_ops = c(.5, .3, .2)
+  , p_field = 0.2
+  , verbose_debug = TRUE
+)
+```
+
+Looks pretty good. Test swapping specifically.
+
+```{r, rows.print = 20}
+# Check record scrambler
+record_scrambler(
+  dataset = tmp_dataset
+  , seed = 123
+  , p = .5
+  , p_ops = c(0, .2, .8)
+  , p_field = 0.2
   , verbose_debug = TRUE
 )
 ```
