@@ -561,8 +561,7 @@ record_scrambler <- function(
   # Loop through the rows
   for (i in 1:nrow(results)) {
     ###DEBUG###
-    if(debug || verbose_debug) {
-      message('====Next record====')
+    if(verbose_debug) {
       c('Scramble record ', i, '? ', scramble[i]) %>% print_debug()
     }
     # If not doing anything to this record, skip
@@ -578,6 +577,8 @@ record_scrambler <- function(
     scramble_ops <- sample(operations, size = ncol(results), prob = p_ops, replace = TRUE)
     ###DEBUG###
     if(debug || verbose_debug) {
+      message('==Editing record==')
+      c('Record number ', i) %>% print_debug()
       c('Scrambling total fields: ', n_scramble) %>% print_debug()
       c('Indices: ', paste(scramble_idx, collapse = ' ')) %>% print_debug()
       c('Names: ', paste(names(results)[scramble_idx], collapse = ' ')) %>% print_debug()
@@ -688,6 +689,20 @@ record_scrambler(
 )
 ```
 
+Test replacement specifically.
+
+```{r, rows.print = 20}
+# Check record scrambler
+record_scrambler(
+  dataset = tmp_dataset
+  , seed = 123
+  , p = .5
+  , p_ops = c(0, 1, 0)
+  , p_field = 0.2
+  , verbose_debug = TRUE
+)
+```
+
 
 # Data generation
 
@@ -698,8 +713,6 @@ data_10k <- data_gen(
   p
   , n = 10000
   , seed = 112358
-  , addr_min = 
-  , 
 )
 ```
 
@@ -755,4 +768,36 @@ test_scramble == data_10k %>% head(3)
 
 test_scramble
 ```
+
+## Record scrambling
+
+```{r}
+data_10k_records_scrambled <- data_10k %>%
+  record_scrambler(
+    seed = 4107604
+    , p = .10
+    , debug = FALSE
+  )
+```
+
+## Checking the results
+
+Look at a few matches.
+
+```{r, rows.print = 20}
+# Chose these indices running debug = TRUE
+records_scrambled <- c(37, 453, 562, 1752, 2463, 2678, 2873, 3039, 4049, 4064, 4301)
+# Print some non-matching data side-by-side
+data_check <- data_10k %>% head(0)
+for(i in records_scrambled) {
+  data_check <- rbind(
+    data_check
+    , data_10k[i, ]
+    , data_10k_records_scrambled[i, ]
+  )
+}
+print(data_check)
+```
+
+## Text scrambling
 
