@@ -17,6 +17,7 @@ Create a synthetic dataset to test fuzzy matching approaches. Ideally, I'd like 
 library(tidyverse)
 library(readxl)
 library(foreach)
+library(wranglR)
 
 # Hide the dplyr .groups message
 options(dplyr.summarise.inform = FALSE)
@@ -413,14 +414,17 @@ string_scrambler <- function(
     message('====String scrambling initialization====')
     c('Input string: ', string) %>% print_debug()
     c('Length: ', string_len) %>% print_debug()
-    message('====Scrambling operations====')
     c('Scrambling ', sum(scramble), ' characters') %>% print_debug()
-    c('Per-character scramble: ', which(scramble) %>% paste(collapse = ' ')) %>% print_debug()
-    c('Randomized operations: ', ops %>% paste(collapse = ' ')) %>% print_debug()
   }
   # If nothing to scramble, return original string
   if(sum(scramble) == 0) {
     return(string)
+  }
+  ###DEBUG###
+  if(debug | verbose_debug) {
+    message('----Scrambling operations----')
+    c('Per-character scramble: ', which(scramble) %>% paste(collapse = ' ')) %>% print_debug()
+    c('Randomized operations: ', ops %>% paste(collapse = ' ')) %>% print_debug()
   }
   # Implement different operations across the string
   ###DEBUG###
@@ -753,22 +757,6 @@ The proportions all look fine.
 
 # Data scrambling
 
-```{r}
-test_scramble <- data_10k %>% head(3)
-for(i in 1:3) {
-  for(j in 1:ncol(data_10k)) {
-    if(is.na(data_10k[i, j])) {
-      next
-    }
-    test_scramble[i, j] <- data_10k[i, j] %>% string_scrambler(p = .025)
-  }
-}
-
-test_scramble == data_10k %>% head(3)
-
-test_scramble
-```
-
 ## Record scrambling
 
 ```{r}
@@ -801,3 +789,179 @@ print(data_check)
 
 ## Text scrambling
 
+```{r}
+test_scramble <- data_10k %>% head(3)
+for(i in 1:3) {
+  for(j in 1:ncol(data_10k)) {
+    if(is.na(data_10k[i, j])) {
+      next
+    }
+    test_scramble[i, j] <- data_10k[i, j] %>% string_scrambler(p = .025)
+  }
+}
+
+test_scramble == data_10k %>% head(3)
+
+test_scramble
+```
+
+```{r}
+# Determine which fields are candidates for string scrambling. A field could be selected but
+# then not have any characters actually scrambled, which is ok.
+p <- 0.10
+data_size <- dim(data_10k_records_scrambled)
+scramble_mask <- sample(
+    x = c(TRUE, FALSE)
+    , size = data_size %>% prod()
+    , prob = c(p, 1 - p)
+    , replace = TRUE
+  ) %>%
+  matrix(
+    data = .
+    , nrow = data_size[1]
+    , ncol = data_size[2]
+  )
+# Scramble data
+data_10k_with_typos <- data_10k_records_scrambled
+for(i in 1:data_size[1]) {
+  # Extract current row from scramble_mask
+  sm <- scramble_mask[i, ]
+  # Skip if no operations to perform
+  if(sum(sm) == 0) {
+    next
+  }
+  # Iterate through the current row
+  for(j in 1:data_size[2]) {
+    if(!j || is.na(data_10k_records_scrambled[i, j])) {
+      next
+    }
+    # Run the string scrambler
+    data_10k_with_typos[i, j] <- data_10k_records_scrambled[i, j] %>%
+      string_scrambler(seed = 8937953)
+  }
+}
+```
+
+```{r}
+# Determine which fields are candidates for string scrambling. A field could be selected but
+# then not have any characters actually scrambled, which is ok.
+p <- 0.25
+data_size <- dim(data_10k_records_scrambled)
+set.seed(8937953)
+scramble_mask <- sample(
+    x = c(TRUE, FALSE)
+    , size = data_size %>% prod()
+    , prob = c(p, 1 - p)
+    , replace = TRUE
+  ) %>%
+  matrix(
+    data = .
+    , nrow = data_size[1]
+    , ncol = data_size[2]
+  )
+# Scramble data
+set.seed(8926656)
+data_10k_with_typos <- data_10k_records_scrambled
+for(i in 1:data_size[1]) {
+  # Extract current row from scramble_mask
+  sm <- scramble_mask[i, ]
+  # Skip if no operations to perform
+  if(sum(sm) == 0) {
+    next
+  }
+  # Iterate through the current row
+  for(j in 1:data_size[2]) {
+    if(!j || is.na(data_10k_records_scrambled[i, j])) {
+      next
+    }
+    # Run the string scrambler
+    data_10k_with_typos[i, j] <- data_10k_records_scrambled[i, j] %>%
+      string_scrambler(p = 0.02)
+  }
+}
+```
+
+
+## Checking the results
+
+```{r}
+# Scramble data
+set.seed(8926656)
+tmp <- data_10k_records_scrambled
+for(i in 1:20) {
+  # Extract current row from scramble_mask
+  sm <- scramble_mask[i, ]
+  # Skip if no operations to perform
+  if(sum(sm) == 0) {
+    next
+  }
+  message('====New record====')
+  c('==Row: ', i) %>% print_debug()
+  # Iterate through the current row
+  for(j in 1:data_size[2]) {
+    if(!j || is.na(data_10k_records_scrambled[i, j])) {
+      next
+    }
+    # Run the string scrambler
+    c('==Col: ', j) %>% print_debug()
+    data_10k_with_typos[i, j] <- data_10k_records_scrambled[i, j] %>%
+      string_scrambler(p = 0.02, debug = TRUE)
+  }
+}
+```
+
+```{r, rows.print = 20}
+errs <- data.frame(
+  n = c(6, 10, 14, 15)
+  , p = c(7, 8, 9, 5)
+)
+for(i in 1:nrow(errs)) {
+rbind(
+    data_10k_records_scrambled[errs$n[i], errs$p[i]]
+    , data_10k_with_typos[errs$n[i], errs$p[i]]
+  ) %>% print()
+}
+```
+
+All looks fine.
+
+# Save output
+
+```{r}
+# Function to add ID numbers based on row number (for joining) to a data frame
+add_ids <- function(data) {
+  data %>%
+    mutate(
+      ID = row_number()
+    ) %>%
+    select(
+      ID
+      , everything()
+    ) %>%
+    return()
+}
+```
+
+
+```{r}
+data_10k %>%
+  add_ids() %>%
+  ReplaceValues(new.val = '') %>%
+  write_csv(
+    path = 'generated data/Randomized 10k biodata - original.csv'
+  )
+
+data_10k_records_scrambled %>%
+  add_ids() %>%
+  ReplaceValues(new.val = '') %>%
+  write_csv(
+    path = 'generated data/Randomized 10k biodata - scrambled fields.csv'
+  )
+
+data_10k_with_typos %>%
+  add_ids() %>%
+  ReplaceValues(new.val = '') %>%
+  write_csv(
+    path = 'generated data/Randomized 10k biodata - scrambled fields and typos.csv'
+  )
+```
