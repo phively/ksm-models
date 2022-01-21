@@ -887,8 +887,8 @@ for(i in 1:data_size[1]) {
 ```{r}
 # Scramble data
 set.seed(8926656)
-tmp <- data_10k_records_scrambled
-for(i in 1:20) {
+seeds <- matrix(runif(n = 5*10, min = 1, max = 1E9), nrow = 5, ncol = 10)
+for(i in 1:5) {
   # Extract current row from scramble_mask
   sm <- scramble_mask[i, ]
   # Skip if no operations to perform
@@ -898,22 +898,22 @@ for(i in 1:20) {
   message('====New record====')
   c('==Row: ', i) %>% print_debug()
   # Iterate through the current row
-  for(j in 1:data_size[2]) {
+  for(j in 1:10) {
     if(!j || is.na(data_10k_records_scrambled[i, j])) {
       next
     }
     # Run the string scrambler
     c('==Col: ', j) %>% print_debug()
     data_10k_with_typos[i, j] <- data_10k_records_scrambled[i, j] %>%
-      string_scrambler(p = 0.02, debug = TRUE)
+      string_scrambler(p = .5, debug = TRUE, seed = seeds[i, j])
   }
 }
 ```
 
 ```{r, rows.print = 20}
 errs <- data.frame(
-  n = c(6, 10, 14, 15)
-  , p = c(7, 8, 9, 5)
+  n = rep(1:5, each = 4)
+  , p = rep(1:10, times = 2)
 )
 for(i in 1:nrow(errs)) {
 rbind(
@@ -924,6 +924,32 @@ rbind(
 ```
 
 All looks fine.
+
+Do the scramble for real.
+
+```{r}
+# Scramble data
+set.seed(8926656)
+seeds <- matrix(runif(n = data_size[2] * data_size[1], min = 1, max = 1E9), nrow = data_size[1], ncol = data_size[2])
+
+for(i in 1:data_size[1]) {
+  # Extract current row from scramble_mask
+  sm <- scramble_mask[i, ]
+  # Skip if no operations to perform
+  if(sum(sm) == 0) {
+    next
+  }
+  # Iterate through the current row
+  for(j in 1:data_size[2]) {
+    if(!j || is.na(data_10k_records_scrambled[i, j])) {
+      next
+    }
+    # Run the string scrambler
+    data_10k_with_typos[i, j] <- data_10k_records_scrambled[i, j] %>%
+      string_scrambler(p = 0.02, debug = FALSE)
+  }
+}
+```
 
 # Save output
 
@@ -948,20 +974,20 @@ data_10k %>%
   add_ids() %>%
   ReplaceValues(new.val = '') %>%
   write_csv(
-    path = 'generated data/Randomized 10k biodata - original.csv'
+    file = 'generated data/Randomized 10k biodata - original.csv'
   )
 
 data_10k_records_scrambled %>%
   add_ids() %>%
   ReplaceValues(new.val = '') %>%
   write_csv(
-    path = 'generated data/Randomized 10k biodata - scrambled fields.csv'
+    file = 'generated data/Randomized 10k biodata - scrambled fields.csv'
   )
 
 data_10k_with_typos %>%
   add_ids() %>%
   ReplaceValues(new.val = '') %>%
   write_csv(
-    path = 'generated data/Randomized 10k biodata - scrambled fields and typos.csv'
+    file = 'generated data/Randomized 10k biodata - scrambled fields and typos.csv'
   )
 ```

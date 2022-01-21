@@ -1,0 +1,78 @@
+---
+title: "Fuzzy matching template"
+output:
+  html_notebook:
+    code_folding: show
+    toc: true
+    toc_float: true
+---
+
+# Goals
+
+Template to import an Excel file and fuzzy match two defined columns.
+
+# Setup
+
+```{r setup}
+library(tidyverse) # Used for piping, dplyr, ggplot, etc.
+library(stringdist) # Performs string distance calculations
+library(readxl) # Import Excel data
+library(writexl) # Export Excel data
+
+# Hide the dplyr .groups message
+options(dplyr.summarise.inform = FALSE)
+```
+
+# Import data
+
+```{r}
+# Using the survey undergrad free responses as a demo
+undergrad <- read_xlsx(path = 'live data/FY21 All Alumni Survey_Degree Fuzzy Match_11.11.2021.xlsx'
+                       , sheet = 1
+                       , guess_max = 1E6)
+```
+
+```{r}
+# Rename columns, the names are very long
+undergrad <- undergrad %>%
+  rename(
+    new_undergrad = `Where did you receive your undergraduate degree?`
+    , cat_undergrad = `CATx undergrad`
+    , update =`Undergrad Update`
+  ) %>%
+  select(
+    ID_NUMBER
+    , new_undergrad
+    , cat_undergrad
+    , update
+  )
+
+# If you need to remove NAs, could use a function to replace with blank ''
+```
+
+
+```{r}
+# Use the stringdist function to create a new score column
+undergrad <- undergrad %>%
+  mutate(
+    dl_distance = stringdist(new_undergrad, cat_undergrad, method = 'dl')
+    , len_ug = str_length(new_undergrad)
+    , len_cat = str_length(cat_undergrad)
+    , max_calc = ifelse(len_ug >= len_cat, len_ug, len_cat)
+    , score = (1 - dl_distance / max_calc) %>% round(3)
+  ) %>%
+  arrange(desc(score))
+```
+
+```{r}
+# Export data
+write_xlsx(undergrad, path = 'live data/output.xlsx')
+```
+
+```{r}
+# For fun, let's do a quick visualization, by update category
+undergrad %>%
+  ggplot(aes(x = score, color = update)) +
+  geom_density()
+```
+
