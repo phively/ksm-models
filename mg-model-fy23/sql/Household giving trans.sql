@@ -48,7 +48,7 @@ Select
   , gthh.af_flag
   , gthh.cru_flag
   , Case
-      When gthh.transaction_type In ('BE', 'LE')
+      When gthh.transaction_type_code In ('BE', 'LE')
         Then 'Y'
       End
     As planned_gift_flag
