@@ -1,3 +1,4 @@
+-- Raw proposal data
 Select
   phf.prospect_id
   , phf.prospect_name
@@ -22,6 +23,7 @@ Select
 From v_proposal_history_fast phf
 ;
 
+-- Aggregated proposal data
 With
 
 decwi As (
