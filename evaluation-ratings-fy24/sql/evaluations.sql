@@ -53,6 +53,8 @@ Select
   , ratings.active_ind
   , ratings.rating_code
   , ratings.rating_desc
+  , ksm_pkg_tmp.get_number_from_dollar(rating_desc)
+    As rating_amt_low
   , ratings.xcomment
   , ratings.evaluator_id_number
   , ratings.evaluator_rpt_name

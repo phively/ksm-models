@@ -1,0 +1,143 @@
+---
+title: "Evaluation ratings and giving"
+output:
+  html_notebook:
+    code_folding: hide
+    toc: true
+    toc_float: true
+---
+
+# Goals
+
+Look at the relationship between evaluation and qualification ratings and subsequent (5-year?) giving.
+
+# Setup
+
+```{r setup}
+library(tidyverse)
+library(readxl)
+library(scales)
+library(foreach)
+library(wranglR)
+
+# Hide the dplyr .groups message
+options(dplyr.summarise.inform = FALSE)
+```
+
+# Eval data
+
+```{r}
+evals <- read_xlsx("data/2024-04-12 all evals.xlsx", guess_max = 1E6)
+```
+
+```{r}
+# Fix datatypes
+evals <- evals %>%
+  # Factors
+  mutate(
+    across(
+      c(PRIMARY_IND, RECORD_STATUS_CODE, PROGRAM_GROUP, EVALUATION_TYPE, EVALUATION_TYPE_DESC
+           , ACTIVE_IND, RATING_CODE, RATING_DESC, EVALUATOR_ID_NUMBER)
+      , factor
+    )
+  ) %>%
+  # Numerics
+  mutate(
+    FIRST_KSM_YEAR = as.numeric(FIRST_KSM_YEAR)
+  )
+```
+
+```{r}
+summary(evals)
+```
+
+# Eval exploration
+
+How many rated by grad year?
+
+```{r}
+evals %>%
+  filter(FIRST_KSM_YEAR >= 1900) %>%
+  ggplot(aes(x = FIRST_KSM_YEAR, fill = EVALUATION_TYPE_DESC)) +
+  geom_histogram(binwidth = 1) +
+  labs(title = "Ratings by grad year (incl. multiple ratings per entity)") +
+  guides(fill = "none") +
+  facet_grid(EVALUATION_TYPE_DESC ~ .)
+```
+
+How many rated by program?
+
+```{r}
+evals %>%
+  ggplot(aes(x = PROGRAM_GROUP, fill = EVALUATION_TYPE_DESC)) +
+  geom_bar() +
+  labs(title = "Rated by program group (incl. multiple ratings per entity)") +
+  guides(fill = "none") +
+  facet_grid(EVALUATION_TYPE_DESC ~ .)
+```
+
+```{r}
+rating_amt_low_labs <- evals %>%
+  select(RATING_AMT_LOW) %>%
+  unique() %>%
+  arrange(RATING_AMT_LOW) %>%
+  mutate(
+    rating = case_when(
+      # Skip NULL
+      is.na(RATING_AMT_LOW) ~ "NA"
+      # Over 1M gets M
+      , RATING_AMT_LOW >= 1E6 ~ "$" %>% paste0(round(RATING_AMT_LOW / 1E6, 1), "M")
+      # Else use K
+      , TRUE ~ "$" %>% paste0(round(RATING_AMT_LOW / 1E3, 1), "K")
+    )
+  )
+
+rating_amt_labs <- rating_amt_low_labs$rating
+names(rating_amt_labs) <- rating_amt_low_labs$RATING_AMT_LOW
+
+evals %>%
+  ggplot(aes(x = factor(RATING_AMT_LOW), fill = EVALUATION_TYPE_DESC)) +
+  geom_bar() +
+  labs(title = "Ratings by level (incl. multiple ratings per entity)", x = NULL) +
+  guides(fill = "none") +
+  scale_x_discrete(labels = rating_amt_labs) +
+  facet_grid(EVALUATION_TYPE_DESC ~ .)
+```
+
+Correlation between grad year and ratings?
+
+```{r, fig.height = 10, fig.width = 7}
+evals %>%
+  mutate(rating = factor(RATING_AMT_LOW)) %>%
+  filter(FIRST_KSM_YEAR >= 1900) %>%
+  ggplot(aes(x = FIRST_KSM_YEAR
+             , color = EVALUATION_TYPE_DESC, fill = EVALUATION_TYPE_DESC)) +
+  geom_density(alpha = .5) +
+  labs(title = "Ratings by grad year") +
+  facet_grid(rating ~ .
+             , labeller = labeller(rating = rating_amt_labs)) +
+  # Group means
+  geom_vline(data = evals %>%
+               mutate(rating = factor(RATING_AMT_LOW)) %>%
+               group_by(rating, EVALUATION_TYPE_DESC) %>%
+               mutate(yrmean = mean(FIRST_KSM_YEAR, na.rm = TRUE))
+             , aes(xintercept = yrmean, color = EVALUATION_TYPE_DESC))
+```
+
+Relationship between program group and ratings?
+
+```{r, fig.height = 8, fig.width = 12}
+evals %>%
+  ggplot(aes(x = RATING_AMT_LOW, fill = EVALUATION_TYPE_DESC)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Ratings by level (incl. multiple ratings per entity)", x = NULL) +
+  scale_x_log10(breaks = names(rating_amt_labs) %>% as.numeric
+                , labels = rating_amt_labs) +
+  facet_grid(PROGRAM_GROUP ~ .) +
+  # Group means
+  geom_vline(data = evals %>%
+             group_by(PROGRAM_GROUP, EVALUATION_TYPE_DESC) %>%
+             mutate(rtmean = mean(RATING_AMT_LOW, na.rm = TRUE))
+           , aes(xintercept = rtmean, color = EVALUATION_TYPE_DESC))
+```
+
