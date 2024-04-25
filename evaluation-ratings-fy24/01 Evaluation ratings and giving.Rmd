@@ -134,10 +134,45 @@ evals %>%
   scale_x_log10(breaks = names(rating_amt_labs) %>% as.numeric
                 , labels = rating_amt_labs) +
   facet_grid(PROGRAM_GROUP ~ .) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
   # Group means
   geom_vline(data = evals %>%
              group_by(PROGRAM_GROUP, EVALUATION_TYPE_DESC) %>%
              mutate(rtmean = mean(RATING_AMT_LOW, na.rm = TRUE))
            , aes(xintercept = rtmean, color = EVALUATION_TYPE_DESC))
 ```
+
+Can't tell anything; redo with density rather than counts. Also filter for only the big programs.
+
+```{r, fig.height = 8, fig.width = 12}
+evals %>%
+  filter(PROGRAM_GROUP %in% c("FT", "EMP", "TMP")) %>%
+  group_by(PROGRAM_GROUP, EVALUATION_TYPE_DESC) %>%
+  mutate(
+    n = n()
+    , pct = n/sum(n)
+  ) %>%
+  group_by(PROGRAM_GROUP, EVALUATION_TYPE_DESC, RATING_AMT_LOW) %>%
+  summarise(
+    percent = sum(pct)
+  ) %>%
+  ggplot(aes(x = RATING_AMT_LOW, y = percent, fill = EVALUATION_TYPE_DESC)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Ratings by level and program (incl. multiple ratings per entity)", x = NULL) +
+  scale_x_log10(breaks = names(rating_amt_labs) %>% as.numeric
+                , labels = rating_amt_labs) +
+  scale_y_continuous(labels = scales::percent) +
+  facet_grid(PROGRAM_GROUP ~ .) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  # Group means
+  geom_vline(data = evals %>%
+             filter(PROGRAM_GROUP %in% c("FT", "EMP", "TMP")) %>%
+             group_by(PROGRAM_GROUP, EVALUATION_TYPE_DESC) %>%
+             mutate(rtmean = mean(RATING_AMT_LOW, na.rm = TRUE))
+           , aes(xintercept = rtmean, color = EVALUATION_TYPE_DESC))
+```
+
+FT ratings apparently skew a bit higher and TMP a bit lower, but no big differences.
+
+# Gift data
 
