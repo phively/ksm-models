@@ -44,6 +44,7 @@ evals <- evals %>%
   # Numerics
   mutate(
     FIRST_KSM_YEAR = as.numeric(FIRST_KSM_YEAR)
+    , eval_fy = wranglR::ToFiscalDate(EVALUATION_DATE, start.month = 9)
   )
 ```
 
@@ -51,7 +52,7 @@ evals <- evals %>%
 summary(evals)
 ```
 
-# Eval exploration
+## Eval exploration
 
 How many rated by grad year?
 
@@ -175,4 +176,117 @@ evals %>%
 FT ratings apparently skew a bit higher and TMP a bit lower, but no big differences.
 
 # Gift data
+
+```{r}
+gifts <- read_xlsx("data/2024-04-25 KSM gifts from rated.xlsx", guess_max = 1E6)
+```
+
+```{r}
+# Fix datatypes
+gifts <- gifts %>%
+  # Factors
+  mutate(
+    across(
+      c(TX_GYPM_IND, TRANSACTION_TYPE, ASSOCIATED_DESC, PAYMENT_TYPE, ALLOC_SHORT_NAME)
+      , factor
+    )
+  )
+```
+
+## Gift exploration
+
+```{r, fig.width = 9}
+gifts %>%
+  ggplot(aes(x = RECOGNITION_CREDIT)) +
+  geom_histogram(alpha = .75, binwidth = .33) +
+  scale_x_log10(breaks = c(10^(0:7)), labels = scales::dollar, minor_breaks = NULL) +
+  labs(title = "Gift distribution (GP)", x = "Recognition credit")
+```
+
+```{r, fig.width = 9}
+gifts %>%
+  ggplot(aes(x = RECOGNITION_CREDIT)) +
+  geom_density(aes(color = factor(FISCAL_YEAR)), alpha = .5, bw = .15) +
+  scale_x_log10(breaks = c(10^(0:7)), labels = scales::dollar, minor_breaks = NULL) +
+  labs(title = "Gift distribution (GP) by fiscal year", x = "Recognition credit", color = "Fiscal year")
+```
+
+Based on the color gradient, looks like the average has been shifting right over time.
+
+# Time and inflation trends
+
+```{r}
+cpiu <- read_xlsx(path = "data/CPI-U.xlsx", guess_max = 1E6) %>%
+  mutate(
+    stat = "cpiu"
+  )
+```
+
+
+```{r}
+gifts %>%
+  group_by(FISCAL_YEAR) %>%
+  summarise(
+    min = min(RECOGNITION_CREDIT)
+    , med = median(RECOGNITION_CREDIT)
+    , mean = mean(RECOGNITION_CREDIT)
+    , max = max(RECOGNITION_CREDIT)
+  ) %>%
+  pivot_longer(
+    cols = min:max
+    , names_to = "stat"
+    , values_to = "recognition_credit"
+  ) %>%
+  filter(
+    FISCAL_YEAR >= 1975
+  ) %>%
+  ggplot(aes(x = FISCAL_YEAR)) +
+  geom_line(aes(y = recognition_credit, color = stat)) +
+  geom_line(data = cpiu %>% filter(Year >= 1975), aes(x = Year, y = `CPI-U`), linetype = "dashed") +
+  scale_y_log10(breaks = c(10^(0:7)), labels = scales::dollar, minor_breaks = NULL) +
+  labs(y = "Recognition credit", x = "Fiscal year", color = "stat (rec credit)"
+    , title = "Change in gift distribution (GP) over time vs CPI-U")
+```
+
+Average and median giving has outpaced inflation (dashed reference line).
+
+```{r}
+# cpiu %>%
+#   filter(Year >= 1975) %>%
+#   ggplot(aes(x = Year, y = `CPI-U`)) +
+#   geom_line()
+```
+
+```{r}
+summary_evals <- evals %>%
+  group_by(eval_fy) %>%
+  summarise(
+    min = min(RATING_AMT_LOW)
+    , med = median(RATING_AMT_LOW)
+    , mean = mean(RATING_AMT_LOW)
+    , max = max(RATING_AMT_LOW)
+  ) %>%
+  pivot_longer(
+    cols = min:max
+    , names_to = "stat"
+    , values_to = "rating_amt_low"
+  )
+
+summary_evals %>%
+  ggplot(aes(x = eval_fy)) +
+  geom_line(aes(y = rating_amt_low, color = stat)) +
+  geom_line(
+    data = cpiu %>% filter(Year >= min_eval_fy) %>% mutate(`CPI-U` = `CPI-U`)
+    , aes(x = Year, y = `CPI-U`*1000), linetype = "dashed") +
+  scale_y_log10(breaks = c(10^(0:7)), labels = scales::dollar, minor_breaks = NULL) +
+  labs(y = "Min eval rating", x = "Fiscal year", color = "stat (eval rating)"
+    , title = "Change in evaluation ratings over time vs CPI-U*1000")
+```
+
+
+# Merged data
+
+```{r}
+
+```
 
