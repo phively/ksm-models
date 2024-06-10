@@ -15,6 +15,7 @@ Look at the relationship between evaluation and qualification ratings and subseq
 
 ```{r setup}
 library(tidyverse)
+library(lubridate)
 library(readxl)
 library(scales)
 library(foreach)
@@ -213,6 +214,72 @@ gifts %>%
 
 Based on the color gradient, looks like the average has been shifting right over time.
 
+Look at average gift by year.
+
+```{r}
+meangifts <- gifts %>%
+  group_by(FISCAL_YEAR) %>%
+  summarise(
+    mean_gift = mean(RECOGNITION_CREDIT)
+    , median_gift = median(RECOGNITION_CREDIT)
+  ) %>%
+  pivot_longer(mean_gift:median_gift, names_to = 'type', values_to = 'dollars')
+
+meangifts %>%
+  ggplot(aes(x = FISCAL_YEAR, y = dollars, color = type)) +
+  geom_point() +
+  scale_y_log10(labels = dollar_format(1)
+                , breaks = c(10*10^(0:4), 50*10^(0:4))
+                , minor_breaks = c(25*10^(0:4), 75*10^(0:4))) +
+  geom_smooth(method = 'lm') +
+  labs(x = "Fiscal year", title = "Average gift size by year")
+```
+
+Pretty clear log linear trend. Interesting that median is a stepwise function; what happened in the change years?
+
+```{r}
+lm_mean <- meangifts %>%
+  filter(type == "mean_gift") %>%
+  lm(
+    log10(dollars) ~ FISCAL_YEAR
+    , data = .
+  )
+
+lm_med <- meangifts %>%
+  filter(type == "median_gift") %>%
+  lm(
+    log10(dollars) ~ FISCAL_YEAR
+    , data = .
+  )
+```
+
+```{r}
+summary(lm_mean)
+```
+
+```{r}
+summary(lm_med)
+```
+
+Of course, $r^2$ is inflated by averaging the data but it's interesting. Look closer at means.
+
+```{r}
+lm_gifts <- gifts %>%
+  filter(TX_GYPM_IND == 'G' & LEGAL_AMOUNT > 0) %>%
+  lm(
+    log10(LEGAL_AMOUNT) ~ FISCAL_YEAR
+    , data = .
+  )
+
+summary(lm_gifts)
+```
+
+```{r}
+plot(lm_gifts)
+```
+
+Thick-tailed distribution which is expected for (log) giving.
+
 # Time and inflation trends
 
 ```{r}
@@ -251,10 +318,10 @@ gifts %>%
 Average and median giving has outpaced inflation (dashed reference line).
 
 ```{r}
-# cpiu %>%
-#   filter(Year >= 1975) %>%
-#   ggplot(aes(x = Year, y = `CPI-U`)) +
-#   geom_line()
+cpiu %>%
+  filter(Year >= 1975) %>%
+  ggplot(aes(x = Year, y = `CPI-U`)) +
+  geom_line()
 ```
 
 ```{r}
@@ -272,6 +339,8 @@ summary_evals <- evals %>%
     , values_to = "rating_amt_low"
   )
 
+min_eval_fy = min(evals$eval_fy, na.rm = TRUE)
+
 summary_evals %>%
   ggplot(aes(x = eval_fy)) +
   geom_line(aes(y = rating_amt_low, color = stat)) +
@@ -283,10 +352,126 @@ summary_evals %>%
     , title = "Change in evaluation ratings over time vs CPI-U*1000")
 ```
 
+I suppose it's dependent on the data window, but average eval rating appears to have outpaced inflation.
 
 # Merged data
 
-```{r}
+Look at total giving made within say 3 years of the evaluation rating.
 
+```{r}
+year_period <- 3
+
+merged <- evals %>%
+  # Join gifts table
+  left_join(
+    gifts %>% select(-REPORT_NAME)
+    , by = c(ID_NUMBER = "ID_NUMBER")
+  ) %>%
+  # Identify any gifts outside of date range
+  mutate(
+    nogifts = is.na(DATE_OF_RECORD)
+    , pre_rating_gift = DATE_OF_RECORD >= EVALUATION_DATE
+    , counting_period_gift = (DATE_OF_RECORD - EVALUATION_DATE) <= days(365 * year_period)
+    , include = nogifts | (pre_rating_gift & counting_period_gift)
+  )
 ```
 
+```{r}
+merged$ID_NUMBER %>% unique() %>% length()
+evals$ID_NUMBER %>% unique() %>% length()
+```
+
+```{r}
+merged_summary <- merged %>%
+  group_by(ID_NUMBER, EVALUATION_ID, eval_fy, RATING_AMT_LOW) %>%
+  summarise(
+    gifts = ifelse(include, 1, 0) %>% sum()
+    , post_eval_dollars = ifelse(include, ReplaceValues(RECOGNITION_CREDIT, NA, 0), 0) %>% sum()
+  )
+```
+
+```{r}
+merged_summary$ID_NUMBER %>% unique() %>% length()
+```
+
+Good, didn't filter out anyone.
+
+## Exploration
+
+```{r}
+merged_summary %>% summary()
+```
+
+Remove NAs.
+
+```{r}
+merged_summary <- merged_summary %>% filter(!is.na(RATING_AMT_LOW))
+
+merged_summary %>% summary()
+```
+
+```{r}
+merged_summary %>%
+  ggplot(aes(x = factor(RATING_AMT_LOW), y = post_eval_dollars)) +
+  geom_boxplot() +
+  scale_y_log10(labels = dollar_format())
+```
+
+```{r}
+lm1 <- merged_summary %>%
+  lm(
+    log10(post_eval_dollars + 1) ~ eval_fy + log10(RATING_AMT_LOW)
+    , data = .
+  )
+
+summary(lm1)
+```
+
+Frankly terrible $r^2$.
+
+```{r}
+merged_summary %>%
+  ggplot(aes(x = RATING_AMT_LOW, y = {post_eval_dollars+1})) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  scale_y_log10(labels = dollar_format()) +
+  scale_x_log10(labels = dollar_format())
+```
+
+I've seen this before: the $0 amounts drag down the best fit line.
+
+```{r}
+plot(lm1)
+```
+
+Note the straight line on the residuals vs fitted plot, plus extreme skewness. Conditional on donors only (as per my original MG model)?
+
+```{r}
+lm2 <- merged_summary %>%
+  filter(post_eval_dollars > 0) %>%
+  lm(
+    log10(post_eval_dollars) ~ eval_fy + log10(RATING_AMT_LOW)
+    , data = .
+  )
+
+summary(lm2)
+```
+
+```{r}
+plot(lm2)
+```
+
+Now we're talking.
+
+```{r}
+merged_summary %>%
+  filter(post_eval_dollars > 0) %>%
+  ggplot(aes(x = RATING_AMT_LOW, y = post_eval_dollars)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  geom_smooth(method = "loess", color = "red") +
+  scale_y_log10(labels = dollar_format()) +
+  scale_x_log10(labels = dollar_format())
+```
+
+Much better. Red is a loess fit.
