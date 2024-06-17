@@ -383,9 +383,10 @@ evals$ID_NUMBER %>% unique() %>% length()
 
 ```{r}
 merged_summary <- merged %>%
-  group_by(ID_NUMBER, EVALUATION_ID, eval_fy, RATING_AMT_LOW) %>%
+  group_by(ID_NUMBER, EVALUATION_ID, eval_fy, RATING_AMT_LOW, EVALUATION_TYPE) %>%
   summarise(
     gifts = ifelse(include, 1, 0) %>% sum()
+    , gave = gifts > 0
     , post_eval_dollars = ifelse(include, ReplaceValues(RECOGNITION_CREDIT, NA, 0), 0) %>% sum()
   )
 ```
@@ -475,3 +476,132 @@ merged_summary %>%
 ```
 
 Much better. Red is a loess fit.
+
+Do rating types make a difference?
+
+```{r}
+lm3 <- merged_summary %>%
+  filter(post_eval_dollars > 0) %>%
+  lm(
+    log10(post_eval_dollars) ~ eval_fy + log10(RATING_AMT_LOW) * EVALUATION_TYPE
+    , data = .
+  )
+
+summary(lm3)
+```
+
+Donors receiving a UOR are expected to give more than those just receiving a PR evaluation; presumably because the UOR indicates MG activity. How about just PR and giving?
+
+```{r}
+lm4 <- merged_summary %>%
+  filter(post_eval_dollars > 0 & EVALUATION_TYPE == "PR") %>%
+  lm(
+    log10(post_eval_dollars) ~ eval_fy + log10(RATING_AMT_LOW)
+    , data = .
+  )
+
+summary(lm4)
+```
+
+
+
+```{r}
+lm5 <- merged_summary %>%
+  filter(post_eval_dollars > 0 & EVALUATION_TYPE == "UR") %>%
+  lm(
+    log10(post_eval_dollars) ~ eval_fy + log10(RATING_AMT_LOW)
+    , data = .
+  )
+
+summary(lm5)
+```
+
+Interestingly UR rating coefficient is actually lower, conditioning on made a gift.
+
+```{r}
+merged_summary %>%
+  filter(post_eval_dollars > 0) %>%
+  ggplot(aes(x = RATING_AMT_LOW, y = post_eval_dollars)) +
+  geom_point() +
+  geom_smooth(method = "lm", aes(color = EVALUATION_TYPE)) +
+  #geom_smooth(method = "loess", color = "red") +
+  scale_y_log10(labels = dollar_format()) +
+  scale_x_log10(labels = dollar_format())
+```
+
+Confirmed; PR line has a steeper slope.
+
+Probability model: does eval type or other variables influence likelihood to give?
+
+```{r}
+glm1 <- merged_summary %>%
+  glm(
+    gave ~ eval_fy + log10(RATING_AMT_LOW) * EVALUATION_TYPE
+    , family = "binomial"
+    , data = .
+  )
+
+glm1 %>% summary()
+```
+
+Those who make it to a UR are more likely to give - again probably indicating MG activity. But interestingly, higher evaluated prospects are less likely to give, particularly if the eval type is UR.
+
+## Final PR model
+
+Look at PR rating and giving for everyone, including nondonors.
+
+Probability model, including nondonors.
+
+```{r}
+glm_pr <- merged_summary %>%
+  filter(EVALUATION_TYPE == "PR") %>%
+  glm(
+    gave ~ eval_fy + log10(RATING_AMT_LOW)
+    , family = "binomial"
+    , data = .
+  )
+
+summary(glm_pr)
+```
+
+
+```{r}
+lm_pr <- merged_summary %>%
+  filter(post_eval_dollars > 0 & EVALUATION_TYPE == "PR") %>%
+  lm(
+    log10(post_eval_dollars) ~ eval_fy + log10(RATING_AMT_LOW)
+    , data = .
+  )
+
+summary(lm_pr)
+```
+
+```{r}
+plot(lm_pr)
+```
+
+
+# Conclusions
+
+Looking at the final models of prospect research rated entities:
+
+  * Higher ratings may be associated with a marginally *lower* likelihood to give (negative sign on log10 rating amount)
+  * Conditional on making a gift, higher ratings are associated with higher giving. On the log scale, 1 unit increase in rating ~= 0.7 increase in giving.
+  
+Converted back to the unit scale:
+
+$10^{0.7} =$
+`r round(10^0.7, 2)`
+
+So conditional on making a gift, a 10x higher research rating is associated with about a 5x larger gift.
+
+On the other hand, for UOR ratings:
+
+  * Conditional on making a gift, a log 1 unit increase in rating ~= 0.52 log increase in giving
+  
+$10^{0.52} =$
+`r round(10^0.52, 2)`
+
+A 10x higher UOR is only associated with a 3.3x larger gift.
+
+Looks like UORs may be associated with some degree of underasking and/or optimism.
